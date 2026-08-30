@@ -1,0 +1,39 @@
+# Personal, machine-local agent instructions
+CLAUDE.local.md
+
+# The working area: tickets, notes, drafts and throwaway experiments.
+# Local by design — see scratchpad/README.md.
+scratchpad/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+
+# The SPA is built into the image, never committed
+src/Planaffe.Api/wwwroot/
+
+# The web client's API layer is generated from docs/api/openapi.json before
+# every build. The contract is the artifact; its output is not.
+src/web/src/api/schema.d.ts
+
+# Go
+/dist/
+planaffe
+pa
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Local secrets and the host volume of a development installation
+.env
+volume/
+
+# macOS
+.DS_Store
