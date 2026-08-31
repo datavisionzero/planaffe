@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../Planaffe.Domain/Planaffe.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

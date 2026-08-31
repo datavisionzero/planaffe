@@ -4,9 +4,12 @@
 live: how the repository is laid out, which project holds what, which way the
 dependencies point, and what is built by which toolchain.
 
-**Nothing under `src/` exists yet.** This document is the plan the first commits
-follow, and it is kept accurate from then on — a file that lands somewhere this
-document does not describe means one of the two is wrong.
+**`src/` holds the four .NET projects and nothing else yet** — they are empty,
+and `src/cli/` and `src/web/` have not been created. What is here is the skeleton
+this document describes, built before there was anything to break so that CI
+could be green from the first commit (ADR 0001). This document is kept accurate
+from here on: a file that lands somewhere it does not describe means one of the
+two is wrong.
 
 Three decisions shape all of it: the backend is **four layers**
 ([ADR 0002](./adr/0002-the-backend-is-four-layers-not-one-project.md)), the

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Planaffe.Api/Planaffe.Api.csproj" />
+    <Project Path="src/Planaffe.Application/Planaffe.Application.csproj" />
+    <Project Path="src/Planaffe.Domain/Planaffe.Domain.csproj" />
+    <Project Path="src/Planaffe.Infrastructure/Planaffe.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Planaffe.IntegrationTests/Planaffe.IntegrationTests.csproj" />
+    <Project Path="tests/Planaffe.UnitTests/Planaffe.UnitTests.csproj" />
+  </Folder>
+</Solution>
