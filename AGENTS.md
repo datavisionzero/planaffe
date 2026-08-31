@@ -18,6 +18,10 @@ local and never pushed (see below).
 - **Layout**: where the code lives, which project holds what, and which way the
   dependencies point is [`docs/codebase.md`](docs/codebase.md). Read it before
   adding a file.
+- **Language of the domain**: [`CONTEXT.md`](CONTEXT.md) is the glossary. Code,
+  identifiers, the HTTP contract and the CLI use its canonical names without
+  exception. Read it before naming anything, and add the term there when you
+  settle a new one.
 - **Decisions**: [`docs/adr/`](docs/adr/) holds the architecture decisions. Read
   the ones that touch the area you are about to work in, and say so explicitly
   when your work contradicts one instead of silently overriding it.

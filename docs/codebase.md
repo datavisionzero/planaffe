@@ -52,13 +52,18 @@ cheapest possible check that nothing has leaked into it.
 
 **`Planaffe.Domain` holds the rules.** The issue with its closed field set and
 its key, the status set and what closes an issue, the priority scale and the
-order it sorts in, the seven conditions of readiness, the claim and its expiry,
+order it sorts in, the seven conditions of workability, the claim and its expiry,
 the label and the group that admits one value at a time, the epic as a bracket,
 the release as a record rather than a plan, the question that is a state rather
 than a comment. The test of whether something belongs here is stated in ADR
 0002: **anything the vision already states as a rule.** A claim that can be
 constructed without an expiry, or a status that can reach `done` without closing
 the issue, is a rule that escaped.
+
+**Every type here is a term in [`CONTEXT.md`](../CONTEXT.md)**, spelled the way
+that file spells it. This is the layer the glossary is written for: a type named
+after an `_Avoid_` word is a naming bug rather than a preference, and a concept
+that needs a name the glossary does not have gets added there first.
 
 **`Planaffe.Application` holds the use cases and the ports.** Creating issues —
 several related ones in one act, which is the moment the vision calls the most
@@ -74,7 +79,11 @@ the base class libraries rather than a port of ours.
 and owns the self-applying migrations, so there is exactly one place that creates
 schema. The acts that have to be atomic are written as the conditional updates
 they are, in one transaction, close to the SQL rather than assembled by a
-caller — claiming is the whole reason this product exists (VISION 11). Waiting is
+caller — claiming is the whole reason this product exists (VISION 11). The two
+rules that are derived on read rather than written — an expired claim, and a
+soft-deleted row ([ADR 0013](./adr/0013-deleting-is-a-soft-delete-with-a-floor-and-identities-are-never-deleted.md)) —
+live here in one place each, because a query that forgets either of them is how
+both decisions fail. Waiting is
 `LISTEN`/`NOTIFY` on its own connection outside any pool, with a deadline as the
 fallback (VISION 13). The two log sinks live here as well
 ([ADR 0008](./adr/0008-planaffe-logs-into-logaffe-and-serilog-is-the-way-out.md)).
@@ -135,6 +144,9 @@ The frontend carries its own tests inside `src/web/`, and the CLI its own inside
 
 ## What is deliberately not here
 
+- **No second issue shape beyond the two that are declared.** A list returns the
+  slim issue, a single read returns the complete one, and both are named types in
+  the contract ([ADR 0012](./adr/0012-a-list-returns-a-slim-issue-and-only-a-single-issue-is-complete.md)).
 - **No shared types across the three languages.** Settled in ADR 0004 and ADR
   0003; the contract is `docs/api/openapi.json` and it is checked.
 - **No second read path and no second write path.** Every adapter — HTTP today,

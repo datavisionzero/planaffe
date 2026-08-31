@@ -32,3 +32,8 @@ material value to understanding the decision.
 - [0006 – The web application is a shell before it is a screen](./0006-the-web-application-is-a-shell-before-it-is-a-screen.md)
 - [0007 – Markdown is rendered in the browser, and never as HTML](./0007-markdown-is-rendered-in-the-browser-and-never-as-html.md)
 - [0008 – planaffe logs into logaffe, and Serilog is the way out](./0008-planaffe-logs-into-logaffe-and-serilog-is-the-way-out.md)
+- [0009 – The MVP is built in three cuts, and the first one ends at the switch-over](./0009-the-mvp-is-built-in-three-cuts.md)
+- [0010 – The product speaks English, and only English](./0010-the-product-speaks-english-and-only-english.md)
+- [0011 – The API carries no version, and migrations only run forward](./0011-the-api-carries-no-version-and-migrations-only-run-forward.md)
+- [0012 – A list returns a slim issue, and only a single issue is complete](./0012-a-list-returns-a-slim-issue-and-only-a-single-issue-is-complete.md)
+- [0013 – Deleting is a soft delete with a floor, and identities are never deleted](./0013-deleting-is-a-soft-delete-with-a-floor-and-identities-are-never-deleted.md)

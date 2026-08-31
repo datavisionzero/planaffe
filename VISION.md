@@ -69,7 +69,7 @@ These three do not meet the criticism above: `gh` is free, mature and already in
 
 The CLI is the interface for agents and for console-minded humans. It has to be complete:
 
-- Create, read, change, comment on and close issues — one at a time or several related ones in one go.
+- Create, read, change, comment on, close and delete issues — one at a time or several related ones in one go.
 - Search and filter issues (status, label, assignee, epic, project, full text).
 - Create and read epics, assign issues, query progress.
 - Create releases, publish them, print their content as Markdown.
@@ -83,6 +83,8 @@ The goal: an agent can carry out its entire working cycle without ever touching 
 
 **Cleaning up is not a feature, it is a question of the interface.** A backlog that agents fill grows faster and contains more duplicates and stale entries than one humans type. The answer to that is not a maintenance tool in the product but a CLI good enough that an agent does the maintenance itself: search and filter what the system knows, and change, re-hang or close what it found in one go. Whoever wants duplicates found sends an agent — not us a feature request (guiding principle 3).
 
+Which is why **deleting is a verb an agent has**, and why it is a soft delete: `canceled` is a decision that stays visible, while an issue that should never have existed should go. It is restorable for a week, so handing the verb to the party that generates the noise costs nothing when it goes wrong ([ADR 0013](docs/adr/0013-deleting-is-a-soft-delete-with-a-floor-and-identities-are-never-deleted.md)).
+
 **Shape:** `planaffe <object> <verb>`, like `gh` and `glab` — `planaffe issue list`, `issue view PLAN-42`, `issue claim PLAN-42`, `epic view PLAN-E3`. Short alias `pa`.
 
 ```
@@ -95,7 +97,7 @@ pa issue close PLAN-42 --result-file - # done, result as Markdown, claim release
 
 Commitments that matter to agents:
 
-- **`--json` prints the complete object**, not a selection of fields. No guessing field names, no second call.
+- **`--json` prints the complete object** wherever it prints one object: `issue view` is every field, no guessing field names, no second call. **Lists are the exception** — they return a slim issue without the Markdown bodies, and they are paginated. Four hundred AI-written tickets in full are not an answer an agent can afford to receive, and context budget is the one hard resource in this target group ([ADR 0012](docs/adr/0012-a-list-returns-a-slim-issue-and-only-a-single-issue-is-complete.md)).
 - **Errors go to stderr, data to stdout.** Always, in the error case too.
 - **Speaking exit codes.** A lost claim is a different code than a network error — an agent has to be able to tell whether to try again.
 - **Configuration through environment variables** (`PLANAFFE_URL`, `PLANAFFE_TOKEN`) plus an optional `.planaffe` file in the repository that fixes the project. Whoever is in the repository never has to name the project.
@@ -340,7 +342,7 @@ Everything in the previous sections — status, priority, blockers, labels, clai
 
 ### When is a ticket workable?
 
-A ticket is **ready** when all of this holds:
+A ticket is **workable** when all of this holds — `ready` is one of the conditions and not the word for their sum ([`CONTEXT.md`](CONTEXT.md)):
 
 1. Status is `todo` — not `backlog` (not up yet), not `in_progress` (already running).
    A ticket in `in_progress` whose **claim has expired** counts here like `todo`: the claim is evaluated on read (see 11.), and the status falls back with it. Without this rule, the ticket of a crashed agent would vanish from the selection permanently.
@@ -424,19 +426,44 @@ Multi-user is built in from the start — even if the first user works alone, th
 - **The back channel is one-way.** An agent may write about itself. It may neither read nor change its token, may not create another one, and may not see anyone else's. Leaving something about yourself is harmless; anything else would be a privilege escalation through the back door.
 - **"An agent" is fuzzy, and we do not pretend otherwise.** A window? An installation? A harness on a machine? We are not fixing that now. That is why the token does not store *the* truth about its agent, but **what was last reported back, as history**. If a pattern emerges over time, something unambiguous can grow out of it. The other way round — fix it first, then discover that reality looks different — would not work.
 
+### The life of a token
+
+- **A human creates it, never an agent.** The back channel above is one-way for exactly this reason: an agent that can issue itself a second token has escaped its own identity.
+- **The secret is shown once**, at creation. What is stored is a hash and a short readable prefix, so tokens can be told apart in a list without any of them being recoverable.
+- **Revoking takes effect immediately, and the identity survives it.** A revoked token still names the agent in every claim and every history entry it wrote; it simply cannot authenticate any more. Tokens and users are never deleted for that reason ([ADR 0013](docs/adr/0013-deleting-is-a-soft-delete-with-a-floor-and-identities-are-never-deleted.md)).
+- **No expiry date in the MVP.** A token that expires on a date wakes nobody — it fails in the middle of an agent run, and the same argument that keeps the due date out (8., 17.) keeps this out. Revocation is the answer, and it is deliberate rather than scheduled.
+- **A token is valid across projects**, like the human identity it belongs to. Restricting a token to a single project is a plausible later addition and not in the MVP.
+
+### Commissioning
+
+The first five minutes are a success criterion (16.), so the path to the first issue is part of the product and not left to the reader:
+
+1. `docker compose up`. Migrations apply themselves.
+2. **The first administrator and the first token come from environment variables** on the first start. There is no setup wizard and no first-run screen — a product whose first principle is that everything works without the UI must not require the UI to become usable.
+3. `pa project create` with the key that will prefix every issue in it.
+4. `pa issue create`. That is the fifth minute.
+
+Every further human is invited by an administrator, and every further token is created by a human through the CLI, and later through the interface.
+
 ## 13. Technical Guard Rails
 
 - **Licence:** MIT.
+- **Product language:** English throughout — interface, CLI output, error messages and documentation. No localisation and no machinery held ready for one ([ADR 0010](docs/adr/0010-the-product-speaks-english-and-only-english.md)).
 - **Storage:** PostgreSQL. All content, Markdown included, lives in the database. Backup = `pg_dump`.
 - **Frontend:** React.
 - **Deployment:** `docker compose up`. The target is two containers (app plus Postgres), three at most. No queue, no Redis, no S3, no Elasticsearch in the MVP.
 - **Search:** Postgres's own means (full-text search), no separate index.
 - **Configuration:** few environment variables, sensible defaults, migrations run on startup.
-- **CLI distribution:** a single, easily installed binary or package that talks to any instance.
+- **CLI distribution:** a single, easily installed binary or package that talks to any instance. It is cut from the same tag as the server, names its version to the installation and is told the installation's in return, so a mismatch is a message rather than a missing endpoint. The API itself carries no version in its paths, and migrations only ever run forward ([ADR 0011](docs/adr/0011-the-api-carries-no-version-and-migrations-only-run-forward.md)).
 - **Waiting is solved in Postgres, not next to it.** Wherever a client waits for an event (`--wait`, see 6.1 and 15.9), `LISTEN`/`NOTIFY` wakes it with a deadline as the fallback — no broker, no Redis, no scheduler. The price is stated in the research and is worth paying, but it is real: `LISTEN` does not get along with transaction pooling and needs its own connection outside every pool; whoever puts the app behind a reverse proxy has to raise its timeouts. Both belong in the documentation before they belong in support requests.
+- **The installation speaks HTTP and expects a reverse proxy for TLS.** No certificate handling of our own — and whoever puts one in front raises its timeouts, because a waiting client holds its connection open (see above).
+- **A project is not a repository.** One project spans as many repositories as it likes; the `.planaffe` file points from a repository at exactly one project, and never the other way round. planaffe knows nothing about repositories, which is the whole point of 2.1 — one place for tickets, wherever the code lives.
+- **Getting out is as documented as getting in.** `pg_dump` is the export, and `pa export --json` is the readable one. There is no importer in the product: an agent reads `gh issue list --json` and creates the issues through the CLI, which is the ability this product is built for. The documentation shows it rather than leaving it as a gap.
 - **Ticket content is not trustworthy.** What planaffe delivers to an agent was often written by another agent. Anthropic explicitly wraps such payloads as "untrusted data", OpenAI warns to sanitise input from issue text. That is already true today and changes nothing about the architecture — but it belongs in the documentation, not in a footnote.
 
 ## 14. MVP Scope
+
+This is the scope of version 1.0, not the order it is built in. It is built in three cuts, the first of which ends when the maintainer's own file-based tracker can be deleted ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)).
 
 **Included:**
 
@@ -604,8 +631,12 @@ The substantive questions are settled: hierarchy, epics, sub-issues, the field s
 
 The wake-up mechanism is settled as well: a held outgoing connection instead of a webhook, `pa next --wait` as the smallest building block, the expiry deadline before the trigger (15.9). Evidence in [`docs/research/waking-agents-and-triggers.md`](docs/research/waking-agents-and-triggers.md).
 
-Only one thing remains open, and it does not block the start:
+The commissioning path, the life of a token (12.), the product language, pagination, deletion, versioning and the way out of the product (13., 6.1) were settled afterwards and are recorded where they belong, with the reasoning in [`docs/adr/`](docs/adr/).
+
+Two things remain open, and neither blocks the start:
 
 - **Due date:** deliberately left out, because a date without a notification wakes nobody. The research on waking changed nothing about that; it only sharpened the coupling: a date needs a **time-triggered** event, and therefore a scheduler on the server — exactly what 11. avoids with good reason for claims. The waiting mechanism from 15.9 does not help here, because it waits for events somebody triggers anyway. Defer further, and do not design for it while building `pa next --wait`.
 
-With that, the vision is ready to be decided on. The next step is the concrete data model and the API.
+- **The question does not close its own loop.** An agent asks, releases the ticket, and the ticket waits — for a human who has to look into "needs you" of their own accord, because there are no notifications in the MVP. It is the only loop in the system that does not close by itself, and it sits precisely between two agent runs. There is a second half to it: the human answers by talking to *one* agent, while the ticket is later picked up by *another*, which sees the question and the answer but not the conversation around them. Neither is a blocker — both are the reason notifications sit as high on the roadmap as they do (15.1), and they are the measure of whether the question was worth being a state of its own.
+
+With that, the vision is decided, and the order of building is settled ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)). The next step is the concrete data model and the API of the first cut.
