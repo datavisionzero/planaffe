@@ -18,22 +18,15 @@ two derived rules that every read has to apply.
 
 ## The doors left open
 
-Cut two and three add to this schema; nothing here has to be rewritten for them.
-Named so that nobody walls them shut by accident:
+Cut two adds to this schema — the section [What cut two adds](#what-cut-two-adds)
+at the end says exactly what — and nothing here is rewritten for it. Two doors
+stay open for cut three, named so that nobody walls them shut by accident:
 
-- **Sub-issues** add `issue.parent_id`, a self-reference. Condition 5 and 8 of
-  VISION 10 join the `next` predicate then.
-- **Releases** add a `release` table and `issue.release_id`. The deletion rule
-  "an issue in a published release cannot be deleted" (ADR 0013) is vacuous
-  until then.
-- **Full-text search** adds a generated `tsvector` column on issue, comment and
-  question.
-- **The agent metadata back channel** adds a `metadata jsonb` column and a
-  history of it on the agent's identity row.
 - **Browser sessions** add a `session` table, and a login adds `password_hash`
-  to the user. Cut one authenticates by token only.
+  to the user. Until then the web application authenticates by token, like the
+  CLI.
 - **Project access** adds a `project_access (project_id, identity_id)` table.
-  In cut one every user sees every project, and a blocker is never hidden.
+  Until then every user sees every project, and a blocker is never hidden.
 
 ## Identities and tokens
 
@@ -507,6 +500,170 @@ pays for a backlog; the floor is a floor, and a project nobody writes to keeps
 its deleted rows longer.
 
 The grace period is `PLANAFFE_DELETION_GRACE_DAYS`, default `7`, per instance.
+
+## What cut two adds
+
+Decided in the design session of PLAN-32 (2026-09-02), after cut one had run
+for a day. Every addition is a column, a table or a trigger beside what exists;
+no constraint above changes, and the view gains columns rather than rules.
+
+### Sub-issues
+
+```sql
+alter table issue add column parent_id uuid references issue (id);
+alter table issue add constraint issue_parent_not_self check (parent_id is distinct from id);
+create index issue_parent on issue (parent_id) where parent_id is not null;
+```
+
+One level (VISION 7), same project, the epic inherited: all three are rules of
+the act that sets `parent_id` — on create, with `parent` in the item, or on
+`PATCH` — and not of the schema, because they read other rows. A parent with a
+parent is refused as `one-level`, a parent in another project as
+`other-project`, and `epic` on a sub-issue is refused as `epic-inherited`; the
+sub-issue's `epic_id` is written from the parent's, on attach and whenever the
+parent's changes. Priority is copied at birth and never again.
+
+`issue_read` gains `open_sub_issues`, counted over the view itself, and
+`Workable` gains conditions 5 and 8 of VISION 10 as one predicate on the
+parent: it is null, or it is open, not `backlog`, and has no open blocker.
+Derived, not copied — the parent's blocker dissolves once and the children
+follow.
+
+Deleting a parent is refused as `has-sub-issues` while any sub-issue, deleted
+ones included, references it — the same rule an epic has for its issues (ADR
+0013) — so a parent is never purged from under its children.
+
+### Releases
+
+```sql
+create table release (
+    id            uuid        not null primary key,
+    project_id    uuid        not null references project (id) on delete cascade,
+    name          text,                                   -- null while open
+    description   text        not null default '',
+    status        text        not null default 'open' check (status in ('open', 'published')),
+    published_at  timestamptz,
+    published_by  uuid        references identity (id),
+    created_at    timestamptz not null,
+    updated_at    timestamptz not null,
+
+    check ((status = 'published') = (name is not null)
+       and (status = 'published') = (published_at is not null)
+       and (status = 'published') = (published_by is not null))
+);
+
+create unique index release_open on release (project_id) where status = 'open';
+create unique index release_name on release (project_id, lower(name)) where name is not null;
+
+create table release_issue (
+    release_id  uuid not null references release (id) on delete cascade,
+    issue_id    uuid not null references issue (id) on delete cascade,
+    primary key (release_id, issue_id)
+);
+
+create index release_issue_issue on release_issue (issue_id);
+```
+
+Exactly one open release per project is the partial unique index; it is
+created with the project, by the migration for the projects that exist, and
+again in the transaction that publishes the previous one. Membership is a
+table rather than a column because an issue that shipped in `v1.2.0`, was
+reopened and closed again is in `v1.2.0` *and* in the open release (VISION 7);
+that an issue is in at most one open release is a rule of the acts that write
+it — close, reopen and publish — all of which lock the issue row first.
+
+The acts: `done` inserts the issue into the project's open release; `canceled`
+inserts nothing; reopen deletes the row that points at an open release and
+leaves rows that point at published ones. A sub-issue closes into no release
+of its own — it enters the one its parent enters, when the parent closes, and
+a sub-issue closed after its parent already shipped enters the open release
+like any issue. Publishing names the open release, sets `published_at` and
+`published_by`, and creates the next open one, in one transaction.
+
+The deletion rule of ADR 0013 — an issue in a published release cannot be
+deleted — is `in-published-release`, checked by the delete act against
+`release_issue` joined to `release.status`.
+
+### Full-text search
+
+```sql
+alter table issue add column search tsvector
+    generated always as (to_tsvector('simple', title || ' ' || description || ' ' || coalesce(result, ''))) stored;
+alter table comment add column search tsvector
+    generated always as (to_tsvector('simple', body)) stored;
+alter table question add column search tsvector
+    generated always as (to_tsvector('simple', question || ' ' || coalesce(answer, ''))) stored;
+
+create index issue_search    on issue    using gin (search);
+create index comment_search  on comment  using gin (search);
+create index question_search on question using gin (search);
+```
+
+`simple`, not `english`: ticket text is written in whatever language the
+maintainer and their agents speak and is full of identifiers — `claim-held`,
+`PLAN-42`, `issue_read` — that stemming would mangle. The query side is
+`websearch_to_tsquery('simple', q)`, so a user types what they would type into
+a search box: words, `"a phrase"`, `-not`. `q` on the issue list matches the
+issue's own vector or that of any of its comments or questions; on the
+question list it matches the question's. No ranking — the list keeps its
+order, and `q` is one filter beside `label`.
+
+### Wake-ups
+
+```sql
+create function planaffe_notify() returns trigger language plpgsql as $$
+begin
+    perform pg_notify('planaffe_' || replace(new.project_id::text, '-', ''), '');
+    return null;
+end $$;
+
+create trigger issue_notify    after insert or update on issue    for each row execute function planaffe_notify();
+create trigger question_notify after insert or update on question for each row execute function planaffe_notify();
+```
+
+One channel per project, because every question a waiter asks — `next`, a
+question's answer, "needs you" — is a project's question, and an agent waiting
+in one project has no reason to wake for a change in another. The payload is
+empty: a notification says "look again", and the waiter re-runs the query it
+was waiting on. `question` carries `project_id` denormalised from its issue for
+this trigger. Comments notify nothing — a comment makes nothing workable.
+
+The instance holds one listening connection and fans notifications out to its
+waiters in process; a waiter that outlives that connection is woken by the
+reconnect and re-runs its query, which is the same as being woken by a change
+it might have missed. The deadline is the fallback for a notification that
+never comes, and it is bounded — one hour — so that a proxy's idle timeout is a
+number an operator can set (`docs/operations.md`).
+
+### The agent's metadata
+
+```sql
+alter table identity add column metadata jsonb;
+alter table identity add column metadata_reported_at timestamptz;
+
+create table identity_metadata (
+    id           uuid        not null primary key,
+    identity_id  uuid        not null references identity (id),
+    reported_at  timestamptz not null,
+    metadata     jsonb       not null
+);
+
+create index identity_metadata_identity on identity_metadata (identity_id, reported_at);
+```
+
+Four optional string fields, each at most 100 characters, and nothing else:
+`kind` (what the agent is — `claude-code`, `codex`, `cursor`), `harness`
+(what it runs in — `cli`, `ide`, `ci`, `container`), `environment` (where, a
+free identifier) and `version` (of the harness). What changes per run — model,
+reasoning level, token usage — is VISION 15.2 and is not in this cut. The
+column is what was last reported; the table is every report, kept because
+VISION 12 wants the history and shown nowhere yet.
+
+### Bulk changes and the export
+
+Neither adds to the schema. A bulk `PATCH` or `DELETE` is the single act
+repeated inside one transaction, and the export is the CLI reading the lists
+that exist (`docs/api.md`).
 
 ## Bootstrap
 

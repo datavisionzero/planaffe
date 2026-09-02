@@ -262,3 +262,16 @@ review, issues without `ready` where triage is required, and issues whose chain
 of blockers ends in something no agent can pull. A list of the API, not only a
 screen, and the one a human waits on.
 _Avoid_: inbox, attention, alerts, triage list, work queue
+
+**Stuck**:
+Derived: a blocked issue whose chain of open blockers ends in a **dead end** —
+an issue that is parked, or has an open question, or is in a project with no
+agent. The last group of "needs you"; a blocked issue whose blockers an agent
+will pull is not stuck and is not on the list. `stuck` in the API.
+_Avoid_: dead, orphaned, abandoned, deadlocked
+
+**Wait**:
+`wait` on `next`, on a question and on "needs you": the request stays open
+until what it asked for is there or the deadline passes, and answers the same
+either way. `--wait` in the CLI; at most one hour per request.
+_Avoid_: poll, long-poll, subscribe, block

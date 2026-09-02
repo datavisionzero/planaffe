@@ -76,9 +76,11 @@ flags, output — is PLAN-0012's; what it can do is decided here.
 
 `status` and `claim` are the derived values of `issue_read` (`storage.md`): an
 expired claim is `null` here and the status is `todo`. `expires_at` is `null`
-for a user's claim. `open_sub_issues` is always `0` until cut two; it is in the
-shape now because ADR 0012 puts it there and the clients should not change
-when it starts counting.
+for a user's claim. Cut two adds `parent` (the parent's key, or `null`) and
+`release` (the name of the release the issue is in, `unreleased` for the open
+one, or `null`) to the summary, and makes `open_sub_issues` count; it was in
+the shape from the start because ADR 0012 puts it there and the clients should
+not change when it starts counting.
 
 `Issue` — the complete issue, everything above plus:
 
@@ -457,8 +459,9 @@ already where an agent's close lands and a human accepts it from here (ADR
 | `GET` | `/questions` | any | a page of questions with their issue's key and title: `project`, `open` (`true` default), `issue` (key), `cursor`, `limit`; oldest first |
 
 This is the "are there open questions?" of VISION 7 as a list. The full "needs
-you" list, with the blocker-chain rule, is cut two ([ADR 0009](./adr/0009-the-mvp-is-built-in-three-cuts.md));
-until then it is this list plus `GET /issues?status=review`.
+you" list, with the blocker-chain rule, is `GET /projects/{key}/needs-you`
+(cut two, below); until it exists it is this list plus
+`GET /issues?status=review`.
 
 ### Epics
 
@@ -473,13 +476,137 @@ until then it is this list plus `GET /issues?status=review`.
 | `DELETE` | `/epics/{key}` | any | soft delete, refused with `has-issues` while any issue, deleted ones included, references it |
 | `POST` | `/epics/{key}/restore` | any | back |
 
-## What cut two adds, so that nothing here has to move
+## What cut two adds
 
-`--wait` as a `wait` parameter on `POST /projects/{key}/next`, on
-`GET /questions/{id}` and on `GET /projects/{key}/needs-you`, held open on
-`LISTEN`/`NOTIFY` with the deadline as the fallback · `GET /projects/{key}/needs-you`
-with the blocker-chain rule · `/releases` and `issue.release` · `parent` on
-the issue and `open_sub_issues` starting to count · `q` as a full-text filter on
-`GET /issues` and `GET /questions` · `PATCH /me/metadata` for agents ·
-`GET /export` · bulk `PATCH` and `DELETE` on `/issues`. None of them changes a
-shape that exists.
+Designed in PLAN-32 (2026-09-02), on the schema `docs/storage.md` describes
+under the same heading. Nothing above changes shape; every addition is a new
+endpoint, a new filter, or a new field beside the existing ones.
+
+### Sub-issues
+
+`parent` on the issue: the parent's key in `IssueSummary`, the parent's
+`IssueRef` in `Issue`, and `sub_issues` — a list of `IssueRef` — in `Issue`.
+Set at creation (`parent` in an item of the bulk body, a key or a ref) or by
+`PATCH` (`parent`, a key or `null`), on an open issue only. One level: a
+parent that has a parent is `one-level`; another project is `other-project`;
+`epic` on a sub-issue is `epic-inherited`, because the sub-issue's epic is its
+parent's and follows it. Priority is copied at birth.
+
+`next` applies conditions 5 and 8 of VISION 10: a sub-issue whose parent is
+parked, closed or blocked is not workable, and counts under `parent_gated` in
+`reasons` — a new count beside the existing ones. Deleting a parent is
+`has-sub-issues` while a sub-issue, deleted ones included, references it. The
+CLI: `pa issue create --parent PLAN-42`, and `pa issue view` lists the
+sub-issues under the description.
+
+### Releases
+
+| method | path | who | does |
+|---|---|---|---|
+| `GET` | `/projects/{key}/releases` | any | every release of the project, the open one first, then published ones newest first: `{ name, status, description, published_at, published_by, issues }` with `issues` a count. Not paginated |
+| `GET` | `/projects/{key}/releases/{name}` | any | one release with its issues as `IssueSummary`, sub-issues after their parent; `unreleased` names the open one |
+| `PATCH` | `/projects/{key}/releases/{name}` | any | `{ description? }` — the release notes are a living document until published, and editable after, because a record can be annotated |
+| `POST` | `/projects/{key}/releases/publish` | any | `{ name, description? }`: names the open release, freezes it, sets the date and the caller, and creates the next open one, in one transaction. 201 with the published release. A name the project has is `release-exists`; `unreleased` and `none` are reserved |
+
+`GET /issues` gains `release` (a name, `unreleased`, or `none`). An issue's
+membership follows the acts (VISION 7): `done` lands in the open release,
+`canceled` in none, reopening leaves an open release and stays in a published
+one, a sub-issue ships with its parent. Deleting an issue in a published
+release is `in-published-release`. The CLI: `pa release list`, `pa release
+view NAME`, `pa release publish NAME [--description-file F]`, and `pa release
+notes NAME`, which prints the issues as Markdown — `- PLAN-42 Title` with
+sub-issues indented under their parent — and is composed by the CLI from the
+view, not by the instance.
+
+### Needs you
+
+| method | path | who | does |
+|---|---|---|---|
+| `GET` | `/projects/{key}/needs-you` | any | what only a human can resolve, in this order: open questions, issues in `review`, then — only where triage is required — issues without `ready`, then stuck issues. A page of `{ issue: IssueSummary, because }` with `because` one of `question`, `review`, `unready`, `stuck` |
+
+**Stuck** is the blocker-chain rule of VISION 10: a blocked issue is on the
+list only when a chain of open blockers from it ends in a dead end — an issue
+that is parked, or has an open question, or is in a project with no agent —
+because a blocker an agent will pull needs nobody and is noise here. The
+predicate is one recursive query over the open edges, evaluated in SQL beside
+`Workable`. The CLI: `pa needs-you`, which prints the four groups under their
+headings.
+
+### Waiting
+
+`wait`, in seconds, on three reads — one mechanism, three doors (VISION 6.1):
+
+| on | as | returns when |
+|---|---|---|
+| `POST /projects/{key}/next` | `wait` in the body | an issue was handed out, or the deadline passed — then the same `{ issue: null, reasons }` as without `wait` |
+| `GET /questions/{id}` | `wait` in the query | the question was answered, or the deadline passed — then the question as it is |
+| `GET /projects/{key}/needs-you` | `wait` in the query, with `If-None-Match` carrying the `ETag` of the last answer | the list differs from the one the caller has, or the deadline passed — then `304` |
+
+The query is run first, and only when it finds nothing to return does the
+request wait: on the project's notification channel (`docs/storage.md`,
+Wake-ups), re-running the query on every notification, until it finds
+something or the deadline passes. `wait` is at most `3600`; a larger value is
+`wait-too-long`, and the CLI's `--wait` takes any number of seconds and asks
+in rounds. Nothing about the answer depends on whether it waited, which is
+what lets `pa next --claim --wait 60` be a loop without a `sleep`. What an
+operator's proxy has to allow is in `docs/operations.md`.
+
+The CLI: `pa next --wait S`, `pa issue ask KEY "…" --wait S` — which holds
+the claim and waits for the answer, for at most the rest of the claim (VISION
+10) — and `pa needs-you --wait S`.
+
+### Search
+
+`q` on `GET /issues` and `GET /questions`: a full-text filter in the words a
+search box takes — `claim expired`, `"for update"`, `-flaky` — matched with
+`websearch_to_tsquery` against the `simple` configuration, so identifiers
+survive (`docs/storage.md`, Full-text search). On issues it matches the title,
+the description, the result, and the issue's comments and questions; on
+questions the question and its answer. A filter, not a ranking: the list keeps
+its order. The CLI: `pa issue list -q "…"`, `pa question list -q "…"`.
+
+### The agent's metadata
+
+| method | path | who | does |
+|---|---|---|---|
+| `PATCH` | `/me/metadata` | agent | `{ kind?, harness?, environment?, version? }` — each a string of at most 100 characters or `null` to clear; a field left out is unchanged; any other field is `unknown-field`. 200 with `Me`, which gains `metadata` and `metadata_reported_at`. A user token is `forbidden`: a user has no metadata (ADR 0015) |
+
+The back channel of VISION 12, one way: an agent writes about itself and reads
+nothing of anyone. `AgentSummary` gains the same two fields, so `pa agent
+list` and `pa agent view` show what an agent last said about itself and when.
+The CLI: `pa me set --kind claude-code --harness cli --version 2.1`.
+
+### Bulk changes
+
+| method | path | who | does |
+|---|---|---|---|
+| `PATCH` | `/issues` | any | `{ keys: [...], changes: { …the body of the single PATCH… } }`: the same change on every key, in one transaction, all or none. 200 with `{ items: [Issue] }` in the order given |
+| `DELETE` | `/issues` | any | `{ keys: [...] }`: soft-deletes every key, all or none. 204 |
+
+Every key is the single act with its rules, and the first refusal refuses the
+whole request with the problem it would have had alone plus `key`, the issue
+it stopped at. All or nothing, like bulk create, because the use is "close
+these twelve duplicates" and half of that is the worst state to be left in; a
+caller repeats the whole request after fixing the one. At most 100 keys
+(`too-many`); `If-Match` is not honoured on a bulk change. The acts — close,
+reopen, claim — stay one issue at a time (ADR 0016). The CLI: `pa issue edit
+KEY KEY… --…`, `pa issue delete KEY KEY…`.
+
+### The export
+
+Not an endpoint. `pa export --json [--project KEY]` reads the lists that exist
+— the project, its labels, its epics, its releases, every issue with its
+comments and questions, and every issue's history — and writes one JSON
+document per project:
+
+```json
+{ "exported_at": "…", "planaffe": "1.2.0",
+  "project": { … }, "labels": [ … ], "epics": [ … ], "releases": [ … ],
+  "issues": [ { …Issue…, "history": [ … ] } ] }
+```
+
+The way out of the product (VISION 13): `pg_dump` is the backup, this is the
+readable copy. There is no importer; an agent given this document and
+`docs/cli.md` recreates the project through `pa issue create --file`, which is
+the ability the product is built for. A separate endpoint would be a second
+way to read what the lists already say (ADR 0012).
