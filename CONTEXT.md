@@ -28,8 +28,9 @@ either a **User** or an **Agent**.
 _Avoid_: actor, principal, account, subject
 
 **User**:
-A human identity, authenticated by a session, holding access to a set of projects
-and possibly the administrator role.
+A human identity, authenticated by a session in the browser or by a **User
+Token** at the console, holding access to a set of projects and possibly the
+administrator role.
 _Avoid_: person, member, account, human
 
 **Agent**:
@@ -46,9 +47,16 @@ and revoked rather than deleted, so that everything it ever signed keeps its
 author.
 _Avoid_: API key, secret, service account, credential
 
+**User Token**:
+A user's key to the CLI: it authenticates as the user and is no identity of its
+own — no name, no metadata, no back channel. Created by the user, shown once,
+revoked rather than deleted.
+_Avoid_: personal access token, API key, session token, login
+
 **Administrator**:
 The role that administers the instance itself — users, projects, and everything
-outside a single project's content.
+outside a single project's content. Held by users only; an agent token never
+carries it, whoever owns it.
 _Avoid_: owner, superuser, root, maintainer
 
 ## The work
@@ -74,19 +82,23 @@ _In prose_ "ticket" is fine and often reads better.
 
 **Sub-issue**:
 An issue with a parent, exactly one level deep. It is a full issue — its own key,
-status, claim and result — and inherits only the parent's epic.
+status, claim and result — that inherits only the parent's epic, starts with the
+parent's priority, and is gated by the parent: not workable while the parent is
+parked, closed or blocked, and shipped in the parent's release.
 _Avoid_: subtask, child issue, checklist item
 
 **Epic**:
 A theme several issues hang under, and a description that is the shared context
 for whoever works on them — a living document that whoever works under it keeps
-current. A bracket, not a unit of work: no assignee, no priority, no claim.
+current. A bracket, not a unit of work: no assignee, no priority, no claim, and
+a status that gates nothing — closing it leaves its issues workable.
 _Avoid_: initiative, theme, feature, parent, milestone
 
 **Release**:
 A named version of a project, and a record of what shipped in it rather than a
-plan for what should. Closed issues collect in the one open release; publishing
-freezes it and opens the next.
+plan for what should. Closed issues collect in the one open release, which has
+no name until publishing names it, freezes it and opens the next; a sub-issue
+ships with its parent.
 _Avoid_: milestone, version, sprint, iteration
 
 **Label**:
@@ -106,7 +118,8 @@ _Avoid_: note, remark, discussion, thread
 **Question**:
 An open state on an issue: what somebody needs to know before the work can go on,
 with an answer that closes it. It is not a comment, because "are there open
-questions?" is a state rather than a text search. Whoever cannot go on asks.
+questions?" is a state rather than a text search. Whoever cannot go on asks;
+asking does not release the claim, and the asker may wait for the answer.
 _Avoid_: query, inquiry, blocker, clarification, needs-info
 
 **History**:
@@ -142,8 +155,10 @@ _Avoid_: state, workflow state, stage, column
 
 **Review**:
 The status between delivered and accepted: the claim is released, the result is
-written, and the issue waits for a human — neither workable nor claimed. An
-agent's close lands here only where **review required** is on.
+written, and the issue waits for a human — neither workable nor claimed. It
+leaves to `done`, to `canceled`, or back to `todo` with a comment. Every close by
+an agent — `canceled` included — lands here where **review required** is on;
+handing in explicitly works whatever the switch says.
 _Avoid_: QA, verification, acceptance, pending, awaiting approval
 
 **Done**:
@@ -160,7 +175,8 @@ _Avoid_: resolved, completed, finished, archived
 **Ready**:
 The field, and a statement about the issue rather than a permission: it is
 concrete enough that somebody can implement it without asking first. Whoever
-writes the issue sets it.
+writes the issue sets it — unless **triage required** is on, when an agent may
+clear it and only a user may set it.
 _Avoid_: approved, groomed, refined, triaged
 
 **Workable**:
@@ -170,23 +186,28 @@ required.
 _Avoid_: ready (that is the field), available, eligible, actionable
 
 **Triage required**:
-The project switch that makes `ready` binding for **workable**. Off by default,
-because a solo developer who trusts whoever writes the issues should not have to
-flag them. It guards the entrance; **review required** guards the exit.
+The project switch that makes `ready` binding for **workable** and a user's word:
+on, an agent may clear the flag and never set it. Off by default, because a solo
+developer who trusts whoever writes the issues should not have to flag them. It
+guards the entrance; **review required** guards the exit, with the same
+asymmetry — an agent hands in, a human accepts.
 _Avoid_: review, approval, gate, moderation
 
 **Review required**:
-The project switch that makes an agent's close land in **review** instead of
-`done`. Off by default, for the same reason as triage required: whoever trusts
+The project switch that makes every close by an agent — `canceled` included —
+land in **review** instead of `done`. Off by default, for the same reason as triage required: whoever trusts
 their agents should not have to accept every issue by hand. A user's close goes
 to `done` either way.
 _Avoid_: approval, sign-off, QA gate, acceptance
 
 **Claim**:
 The exclusive hold one identity takes on an issue, won atomically by exactly one
-claimant, expiring by itself after inactivity when an agent holds it and never
-when a user does, and released by handing the issue over — into review or to a
-close. It says who is working **now**.
+claimant, expiring by itself after its holder's inactivity when an agent holds it
+and never when a user does, and released by handing the issue over — into review
+or to a close — or by letting go, which lands in `todo`. Taken directly on any
+open unclaimed issue except one in review, held several at a time by one
+identity, and taken over a user's head only by a user. It says who is working
+**now**.
 _Avoid_: lock, reservation, assignment, checkout
 
 **Assignee**:
@@ -221,3 +242,10 @@ The act at the centre of the product: hand out the highest-ranked workable issue
 and claim it, as one operation that cannot be split. Priority first, then an epic
 nobody is working in, then the older issue.
 _Avoid_: pull, fetch, assign, dequeue, take
+
+**Needs you**:
+Derived: the list of what only a human can resolve — open questions, issues in
+review, issues without `ready` where triage is required, and issues whose chain
+of blockers ends in something no agent can pull. A list of the API, not only a
+screen, and the one a human waits on.
+_Avoid_: inbox, attention, alerts, triage list, work queue

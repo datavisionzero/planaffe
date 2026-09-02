@@ -1,6 +1,6 @@
 # Product Vision
 
-> **Status:** The hierarchy (7.), the field set (8.) and the workflow (9.) are settled after research — evidence in [`docs/research/hierarchy-and-fields.md`](docs/research/hierarchy-and-fields.md); the workflow gained `review` afterwards ([ADR 0014](docs/adr/0014-review-is-a-status-and-a-project-switch.md)). How an agent learns that it is its turn (15.9) is settled after research — evidence in [`docs/research/waking-agents-and-triggers.md`](docs/research/waking-agents-and-triggers.md). What is still open is in section 17.
+> **Status:** The hierarchy (7.), the field set (8.) and the workflow (9.) are settled after research — evidence in [`docs/research/hierarchy-and-fields.md`](docs/research/hierarchy-and-fields.md); the workflow gained `review` afterwards ([ADR 0014](docs/adr/0014-review-is-a-status-and-a-project-switch.md)), and identity gained the user token ([ADR 0015](docs/adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)). How an agent learns that it is its turn (15.9) is settled after research — evidence in [`docs/research/waking-agents-and-triggers.md`](docs/research/waking-agents-and-triggers.md). What is still open is in section 17.
 
 ## 1. Elevator Pitch
 
@@ -76,7 +76,7 @@ The CLI is the interface for agents and for console-minded humans. It has to be 
 - **Claim** issues and release them again.
 - Ask questions, retrieve open questions, answer them.
 - Output either human-readable or machine-readable (JSON), so that agents can parse deterministically.
-- Authentication via API token, usable across projects, with a clearly set "current project".
+- Authentication via token, usable across projects, with a clearly set "current project". A token is either an **agent** or a **user's key** (12.): an agent works under its own identity, a human at the console works as themselves — with a claim that does not expire and a close that is a human's word.
 - Description texts are passed as Markdown via stdin or a file — no forced editor, agent-friendly.
 
 The goal: an agent can carry out its entire working cycle without ever touching the UI — find a suitable issue, claim it, work on it, document the result, close it.
@@ -88,11 +88,14 @@ Which is why **deleting is a verb an agent has**, and why it is a soft delete: `
 **Shape:** `planaffe <object> <verb>`, like `gh` and `glab` — `planaffe issue list`, `issue view PLAN-42`, `issue claim PLAN-42`, `epic view PLAN-E3`. Short alias `pa`.
 
 ```
-pa next --ready --claim        # take the next ready issue and claim it
+pa next --claim                # take the next workable issue and claim it
 pa next --claim --wait 60      # the same, waiting up to 60 s for supply
+pa next --claim --ready        # only flagged issues, even where triage is not required
 pa issue view PLAN-42 --json   # the complete issue as JSON, including the epic description
 pa issue ask PLAN-42 "Which…"  # ask a question; the ticket waits for an answer
+pa issue ask PLAN-42 "Which…" --wait 600  # the same, and wait for the answer
 pa issue close PLAN-42 --result-file - # done, result as Markdown, claim released
+pa needs-you --wait 3600       # block until something needs a human
 ```
 
 Commitments that matter to agents:
@@ -102,7 +105,8 @@ Commitments that matter to agents:
 - **Speaking exit codes.** A lost claim is a different code than a network error — an agent has to be able to tell whether to try again.
 - **Configuration through environment variables** (`PLANAFFE_URL`, `PLANAFFE_TOKEN`) plus an optional `.planaffe` file in the repository that fixes the project — and, where one project spans several repositories, the label that marks this repository's tickets (13.). Whoever is in the repository never has to name the project.
 - **Never interactive when stdin is not a terminal.** No editor, no prompt, no pager — an agent must never hang.
-- **`--wait` instead of polling.** `pa next --wait <seconds>` blocks until a matching ticket is there or the deadline passes, and then returns exactly what it returns without it. That turns a loop with `sleep` into one line without idle time — and later, the same line into the wake-up mechanism from 15.9.
+- **`--wait` instead of polling.** `pa next --wait <seconds>` blocks until a matching ticket is there or the deadline passes, and then returns exactly what it returns without it. That turns a loop with `sleep` into one line without idle time — and later, the same line into the wake-up mechanism from 15.9. The same flag sits on the two other places where somebody waits for somebody else: `pa issue ask --wait` holds the claim and waits for the answer (10.), and `pa needs-you --wait` waits, for a human, until something needs one (10.). One mechanism, three doors.
+- **`--ready` is a filter, not the switch.** `next` hands out only workable issues, and where triage is required, `ready` is one of the conditions (10.). Where it is not, `--ready` narrows the selection to flagged issues anyway — for a run that should only touch what somebody has looked at.
 
 ### 6.2 Web interface (for humans)
 
@@ -124,7 +128,7 @@ Concretely, as far as the data allows:
 - **Open question:** the question sits at the very top with an answer field, the ticket description collapsed below it. Whoever can answer the question without the context does not have to read the rest.
 - **Blocked:** the blocker sits at the top, with title and status. The only relevant information is what is being waited for.
 - **In progress:** who is working on it and since when — visible before you scroll.
-- **In review:** the `result` sits at the top, and `done` or back to `todo` is one action each.
+- **In review:** the `result` sits at the top, and `done`, `canceled` or back to `todo` with a comment is one action each.
 - **Long descriptions** are collapsed after the first paragraphs, opened fully with one click.
 
 Deliberately **no** summarisation logic, no heuristic guessing what is important. Only the re-ordering of what is already structured: labels, blockers, claims, comments. If the information lives in prose alone, we show the prose.
@@ -158,8 +162,9 @@ That is the same shape Jira (epic → story → subtask) and GitLab (epic → is
 - Epic, parent and sub-issue stay within **one project**. That keeps ID allocation and permission checks trivial.
 - **Relationships** (`blocks`) between issues, on the other hand, may cross projects. A blocker in a project the caller cannot read is still evaluated for workability — otherwise "ready" would be a lie — but shown without key, title and status: only as "blocked by a ticket in another project".
 - Issue IDs are project-scoped short IDs (`PLAN-42`), quotable in branch names, commits and pull requests.
-- **Sub-issues are full issues:** their own key from the same sequence (`PLAN-43`, not `PLAN-42.1`), their own status, their own claim, their own `result`. The only thing they inherit from the parent is the epic, and they cannot set a different one — a theme that applies to the parent applies to its parts.
-- **A parent does not close itself** when its last child closes. It only becomes workable again (see 10.): usually some assembly, an acceptance step or at least a `result` remains to be written. Whoever does not need that closes it with one command.
+- **Sub-issues are full issues:** their own key from the same sequence (`PLAN-43`, not `PLAN-42.1`), their own status, their own claim, their own `result`. The only thing they inherit from the parent is the epic, and they cannot set a different one — a theme that applies to the parent applies to its parts. Priority is copied, not inherited: a sub-issue is born with its parent's priority as a starting value and goes its own way from there. Urgency is a property of the unit, and a breakdown should not lose it four times over.
+- **The parent's gates apply to its parts.** A sub-issue is not workable while its parent is parked in `backlog`, closed, or waiting on an open blocker (condition 8 in 10.). Derived, not copied: the parent's blocker dissolves once, and the children follow. Without this rule, breaking a blocked ticket down would unblock it — `next` would hand out the parts of a whole that is still waiting.
+- **A parent does not close itself** when its last child closes. It only becomes workable again (see 10.): usually some assembly, an acceptance step or at least a `result` remains to be written. Whoever does not need that closes it with one command. Closing a parent with open children goes through, with a warning that lists them — they are no longer workable from then on, visibly rather than silently.
 
 ### The Epic
 
@@ -182,7 +187,7 @@ No assignee, no priority, no claim, no due date. Work happens on issues, not on 
 - An issue belongs to **at most one** epic. The field is optional — most issues have none.
 - Epics are **not nested**. One level, no more.
 - **Progress is derived**, not maintained, and it counts what is closed: `PLAN-E3 · 5 of 7 closed · 4 done · 1 canceled`. The question an epic answers is whether anything is left; `canceled` is a decision that stays visible, not progress, so it is shown apart rather than hidden in either number.
-- An epic can be closed while issues are still open — with a warning, but without a blockade (guiding principle 4).
+- An epic can be closed while issues are still open — with a warning, but without a blockade (guiding principle 4). Closing changes nothing for the issues: the epic is a bracket, and its status gates nothing — they stay workable. The warning lists what is still open, and the CLI offers to cancel or park it in the same command. Attaching an issue to a closed epic reopens the epic — one thought, one command.
 - The epic's description is the **shared context for agents**: whoever claims an issue of the epic gets it delivered along with the ticket by the CLI.
 - It is a **living document**, not a frozen brief. Whatever changes the plan — a decision taken in one ticket that the others have to know about — is written into the epic's description by whoever took it, agent or human; whatever concerns one ticket stays on that ticket. The epic's history records that the description changed, as an issue's does.
 
@@ -233,7 +238,7 @@ We build software, so the question "what was in version 1.2?" belongs in the sys
 
 | Field | |
 |---|---|
-| `name` | `v1.2.0` |
+| `name` | `v1.2.0` — given on publishing, fixed from then on |
 | `description` | Markdown — release notes |
 | `status` | `open` / `published`, with a date |
 
@@ -241,8 +246,9 @@ We build software, so the question "what was in version 1.2?" belongs in the sys
 
 Which is why it fills itself:
 
-- Every project has exactly **one open release**. When a ticket is closed as `done`, it lands there automatically. `canceled` does not — what was not built belongs in no release notes.
-- **Publishing freezes the state**, sets the date and creates the next open release.
+- Every project has exactly **one open release**. When a ticket is closed as `done`, it lands there automatically. `canceled` does not — what was not built belongs in no release notes. The open release has no name yet — nobody knows it on the day it is created — and is shown as `unreleased`.
+- **Publishing names the release**, freezes the state, sets the date and creates the next open release. `pa release publish v1.2.0` is one command.
+- **A sub-issue ships with its parent.** It enters the release its parent enters, not the one open on the day it closed, and the notes print it indented under the parent: the parent is the changelog entry, the children are how it was done. A sub-issue whose parent is still open is in no release — what has not shipped as a whole has not shipped.
 - Moving a ticket by hand still works — a ticket that has not shipped yet simply does not belong.
 - A ticket belongs to at most one **open** release.
 - **When a ticket is reopened**, it leaves a release that is still open. If it sits in one already **published**, it stays there — it did ship, and you do not rewrite a record. When it is closed again, it additionally enters the current release. A ticket appearing in v1.2.0 *and* v1.2.1 is not a bug but exactly the story: shipped once, fixed once.
@@ -273,12 +279,12 @@ Seventeen fields — comparable to Linear's core, considerably leaner than GitLa
 | `result` | optional | Markdown — what was done |
 | `status` | default `todo` | see 9. |
 | `ready` | default `false` | "implementable without asking first", see 10. |
-| `priority` | default `0` | `0`–`4` |
+| `priority` | default `0`, a sub-issue starts with its parent's | `0`–`4` |
 | `labels` | optional | several, optionally grouped |
 | `assignee` | optional | exactly 0 or 1 |
 | `claim` | optional | identity plus timestamp, see 11. |
 | `epic` | optional | 0 or 1, project-local |
-| `release` | set on closing | 0 or 1, project-local |
+| `release` | set on closing, a sub-issue with its parent | 0 or 1, project-local |
 | `parent` | optional | 0 or 1, project-local |
 | `blocks` / `blocked_by` | optional | n:m, across projects |
 | `author` | assigned | human or agent |
@@ -326,15 +332,17 @@ backlog → todo → in_progress → [review] → done
                                         ↘ canceled
 ```
 
-`done` and `canceled` set the issue to closed automatically. Whoever only wants `open`/`closed` uses `todo` and `done` and ignores the rest. `review` is passed through only where the project asks for it (below).
+`done` and `canceled` set the issue to closed automatically, and `canceled` is reachable from every open status, `review` included. Whoever only wants `open`/`closed` uses `todo` and `done` and ignores the rest. `review` is passed through by default only where the project asks for it (below).
 
 **`backlog` and `todo` answer *when*; `ready` answers *how well*.** `backlog` is a decision about time: not now, do not pull this. `todo` is the opposite: pull it as soon as it is workable (10.). `ready` (8.) is a statement about the ticket itself: concrete enough to implement without asking. The two are independent — a concrete ticket can be parked, a vague one can be due — and neither is derived from the other. **A ticket is born in `todo`.** Whoever creates it has decided it should be done; parking it in `backlog` is the explicit act, not the default. Otherwise an agent that breaks an assignment into seven tickets leaves seven that `next` never hands out, and the solo developer gets exactly the clicking work 10. promises to spare them. With triage required, `ready` protects against a sloppy ticket being pulled; without it, the creator is trusted anyway.
 
 **What `done` means.** The work the ticket asked for is delivered the way the project delivers — merged, pushed, tagged: the project's convention, not ours. planaffe does not check it and cannot; it has no repository (13.). What it does is give the moment *before* `done` a place:
 
-**`review` is the status between delivered and accepted.** An agent that has finished hands the ticket over: the claim is released, the `result` is written, and the ticket is neither workable nor claimed — it waits for a human, in "needs you" (10.), next to the open questions. From there it goes to `done`, or back to `todo` with a comment or a question, one action each. Without this status a ticket that is finished but not yet looked at has nowhere to be: keep the claim and it expires overnight, release it and the next agent does the work again, close it and the release records something nobody checked.
+**`review` is the status between delivered and accepted.** An agent that has finished hands the ticket over: the claim is released, the `result` is written, and the ticket is neither workable nor claimed — it waits for a human, in "needs you" (10.), next to the open questions. From there it goes to `done`, to `canceled`, or back to `todo` — one action each. Back to `todo` is the rejection, and it comes with a **comment** that says why: expected like the `result` on the other side, pointed out when missing, enforced never. Not with a question — a question is what whoever cannot go on asks of a human (7.), and a human asking one here would have the ticket wait for a human to answer it, while the agent that did the work is long gone. The next agent reads the comment beside the old `result` and knows what was not enough. Without this status a ticket that is finished but not yet looked at has nowhere to be: keep the claim and it expires overnight, release it and the next agent does the work again, close it and the release records something nobody checked.
 
-**The switch: review required.** Whether an agent's close lands in `review` or in `done` is a project switch, off by default — the mirror image of triage required (10.): triage guards the entrance, review guards the exit. Off, an agent's close is a close, and `done` means what the agent says it means; whoever trusts their agents clicks nothing. On, an agent's close lands in `review`, and `done` is a human's word — which is what makes the release a record rather than a claim (7.). A human closing a ticket goes straight to `done` either way; the switch is about what an agent's word is worth, and that is the question triage required already asks about the other end.
+**The switch: review required.** Whether an agent's close lands in `review` or in `done` is a project switch, off by default — the mirror image of triage required (10.): triage guards the entrance, review guards the exit. Off, an agent's close is a close, and `done` means what the agent says it means; whoever trusts their agents clicks nothing. On, every close by an agent lands in `review` — `canceled` included, because "could not be done" is a claim to check as much as "done" is, and the `result` carries the reason — and `done` is a human's word, which is what makes the release a record rather than a claim (7.). A human closing a ticket goes straight to `done` either way; the switch is about what an agent's word is worth, and that is the question triage required already asks about the other end.
+
+The switch decides only where a plain close lands. `review` itself is always reachable, explicitly: an agent that is not sure of its work hands the ticket over for a look whatever the project's default — the same gesture as clearing `ready` on a ticket it wrote and finds thin. And one consequence of the breakdown belongs here: with the switch on, five sub-issues and their parent are six items to review, because every one of them is a full issue. The cut decides how often a human looks, and that is a reason to cut for the reviewer as well as for the agent.
 
 **Reopening is one movement wherever it starts**, and `review` back to `todo` is the same one: the status becomes `todo`, `closed_at` is cleared, there is no claim, and the `result` stays — the history shows that it is old, and the next close overwrites it. The ticket leaves a release that is still open and stays in one already published (7.).
 
@@ -366,14 +374,15 @@ A ticket is **workable** when all of this holds — `ready` is one of the condit
 5. **No open sub-issues.** A ticket with open children is a bracket, not a unit of work — the agent takes the children.
 6. **`ready` is set**, if the project has triage required switched on.
 7. **It is not assigned to somebody else.** A ticket without an assignee is there for everybody; one with an assignee only pulls for that identity. Otherwise an assignment would have no effect — the next agent along would beat it to it. This very rule later also carries assignment to a named agent (15.8), without a single additional rule.
+8. **Its parent, if it has one, is not parked, closed or blocked.** A sub-issue is a part of a whole, and the whole's gates apply to its parts (7.). The parent's open question does not count — a question about assembling the parts does not stop the parts.
 
 ### What `ready` means
 
-Not "a human has approved it", but: **the ticket is concrete enough that somebody can implement it without asking first.** A statement about the quality of the ticket, not a permission.
+Not "a human has approved it", but: **the ticket is concrete enough that somebody can implement it without asking first.** A statement about the quality of the ticket, not a permission — unless the project asks for one, the way `done` is not a permission unless review is required (9.).
 
-That matters because tickets in this target group are usually **created by an agent**: the user says "create me seven issues for the auth rewrite", and the agent writes them. A few of them are crystal clear, a few are notes that still have to ripen. Whoever writes the tickets knows that best — so they set the flag themselves, per ticket. A human can correct it at any time, but does not have to click through seven tickets just to get going.
+That matters because tickets in this target group are usually **created by an agent**: the user says "create me seven issues for the auth rewrite", and the agent writes them. A few of them are crystal clear, a few are notes that still have to ripen. Whoever writes the tickets knows that best — so they say so, per ticket, and a human does not have to click through seven tickets just to get going. With triage required off, that is the whole story: the flag is the creator's own word, useful as a filter and a warning.
 
-The way back matters just as much: if an agent claims a ticket and notices that it is too vague, it asks a **question** (see 7.) and releases the ticket. With that it is automatically no longer workable and lands in "needs you" — nobody has to remember to flip a flag.
+The way back matters just as much: if an agent claims a ticket and notices that it is too vague, it asks a **question** (see 7.). With that the ticket is automatically no longer workable and lands in "needs you" — nobody has to remember to flip a flag. Asking does not release the claim. An agent whose human is at the keyboard waits for the answer with `pa issue ask --wait` and goes on with its context intact — for at most the rest of its claim, because a claim that expires while the question is open falls back to `todo` like any other, and the answered ticket would go to the next agent along. An agent that will not wait releases the ticket. **Asking does not release; whoever does not wait releases.**
 
 **Triage happens in the chat, not in the interface.** Whoever sees that PLAN-14 is stuck does not open the web app and type around in it, but tells their agent: "answer the open question in PLAN-14 like this and make the ticket more concrete." The agent answers the question and rewrites the ticket. The interface shows where it is stuck; acting happens through the CLI.
 
@@ -384,7 +393,7 @@ The history then says that the agent answered — under its token, which belongs
 The dividing line is not human versus agent, but: do I trust whoever creates the tickets?
 
 - **Off** (default): everything in `todo` is pulled. `ready` remains useful as a filter and a warning, but stops nothing. No clicking work for the solo developer.
-- **On**: only flagged tickets are pulled. Useful when several people create tickets, or when you want to look over them yourself after a breakdown, before five agents set off.
+- **On**: only flagged tickets are pulled — and `ready` becomes a human's word: an agent may **clear** the flag, never set it. The agent that writes seven tickets can still say which of them it considers thin; that one of them is fit to go is said by a person. This is the mirror image of review required (9.): an agent may hand in, not accept. Useful when several people create tickets, or when you want to look over them yourself after a breakdown, before five agents set off.
 
 ### The breakdown is the most important moment
 
@@ -395,9 +404,9 @@ That is why the CLI has to be good at **creating several related tickets in one 
 ### When several agents ask at once
 
 - **Fetching and claiming is a single operation**, server-side, in one transaction. The client does not pick. A "fetch the list first, then claim" would be a race that puts two agents on the same ticket — exactly the failure the system exists to prevent.
-- **Selection order:** highest priority first; on equal priority, an epic in which no other agent is currently working; on a tie there too, the older ticket.
+- **Selection order:** highest priority first; on equal priority, an epic in which no other identity is currently working — a human in the theme is as much a source of conflicts as an agent; on a tie there too, the older ticket.
 - **Epics are kept apart — but only as a tie-breaker.** Two agents in the same theme usually work on the same code, and the conflicts do not arise in the issue tracker but in the repository. Priority still trumps: an urgent ticket does not sit around because its epic is occupied. Tickets **without** an epic are never kept apart — they belong to no theme, so they are not one. `--epic PLAN-E3` still forces a particular theme.
-- **An empty result explains itself.** When nothing comes back, the answer says why: "3 blocked, 2 waiting for an answer, 4 already in progress." The agent knows whether to wait or to stop; the human knows what to clean up. Whoever does not want to stop waits with `--wait` (6.1) instead of asking in a loop.
+- **An empty result explains itself.** When nothing comes back, the answer says why: "3 blocked, 2 waiting for an answer, 4 already in progress, 5 in review, 6 parked, 1 not ready." The agent knows whether to wait or to stop; the human knows what to clean up — and "in review" and "parked" are the two numbers that say the supply is stuck at the exit, or was never let in. Whoever does not want to stop waits with `--wait` (6.1) instead of asking in a loop.
 
 ### In the interface
 
@@ -405,7 +414,9 @@ The question belongs in a fixed place for humans as well:
 
 - **"Ready for agents"** — what an agent would pull now, in exactly that order.
 - **"In progress"** — who is working on what, since when, in which epic.
-- **"Needs you"** — open questions first, then tickets in `review`, then blocked tickets and those without `ready`. This is the human's work list: provide supply so the agents do not run dry.
+- **"Needs you"** — what only a human can resolve, and nothing else: open questions first, then tickets in `review`, then — only where triage is required — tickets without `ready`, and blocked tickets only when the chain of blockers ends in something no agent can pull: a parked ticket, one with an open question, one in a project without agents. A ticket blocked by a ticket an agent will do needs nobody and is noise here; it waits, visibly, in "in progress" — "waiting for PLAN-40". This is the human's work list: provide supply so the agents do not run dry.
+
+"Needs you" is not only a screen. It is a list of the API like every other (ADR 0012), and `pa needs-you --wait` holds the connection until something new lands in it — the held outgoing connection of 15.9, pointed at the human. With that, a notification is a one-liner the user writes around `pa`, not a feature the product ships: no mail, no webhook, no reachable address, and none of the delivery state 15.9 declines. Notifications stay on the roadmap (15.1); this is the piece of them that costs nothing.
 
 ## 11. Claiming — the Core Feature for Agent Operation
 
@@ -415,28 +426,30 @@ Several agents work in parallel. It must not happen that two touch the same issu
 - A claim belongs to an identity (human or agent) and carries a timestamp — visible in the UI and the CLI.
 - The typical agent cycle is one command: "give me the next ready issue and claim it for me".
 
-**Claim and status belong together.** Claiming sets the issue to `in_progress`, releasing sets it back to `todo`, closing — or handing the issue into `review` (9.) — releases the claim. One step, not two (guiding principle 4).
+**Claim and status belong together.** Claiming sets the issue to `in_progress`, releasing sets it back to `todo`, closing — or handing the issue into `review` (9.) — releases the claim. One step, not two (guiding principle 4). Releasing lands in `todo` wherever the claim started: a ticket claimed out of `backlog` is not parked again by letting go — whoever wants it parked says so.
 
-**A claim expires after four hours of inactivity.** Every change to the issue — a comment, a status change, an edit — extends it. That way a crashed agent blocks nothing permanently.
+**A claim expires after four hours of inactivity.** Every change the **holder** makes to the issue — a comment, a status change, an edit — extends it. A change by somebody else does not: a human asking "how far did you get?" on a crashed agent's ticket must not keep the dead claim alive for another four hours. That way a crashed agent blocks nothing permanently.
 
 **A claim held by a user does not expire.** Expiry exists for agents, because that is where runs die. A human who goes home with a claim has not crashed, and a ticket handed to an agent overnight because its human went to bed is the wrong kind of surprise. A forgotten human claim is visible in "in progress" and taken over with `claim --force`.
 
 Deliberately part of it:
 
 - **No heartbeat.** A separate "I am still alive" command would be an additional concept agents forget. Work on the issue *is* the sign of life.
-- **No background job.** Expired claims are evaluated on read, not deleted by a cleanup process — that saves a scheduler and fits guiding principle 2. An expired claim counts as absent everywhere, and the ticket counts as `todo` again — in `pa next`, in lists and in the interface. The status change is therefore derived, not written.
+- **No background job.** Expired claims are evaluated on read, not deleted by a cleanup process — that saves a scheduler and fits guiding principle 2. An expired claim counts as absent everywhere, and the ticket counts as `todo` again — in `pa next`, in lists and in the interface. The status change is therefore derived, not written. The one trace the expiry leaves is written by the successor: the history entry of the claim that follows an expired one says so, so the history still answers who took over from whom without a job to write it.
 - **The deadline is fixed** (changeable per instance through an environment variable, not per project). Four hours is generous for an agent run and short enough that a crash does not cost the day.
-- **`claim --force`** takes over someone else's claim. Not pretty, but there are situations for it — and the alternative is somebody poking around in the database. The previous holder sees it in the history.
+- **A claim can be taken directly.** `pa issue claim` goes on any open, unclaimed issue — parked, blocked, waiting on a question — because workability is `next`'s rule, not the claim's: whoever claims by key knows what they are doing. The one exception is `review`: that ticket has been handed over, and whoever wants to work on it sends it back to `todo` first.
+- **One identity may hold several claims.** A run that fans out into sub-agents under one token takes several tickets, and nothing stops it; the tie-breaker in 10. counts other identities only.
+- **`claim --force`** takes over someone else's claim. Not pretty, but there are situations for it — and the alternative is somebody poking around in the database. The previous holder sees it in the history. Over an agent's claim, anyone may — that is the "the run is hung and four hours is too long" case. Over a user's claim, only a user may: a human's claim not expiring would otherwise protect against `next` and not against an agent that wants the ticket, and that is the same wrong surprise.
 
 ## 12. Users and Permissions
 
 Multi-user is built in from the start — even if the first user works alone, the point comes when a second person joins.
 
-- User accounts for humans; API tokens for agents, bound to an identity, so that it stays traceable **who** claimed and changed what.
-- The permission model is deliberately coarse: an assignment of **which user may see and edit which projects**. Plus an admin role for instance administration.
+- User accounts for humans, agent tokens for agents — and a user token as the human's key to the CLI. Everything is bound to an identity, so that it stays traceable **who** claimed and changed what.
+- The permission model is deliberately coarse: an assignment of **which user may see and edit which projects**. Plus an admin role for instance administration. The role belongs to users only: an agent's token never carries it, whoever owns it. Users, projects and project access are a human's acts, like creating a token — an agent that could invite users would have escaped its identity by a wider door than the one closed below ([ADR 0015](docs/adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)).
 - No fine-grained permission system, no field- or status-level rights, no role matrix.
 
-**One token per agent — and the token is the agent.** An API token is not a human's second key but the identity an agent works under. That holds from the MVP on, because none of it can be retrofitted later without devaluing the history:
+**Two kinds of token, and the agent token is the agent.** A **user token** is a human's key to the CLI: it authenticates as the user, is no identity of its own, and has no name, no metadata and no back channel. The console-minded human of 6.1 works under it as themselves — with a claim that does not expire (11.) and a close that goes to `done` (9.). An **agent token** is not a human's second key but the identity an agent works under; everything below is about agent tokens. That holds from the MVP on, because none of it can be retrofitted later without devaluing the history:
 
 - **Do not reuse.** Whoever runs Claude Code and Codex side by side gives each its own token. We cannot enforce it — but everything the system will ever know about agents depends on it being true. So we say it clearly and set the CLI up so that the convenient path is also the correct one.
 - **Every token has a name.** Randomly assigned on creation, changeable at any time. That way the history, the claim display and the lists do not say "Token 7f3a…" but something readable — and the agent becomes something you can talk about.
@@ -457,11 +470,11 @@ Multi-user is built in from the start — even if the first user works alone, th
 The first five minutes are a success criterion (16.), so the path to the first issue is part of the product and not left to the reader:
 
 1. `docker compose up`. Migrations apply themselves.
-2. **The first administrator and the first token come from environment variables** on the first start. There is no setup wizard and no first-run screen — a product whose first principle is that everything works without the UI must not require the UI to become usable.
+2. **The first administrator and their user token come from environment variables** on the first start. There is no setup wizard and no first-run screen — a product whose first principle is that everything works without the UI must not require the UI to become usable. The first agent gets its own token from that administrator, one command later.
 3. `pa project create` with the key that will prefix every issue in it.
 4. `pa issue create`. That is the fifth minute.
 
-Every further human is invited by an administrator, and every further token is created by a human through the CLI, and later through the interface.
+Every further human is invited by an administrator — with a one-time link the administrator hands over themselves, since nothing sends mail, behind which the invited person sets their password — and every further token is created by a human through the CLI, and later through the interface.
 
 ## 13. Technical Guard Rails
 
@@ -470,13 +483,13 @@ Every further human is invited by an administrator, and every further token is c
 - **Storage:** PostgreSQL. All content, Markdown included, lives in the database. Backup = `pg_dump`.
 - **Frontend:** React.
 - **Deployment:** `docker compose up`. The target is two containers (app plus Postgres), three at most. No queue, no Redis, no S3, no Elasticsearch in the MVP.
-- **Search:** Postgres's own means (full-text search), no separate index.
+- **Search:** Postgres's own means (full-text search), no separate index — over everything that is Markdown: title, description, result, comments, questions and answers.
 - **Configuration:** few environment variables, sensible defaults, migrations run on startup.
 - **CLI distribution:** a single, easily installed binary or package that talks to any instance. It is cut from the same tag as the server, names its version to the installation and is told the installation's in return, so a mismatch is a message rather than a missing endpoint. The API itself carries no version in its paths, and migrations only ever run forward ([ADR 0011](docs/adr/0011-the-api-carries-no-version-and-migrations-only-run-forward.md)).
 - **Waiting is solved in Postgres, not next to it.** Wherever a client waits for an event (`--wait`, see 6.1 and 15.9), `LISTEN`/`NOTIFY` wakes it with a deadline as the fallback — no broker, no Redis, no scheduler. The price is stated in the research and is worth paying, but it is real: `LISTEN` does not get along with transaction pooling and needs its own connection outside every pool; whoever puts the app behind a reverse proxy has to raise its timeouts. Both belong in the documentation before they belong in support requests.
 - **The installation speaks HTTP and expects a reverse proxy for TLS.** No certificate handling of our own — and whoever puts one in front raises its timeouts, because a waiting client holds its connection open (see above).
 - **A project is normally one repository, and never has to be.** The usual shape is one repository, one project. A project may span several — a product cut into backend, frontend and infrastructure keeps one epic across all three — but either way planaffe models no repository: no object, no field, no URL. It knows nothing about repositories, which is the whole point of 2.1 — one place for tickets, wherever the code lives. Where a project does span several, the convention is a label group `repo` with one label per repository: an issue carries the label of the repository it concerns, or none when it concerns no particular one. The group is not created by default; whoever needs it creates it. When the git integration comes (15.1), the repository becomes an object with a URL and the label group migrates into it — not before, because a repository without an identity is a label in disguise.
-- **The `.planaffe` file** sits in the root of a repository and is checked in, like `.nvmrc`. It points from the repository at exactly one project, never the other way round — a project does not list its repositories. It holds the project key, so that nobody working in the repository has to name the project, and optionally the `repo` label of this repository, so that `pa next` run here hands out only issues carrying that label or none. It holds no URL and no token; those come from the environment. A file naming a label the project does not have is an error on the first command, not a silent empty result.
+- **The `.planaffe` file** sits in the root of a repository and is checked in, like `.nvmrc`. It points from the repository at exactly one project, never the other way round — a project does not list its repositories. It holds the project key, so that nobody working in the repository has to name the project, and optionally the `repo` label of this repository, so that `pa next` run here hands out only issues carrying that label or none — and `pa issue create` run here puts that label on the new issue unless told `--repo none`: an issue written in the frontend repository concerns the frontend until somebody says otherwise. It holds no URL and no token; those come from the environment. A file naming a label the project does not have is an error on the first command, not a silent empty result.
 - **Getting out is as documented as getting in.** `pg_dump` is the export, and `pa export --json` is the readable one. There is no importer in the product: an agent reads `gh issue list --json` and creates the issues through the CLI, which is the ability this product is built for. The documentation shows it rather than leaving it as a gap.
 - **Ticket content is not trustworthy.** What planaffe delivers to an agent was often written by another agent. Anthropic explicitly wraps such payloads as "untrusted data", OpenAI warns to sanitise input from issue text. That is already true today and changes nothing about the architecture — but it belongs in the documentation, not in a footnote.
 
@@ -491,13 +504,13 @@ This is the scope of version 1.0, not the order it is built in. It is built in t
 - Questions: ask, list, answer — filterable across the project
 - Epics: create, assign issues, see progress, close
 - Releases: closed tickets collect automatically, publish, content as Markdown
-- "Fetch the next ticket and claim it" as one operation (see 10.), optionally waiting (`--wait`)
+- "Fetch the next ticket and claim it" as one operation (see 10.), optionally waiting (`--wait`) — and the same waiting on a question's answer and on "needs you"
 - Sub-issues (one level) and `blocks`/`blocked_by` relationships
 - Labels per project, with groups for mutually exclusive values, including a default group "kind" (`bug`/`feature`/`chore`)
 - Claiming including release and expiry
 - History on the issue: who changed which field when
 - Filtering, sorting, full-text search
-- User administration, project assignment, named API tokens per agent with the metadata back channel (see 12.)
+- User administration, project assignment, user tokens for the console, named agent tokens per agent with the metadata back channel (see 12.)
 - A complete CLI with machine-readable output
 - A responsive web interface
 - A Docker Compose setup and documentation
@@ -634,7 +647,7 @@ Unsorted, not yet decided:
 - **Ticket templates per project.** A Markdown structure proposed on creation — requirement, acceptance criteria, testing notes, whatever the project needs. That is our answer to fixed ticket sections: changeable and deletable as a template, instead of in the schema forever (guiding principle 5).
 - **An abort signal.** Today there is no way to tell a running agent to stop — `claim --force` takes the claim but stops no process. Linear and Cursor both have an explicit stop signal; planaffe has a gap here. As soon as the waiting connection from 15.9 exists, this is a second event on the same line and almost free.
 - **A budget per project.** Once the token data from 15.2 exists, a ceiling per epic or project is the obvious next thing.
-- **A commit and PR reference on closing.** The agent records branch and PR when it closes. The little brother of the git integration, and possible without it.
+- **A commit and PR reference on closing.** The agent records branch and PR when it closes. The little brother of the git integration, and possible without it. Since `review` exists (9.), it has a reader: whoever reviews has to find the pull request, and today it sits somewhere in the `result`. A reason to build this earlier than the rest of 15.1.
 
 ## 16. How We Measure Success
 
@@ -652,10 +665,12 @@ The wake-up mechanism is settled as well: a held outgoing connection instead of 
 
 The commissioning path, the life of a token (12.), the product language, pagination, deletion, versioning and the way out of the product (13., 6.1) were settled afterwards and are recorded where they belong, with the reasoning in [`docs/adr/`](docs/adr/). So were, in a second product review, what `done` means and the `review` status with its switch (9., [ADR 0014](docs/adr/0014-review-is-a-status-and-a-project-switch.md)), the birth status `todo`, the claim of a user that does not expire (11.), the label description (8.), the epic as a living document (7.) and the relation of project to repository (13.).
 
+A third review settled the seams between those decisions: the user token as the human's key to the CLI, and that an agent is never an administrator (12., [ADR 0015](docs/adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)); what an agent may do with `ready` under triage required and with `canceled` under review required, and that the way back from `review` is a comment, never a question (9., 10., ADR 0014); the parent's gates on its sub-issues (7., 10.); the closed epic and the unnamed open release (7.); the details of the claim (11.); what "needs you" contains and that it is a list of the API; and `--wait` on questions and on "needs you" (6.1, 10.).
+
 Two things remain open, and neither blocks the start:
 
 - **Due date:** deliberately left out, because a date without a notification wakes nobody. The research on waking changed nothing about that; it only sharpened the coupling: a date needs a **time-triggered** event, and therefore a scheduler on the server — exactly what 11. avoids with good reason for claims. The waiting mechanism from 15.9 does not help here, because it waits for events somebody triggers anyway. Defer further, and do not design for it while building `pa next --wait`.
 
-- **The question does not close its own loop.** An agent asks, releases the ticket, and the ticket waits — for a human who has to look into "needs you" of their own accord, because there are no notifications in the MVP. It is the only loop in the system that does not close by itself, and it sits precisely between two agent runs. There is a second half to it: the human answers by talking to *one* agent, while the ticket is later picked up by *another*, which sees the question and the answer but not the conversation around them. Neither is a blocker — both are the reason notifications sit as high on the roadmap as they do (15.1), and they are the measure of whether the question was worth being a state of its own.
+- **The question does not close its own loop.** An agent asks, releases the ticket, and the ticket waits — for a human who has to look into "needs you" of their own accord, because there are no notifications in the MVP. It is the only loop in the system that does not close by itself, and it sits precisely between two agent runs. Two things narrow it without closing it: `pa issue ask --wait` keeps the loop inside one run while a human is at the keyboard, and `pa needs-you --wait` lets the human be woken by a one-liner of their own (10.). What remains is the unattended case, and there is a second half to it: the human answers by talking to *one* agent, while the ticket is later picked up by *another*, which sees the question and the answer but not the conversation around them. Neither is a blocker — both are the reason notifications sit as high on the roadmap as they do (15.1), and they are the measure of whether the question was worth being a state of its own.
 
 With that, the vision is decided, and the order of building is settled ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)). The next step is the concrete data model and the API of the first cut.

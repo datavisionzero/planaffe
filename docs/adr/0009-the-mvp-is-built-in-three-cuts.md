@@ -15,11 +15,12 @@ required* switches, the
 issue with the field set of VISION 8 except `release` and `parent`, the status
 set, the claim and its expiry, the history, labels with groups, the epic as a
 bracket, `blocks`/`blocked_by`, the question, `pa next --claim` evaluating the
-conditions of VISION 10, creating several wired-up issues in one act, users and
-named tokens, the bootstrap path, the CLI for all of it, and Docker Compose.
-No web application.
+conditions of VISION 10, creating several wired-up issues in one act, users with
+their user tokens and agents with their named tokens (ADR 0015), the bootstrap
+path, the CLI for all of it, and Docker Compose. No web application.
 
-**Cut two — unattended operation.** Sub-issues, `--wait` on `LISTEN`/`NOTIFY`,
+**Cut two — unattended operation.** Sub-issues, `--wait` on `LISTEN`/`NOTIFY` —
+for `next`, for a question's answer, and for "needs you" as a list of the API —
 releases, full-text search, the agent metadata back channel, bulk operations
 beyond creating, `pa export --json`.
 
@@ -59,8 +60,8 @@ afterwards devalues every claim and every history entry written before it.
 ## Consequences
 
 **The readiness conditions of VISION 10 are a conjunction, so a missing concept
-is silently satisfied.** With no sub-issues in cut one, condition five is
-vacuously true. Cut two adds conditions rather than rewriting them, which is what
+is silently satisfied.** With no sub-issues in cut one, conditions five and
+eight are vacuously true. Cut two adds conditions rather than rewriting them, which is what
 makes this split safe.
 
 **Between cut one and cut three nobody outside can judge the product.** A visitor

@@ -92,7 +92,7 @@ fallback (VISION 13). The two log sinks live here as well
 ([ADR 0008](./adr/0008-planaffe-logs-into-logaffe-and-serilog-is-the-way-out.md)).
 
 **`Planaffe.Api` is the adapters and the composition root.** The HTTP endpoints,
-authentication of a session and of an agent token, the rate limits, the static
+authentication of a session, of a user token and of an agent token, the rate limits, the static
 files of the built SPA, and — later — the MCP server, which will be a second
 adapter over the same use cases and not a second way into the data.
 
