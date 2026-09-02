@@ -1,0 +1,289 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # So that a run can be started without inventing a commit to carry it.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# This workflow is the whole gate. `main` is the only long-lived branch and
+# maintainers commit straight to it (ADR 0001), so there is no review step and
+# no environment between a commit and a release — what is here is what stands
+# between a mistake and the trunk. Two things follow from that. It runs on every
+# push to `main`, every pull request from a fork, and on demand; and it has to
+# stay fast enough that nobody is tempted to push past it, which is why the four
+# toolchains run beside each other rather than in one job.
+
+# One run at a time, across every branch, and nothing is cancelled. The reason
+# is the registry: the `image` job moves `ghcr.io/datavisionzero/planaffe:main`,
+# and two runs overlapping would leave that tag wherever the slower one
+# finished, which can be the older commit. Serialising keeps it moving in the
+# order the commits were pushed. With a single maintainer pushing there is
+# nothing to gain from two racing, and a pull request waiting a few minutes
+# behind the trunk costs less than a tag that points backwards.
+concurrency:
+  group: ci
+  cancel-in-progress: false
+
+jobs:
+  # The repository is being built in cuts (ADR 0009), and the four toolchains
+  # arrive at four different moments: the .NET solution is here, the contract,
+  # the CLI, the frontend and the image are not yet. The workflow is written
+  # whole anyway, for the same reason the empty layers were raised before there
+  # was anything to put in them — a gate assembled after the fact is a gate that
+  # was missing while the code was written.
+  #
+  # So each job that has no subject yet skips instead of failing, and this job
+  # is what decides. It asks for the one file its subject cannot exist without,
+  # which means no ticket has to remember to come back here: `src/web`'s
+  # `package.json` lands with the web shell and the job starts running.
+  #
+  # What this deliberately does not protect against is a subject that vanishes —
+  # delete `src/web/package.json` and the web job goes quiet rather than red.
+  # That hole closes on its own: the image carries the built SPA (VISION 16), so
+  # a frontend that stopped being built stops the `image` job below.
+  subjects:
+    name: What there is to build
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.look.outputs.web }}
+      cli: ${{ steps.look.outputs.cli }}
+      contract: ${{ steps.look.outputs.contract }}
+      image: ${{ steps.look.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: look
+        run: |
+          set -euo pipefail
+          {
+            test -f src/web/package.json  && echo "web=true"      || echo "web=false"
+            test -f src/cli/go.mod        && echo "cli=true"      || echo "cli=false"
+            test -f docs/api/openapi.json && echo "contract=true" || echo "contract=false"
+            test -f deploy/Dockerfile     && echo "image=true"    || echo "image=false"
+          } >> "$GITHUB_OUTPUT"
+
+  # Seconds, and nothing installed: the rules of Domain and the use cases of
+  # Application against substituted ports, plus the layering test that reads the
+  # four project files and fails a reference pointing outward (ADR 0002).
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Planaffe.slnx
+      - run: dotnet build Planaffe.slnx -c Release --no-restore
+      - run: dotnet test tests/Planaffe.UnitTests -c Release --no-build
+
+  # The parts no substitute can vouch for, and they are the ones this product is
+  # about: that two concurrent claims produce exactly one winner, that an expired
+  # claim makes an issue selectable again, that the migrations apply (VISION 11).
+  # Testcontainers brings up the Postgres, so this job needs the Docker the
+  # runner already has and nothing else declared here.
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Planaffe.slnx
+      - run: dotnet build Planaffe.slnx -c Release --no-restore
+      - run: dotnet test tests/Planaffe.IntegrationTests -c Release --no-build
+
+  # No generation step here on purpose. The API layer is generated from
+  # docs/api/openapi.json before typecheck, test and build (ADR 0005), and that
+  # belongs in the package's own scripts rather than in this file — otherwise CI
+  # runs against a freshly generated client and a contributor runs against
+  # whatever is in their working tree.
+  web:
+    name: Web
+    needs: subjects
+    if: needs.subjects.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build -- --outDir dist --emptyOutDir
+
+  # `pa` is a client of the public API and references nothing in `src/`
+  # (ADR 0003), so it is a plain Go module built by a plain Go job. The version
+  # comes from its own `go.mod` rather than from a number pinned here, which is
+  # the only way the two cannot disagree.
+  cli:
+    name: CLI
+    needs: subjects
+    if: needs.subjects.outputs.cli == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/cli
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: src/cli/go.mod
+          cache-dependency-path: src/cli/go.sum
+
+      # Go has no equivalent of npm's lifecycle scripts, so the generated client
+      # of the contract is produced by an explicit step here — and by
+      # `go generate ./...` locally, which is the same command. Nothing below
+      # would compile without it: the output is not committed (ADR 0005).
+      - run: go generate ./...
+
+      - run: go vet ./...
+      - run: go test ./...
+      # Compilation of every package, not the release binaries. Those are cut
+      # per platform from a tag, and a trunk build has no tag to be named after.
+      - run: go build ./...
+
+  # ADR 0005 asks for a contract kept honest by a test rather than by a
+  # compiler, because the server shares no types with either of its two clients.
+  # This is that test: the document the running installation serves has to be the
+  # one that is checked in, and a renamed field is a red trunk instead of a
+  # support question.
+  contract:
+    name: OpenAPI contract
+    needs: subjects
+    if: needs.subjects.outputs.contract == 'true'
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:18
+        env:
+          POSTGRES_DB: planaffe
+          POSTGRES_USER: planaffe
+          POSTGRES_PASSWORD: planaffe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U planaffe -d planaffe"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # An empty database and no migration step: the installation applies its
+      # own migrations on start (ADR 0011), so a schema this job had to prepare
+      # would be a second place that creates one.
+      - name: Start the installation
+        run: dotnet run --project src/Planaffe.Api -c Release --no-launch-profile &
+        env:
+          ConnectionStrings__Postgres: Host=localhost;Port=5432;Database=planaffe;Username=planaffe;Password=planaffe
+          ASPNETCORE_HTTP_PORTS: "5142"
+
+      - name: Capture the contract
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 45); do
+            curl --fail --silent http://localhost:5142/openapi/v1.json -o /tmp/openapi.json && break
+            sleep 2
+          done
+          test -s /tmp/openapi.json || { echo "the installation never served a document"; exit 1; }
+          # Formatted by the json module rather than by json.tool, whose --indent
+          # flag is not in every Python the runner might carry.
+          python3 -c 'import json,pathlib; d=json.loads(pathlib.Path("/tmp/openapi.json").read_text()); pathlib.Path("docs/api/openapi.json").write_text(json.dumps(d, indent=2) + "\n")'
+
+      - name: The checked-in contract is the one being served
+        run: git diff --exit-code -- docs/api/openapi.json
+
+  # One image, carrying the API and the built SPA — the only place the two
+  # toolchains meet. This is also the whole of the deployment gate: a red trunk
+  # does not move `:main`, so anything following that tag stays on the last
+  # commit that passed. Expressing it here costs an image nobody pulls on a
+  # pull request, which is cheaper than a second workflow or a `workflow_run`
+  # trigger.
+  image:
+    name: Image
+    needs: [subjects, unit, integration, web, cli, contract]
+    # `needs` alone would skip this job for every job above that skipped itself,
+    # which for a while is most of them. What has to hold is that nothing
+    # failed — a skipped job did not fail.
+    if: >-
+      !cancelled()
+      && !contains(needs.*.result, 'failure')
+      && needs.subjects.outputs.image == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      - id: what
+        name: Whether this is published, and under which names
+        env:
+          # A pull request's ref is `refs/pull/<n>/merge` and never this, so the
+          # one comparison covers it: a pull request builds and publishes
+          # nothing, which is what keeps `on: pull_request` safe to leave open
+          # to strangers.
+          PUBLISH: ${{ github.ref == 'refs/heads/main' }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "publish=$PUBLISH"
+            echo "tags<<TAGS"
+
+            if [ "$PUBLISH" = "true" ]; then
+              # What an installation tracking the trunk pulls.
+              echo "ghcr.io/datavisionzero/planaffe:main"
+              # And a name for this one build, so such an installation can be
+              # pinned away from a bad trunk without waiting for the next commit.
+              echo "ghcr.io/datavisionzero/planaffe:sha-${SHA:0:7}"
+            fi
+
+            echo "TAGS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Sign in to the registry
+        if: steps.what.outputs.publish == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No `VERSION` build argument, deliberately. `Directory.Build.props` keeps
+      # `0.0.0-dev` for a build nobody released, and a trunk build is not a
+      # release: the tag is the only source of a version number. `REVISION` is
+      # passed for the same reason `VERSION` is not — every build between two
+      # releases calls itself `0.0.0-dev`, so the commit is what tells them
+      # apart, and the container cannot work it out on its own.
+      #
+      # `:latest` is not among the tags either. That is what a stranger's
+      # installation upgrades into, and the trunk has no claim on it.
+      - name: Build, and push from the trunk
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: ${{ steps.what.outputs.publish == 'true' }}
+          build-args: |
+            REVISION=${{ github.sha }}
+          tags: ${{ steps.what.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
