@@ -202,8 +202,9 @@ jobs:
           done
           test -s /tmp/openapi.json || { echo "the installation never served a document"; exit 1; }
           # Formatted by the json module rather than by json.tool, whose --indent
-          # flag is not in every Python the runner might carry.
-          python3 -c 'import json,pathlib; d=json.loads(pathlib.Path("/tmp/openapi.json").read_text()); pathlib.Path("docs/api/openapi.json").write_text(json.dumps(d, indent=2) + "\n")'
+          # flag is not in every Python the runner might carry. ensure_ascii off,
+          # so that a dash in a summary stays a dash, as ContractTests writes it.
+          python3 -c 'import json,pathlib; d=json.loads(pathlib.Path("/tmp/openapi.json").read_text(encoding="utf-8")); pathlib.Path("docs/api/openapi.json").write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")'
 
       - name: The checked-in contract is the one being served
         run: git diff --exit-code -- docs/api/openapi.json
