@@ -1,0 +1,198 @@
+using Planaffe.Application.Ports;
+using Planaffe.Domain;
+using Planaffe.Domain.Issues;
+using Planaffe.Domain.Projects;
+
+namespace Planaffe.Application.Acts;
+
+/// <summary>One issue, complete: the context package (ADR 0012).</summary>
+public sealed class ReadIssue(IIssues issues, IssueAssembler assembler, InstanceSettings settings)
+{
+    public async Task<IssueShape> ExecuteAsync(string key, CancellationToken cancellationToken) =>
+        await assembler.CompleteAsync(await issues.LiveAsync(key, settings, cancellationToken), cancellationToken);
+}
+
+/// <summary>The query string of <c>GET /issues</c>, as strings; the act makes sense of them.</summary>
+public sealed record IssueListRequest(
+    string? Project,
+    IReadOnlyList<string> Status,
+    bool? Ready,
+    int? PriorityMin,
+    int? PriorityMax,
+    IReadOnlyList<string> Label,
+    string? Epic,
+    string? Assignee,
+    string? Claimed,
+    string? Author,
+    bool? Blocked,
+    bool? HasOpenQuestion,
+    bool? Deleted,
+    string? Sort,
+    string? Order,
+    string? Cursor,
+    int? Limit);
+
+/// <summary>
+/// A page of slim issues (ADR 0012): every filter of <c>docs/api.md</c>, three
+/// sorts, a cursor rather than an offset — because agents insert while others
+/// read, and an offset would skip or repeat under them.
+/// </summary>
+public sealed class ListIssues(
+    ICallerIdentity callerIdentity,
+    IProjects projects,
+    IEpics epics,
+    IIdentities identities,
+    IIssues issues,
+    IssueAssembler assembler,
+    InstanceSettings settings)
+{
+    public const int DefaultLimit = 50;
+
+    public const int MaximumLimit = 200;
+
+    public async Task<IssuePage> ExecuteAsync(IssueListRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var caller = callerIdentity.Caller;
+
+        var limit = request.Limit ?? DefaultLimit;
+        if (limit < 1 || limit > MaximumLimit)
+        {
+            throw Refusal.Validation("limit", $"limit is 1 to {MaximumLimit}; larger pages are refused, not truncated (ADR 0012).");
+        }
+
+        var sort = request.Sort?.ToLowerInvariant() switch
+        {
+            null or "updated" => IssueSort.Updated,
+            "created" => IssueSort.Created,
+            "priority" => IssueSort.Priority,
+            _ => throw Refusal.Validation("sort", "sort is updated, created or priority."),
+        };
+
+        var order = request.Order?.ToLowerInvariant() switch
+        {
+            null when sort is IssueSort.Updated => SortOrder.Desc,
+            null => SortOrder.Asc,
+            "asc" => SortOrder.Asc,
+            "desc" => SortOrder.Desc,
+            _ => throw Refusal.Validation("order", "order is asc or desc."),
+        };
+
+        var query = await QueryAsync(request, caller, cancellationToken);
+        var after = request.Cursor is null ? null : IssueCursor.Decode(request.Cursor, query, sort, order);
+
+        var page = await issues.ListAsync(query, sort, order, after, limit, cancellationToken);
+        var items = await assembler.SummariesAsync(page.Items, cancellationToken);
+
+        return new IssuePage(
+            items,
+            page.Total,
+            page.HasMore,
+            page.HasMore ? IssueCursor.Encode(query, sort, order, page.Items[^1]) : null);
+    }
+
+    private async Task<IssueQuery> QueryAsync(IssueListRequest request, Caller caller, CancellationToken cancellationToken)
+    {
+        Project? project = null;
+        if (request.Project is not null)
+        {
+            project = await projects.LiveAsync(request.Project, settings, cancellationToken);
+        }
+
+        var statuses = new List<IssueStatus>();
+        foreach (var status in request.Status)
+        {
+            statuses.Add(Enum.TryParse<IssueStatus>(status.Replace("_", string.Empty), ignoreCase: true, out var parsed)
+                ? parsed
+                : throw Refusal.Validation("status", $"{status} is not a status."));
+        }
+
+        Guid? epicId = null;
+        var epicNone = false;
+        if (request.Epic is not null)
+        {
+            if (request.Epic.Equals("none", StringComparison.OrdinalIgnoreCase))
+            {
+                epicNone = true;
+            }
+            else if (EpicKey.TryParse(request.Epic, out var epicProject, out var number))
+            {
+                var owner = await projects.FindByKeyAsync(epicProject, cancellationToken)
+                    ?? throw Refusal.Validation("epic", $"No project {epicProject}.");
+                epicId = (await epics.FindLiveAsync(owner.Id, number, cancellationToken))?.Id
+                    ?? throw Refusal.Validation("epic", $"No epic {request.Epic}.");
+            }
+            else
+            {
+                throw Refusal.Validation("epic", $"{request.Epic} is not an epic key.");
+            }
+        }
+
+        var (assigneeId, assigneeNone) = await IdentityFilterAsync(request.Assignee, "assignee", caller, allowNone: true, cancellationToken);
+
+        bool? claimedAtAll = null;
+        Guid? claimedBy = null;
+        if (request.Claimed is not null)
+        {
+            if (bool.TryParse(request.Claimed, out var flag))
+            {
+                claimedAtAll = flag;
+            }
+            else
+            {
+                (claimedBy, _) = await IdentityFilterAsync(request.Claimed, "claimed", caller, allowNone: false, cancellationToken);
+            }
+        }
+
+        var (authorId, _) = await IdentityFilterAsync(request.Author, "author", caller, allowNone: false, cancellationToken);
+
+        return new IssueQuery(
+            project?.Id,
+            statuses,
+            request.Ready,
+            Priority(request.PriorityMin, "priority_min"),
+            Priority(request.PriorityMax, "priority_max"),
+            request.Label,
+            epicId,
+            epicNone,
+            assigneeId,
+            assigneeNone,
+            claimedAtAll,
+            claimedBy,
+            authorId,
+            request.Blocked,
+            request.HasOpenQuestion,
+            request.Deleted ?? false);
+    }
+
+    private async Task<(Guid? Id, bool None)> IdentityFilterAsync(
+        string? value, string field, Caller caller, bool allowNone, CancellationToken cancellationToken)
+    {
+        if (value is null)
+        {
+            return (null, false);
+        }
+
+        if (allowNone && value.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            return (null, true);
+        }
+
+        if (value.Equals("me", StringComparison.OrdinalIgnoreCase))
+        {
+            return (caller.Id, false);
+        }
+
+        var identity = await identities.FindByNameAsync(value, cancellationToken)
+            ?? throw Refusal.Validation(field, $"No identity named {value}.");
+
+        return (identity.Id, false);
+    }
+
+    private static Priority? Priority(int? value, string field) =>
+        value is null
+            ? null
+            : value is >= 0 and <= 4
+                ? (Priority)value
+                : throw Refusal.Validation(field, "Priority is 0 to 4.");
+}

@@ -64,6 +64,8 @@ experiments. It is in `.gitignore` and never reaches the remote. Its rules are
 in `scratchpad/README.md` on the machine you are working on. If the directory
 does not exist, proceed silently; it is not part of the published repository.
 
-**Issues live there**, not on GitHub: this repository is public, and the working
-level of a product that is still being cut into shape is not a shop window.
-GitHub issues stay the place where strangers report things.
+**Issues live in planaffe itself**, not on GitHub: the maintainer's own
+instance tracks the work (`.planaffe` at the root names the project, and
+`docs/cli.md` says how `pa` is configured), because this repository is public
+and the working level of a product that is still being cut into shape is not a
+shop window. GitHub issues stay the place where strangers report things.

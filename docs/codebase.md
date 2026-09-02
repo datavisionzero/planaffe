@@ -4,12 +4,14 @@
 live: how the repository is laid out, which project holds what, which way the
 dependencies point, and what is built by which toolchain.
 
-**`src/` holds the four .NET projects and nothing else yet** — they are empty,
-and `src/cli/` and `src/web/` have not been created. What is here is the skeleton
-this document describes, built before there was anything to break so that CI
-could be green from the first commit (ADR 0001). This document is kept accurate
-from here on: a file that lands somewhere it does not describe means one of the
-two is wrong.
+**`src/` holds the four .NET projects and the Go CLI** — `src/web/` has not been
+created. Domain carries the types of cut one, named
+after `CONTEXT.md`; Infrastructure carries the schema (`Persistence/`: the
+context, one configuration per table, the migrations and the migrator that
+applies them); Api is the host that runs the migrator before it serves. The
+skeleton was built before there was anything to break so that CI could be green
+from the first commit (ADR 0001). This document is kept accurate from here on: a
+file that lands somewhere it does not describe means one of the two is wrong.
 
 Three decisions shape all of it: the backend is **four layers**
 ([ADR 0002](./adr/0002-the-backend-is-four-layers-not-one-project.md)), the
@@ -29,8 +31,10 @@ planaffe/
 │  ├─ research/
 │  ├─ storage.md              the data model: tables, constraints, what is derived on read
 │  ├─ api.md                  the HTTP surface: endpoints, shapes, errors, exit codes
+│  ├─ operations.md           running, upgrading, the variables, backups
+│  ├─ cli.md                  pa: configuration, exit codes, verbs
 │  └─ api/openapi.json        the HTTP contract, checked in
-├─ deploy/                    the Dockerfile, Compose, and nothing else
+├─ deploy/                    the Dockerfile, Compose (production and development), and nothing else
 ├─ src/
 │  ├─ Planaffe.Domain/        the rules
 │  ├─ Planaffe.Application/   the use cases and their ports
@@ -70,7 +74,9 @@ that file spells it. This is the layer the glossary is written for: a type named
 after an `_Avoid_` word is a naming bug rather than a preference, and a concept
 that needs a name the glossary does not have gets added there first.
 
-**`Planaffe.Application` holds the use cases and the ports.** Creating issues —
+**`Planaffe.Application` holds the acts and the ports** — `Acts/` and `Ports/`,
+named as the vision names them: an act is one thing a caller does, a port is
+one thing the acts need answered. Creating issues —
 several related ones in one act, which is the moment the vision calls the most
 important (VISION 10) — reading an issue as the context package an agent gets,
 taking the next ready issue and claiming it in one operation, releasing it,
@@ -82,7 +88,11 @@ the base class libraries rather than a port of ours.
 
 **`Planaffe.Infrastructure` answers those ports.** EF Core declares the tables
 and owns the self-applying migrations, so there is exactly one place that creates
-schema. The acts that have to be atomic are written as the conditional updates
+schema. A migration is added with the pinned tool in `.config/dotnet-tools.json`
+— `dotnet tool restore`, then `dotnet ef migrations add <Name> --project
+src/Planaffe.Infrastructure` — without a running instance anywhere; what the
+model cannot say, the `issue_read` view and the expression index on an
+identity's name, is SQL inside the migration that created it. The acts that have to be atomic are written as the conditional updates
 they are, in one transaction, close to the SQL rather than assembled by a
 caller — claiming is the whole reason this product exists (VISION 11). The two
 rules that are derived on read rather than written — an expired claim, and a
@@ -93,16 +103,22 @@ both decisions fail. Waiting is
 fallback (VISION 13). The two log sinks live here as well
 ([ADR 0008](./adr/0008-planaffe-logs-into-logaffe-and-serilog-is-the-way-out.md)).
 
-**`Planaffe.Api` is the adapters and the composition root.** The HTTP endpoints,
-authentication of a session, of a user token and of an agent token, the rate limits, the static
-files of the built SPA, and — later — the MCP server, which will be a second
-adapter over the same use cases and not a second way into the data.
+**`Planaffe.Api` is the adapters and the composition root.** `Http/` holds the
+endpoints, the bearer authentication that answers the caller port, the version
+header and the one place a refusal becomes a problem document; `Hosting/` the
+services that run before anything is served — the migrations, the bootstrap.
+Later: authentication of a browser session, the rate limits, the static files
+of the built SPA, and the MCP server, which will be a second adapter over the
+same acts and not a second way into the data.
 
 ## The CLI is a client, not a layer
 
-`src/cli/` is an ordinary Go module. It references nothing in `src/` and knows
-the installation only through the generated client of
-`docs/api/openapi.json` ([ADR 0005](./adr/0005-the-contract-is-checked-in-and-both-clients-are-generated-from-it.md)).
+`src/cli/` is an ordinary Go module (`cmd/pa` the binary, `internal/` the
+packages). It references nothing in `src/` and knows the installation only
+through the generated client of `docs/api/openapi.json`
+([ADR 0005](./adr/0005-the-contract-is-checked-in-and-both-clients-are-generated-from-it.md)),
+produced into `internal/api/` by `go generate` and never committed;
+[`cli.md`](./cli.md) has the rest.
 It ships as its own release artifact — a static binary per platform, built by the
 release workflow — and is versioned with the server it was cut from.
 
@@ -114,7 +130,9 @@ from a laptop, a CI runner or an agent's container.
 ## The frontend is built separately and joined once
 
 `src/web/` is an ordinary Vite project with its own `package.json`, and nothing
-in the .NET build knows it exists. Development runs the two side by side — the
+in the .NET build knows it exists. It is drawn by Tailwind and Base UI in
+components the repository owns
+([ADR 0017](./adr/0017-the-web-application-is-drawn-by-tailwind-and-base-ui-components-the-repository-owns.md)). Development runs the two side by side — the
 Vite dev server against `dotnet run` — and the only place they are joined is the
 `Dockerfile`, which builds the SPA in a Node stage and copies it into the
 published output.
@@ -131,6 +149,18 @@ verified by CI against the document the installation serves. Both clients are
 generated from it before every build, typecheck and test, and neither generated
 output is committed
 ([ADR 0005](./adr/0005-the-contract-is-checked-in-and-both-clients-are-generated-from-it.md)).
+
+A change to an endpoint is a change to the document, in the same commit. The
+integration test `ContractTests` compares what the instance serves with the
+checked-in file, structurally, and fails until they agree; regenerating is the
+same test with the switch that writes the file:
+
+```sh
+PLANAFFE_CAPTURE_CONTRACT=1 dotnet test tests/Planaffe.IntegrationTests --filter ContractTests
+```
+
+It writes the same bytes CI's capture step would, so the two never differ by
+formatting.
 
 ## Tests are split by what they need
 

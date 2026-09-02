@@ -33,7 +33,14 @@ npm-debug.log*
 
 # Local secrets and the host volume of a development installation
 .env
+deploy/.env
 volume/
 
 # macOS
 .DS_Store
+
+# The rolling file of a development run (ADR 0008)
+logs/
+
+# The Go client of the contract, generated before every build (ADR 0005)
+src/cli/internal/api/client.gen.go

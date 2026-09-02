@@ -1,0 +1,223 @@
+using System.Globalization;
+using Planaffe.Application.Ports;
+using Planaffe.Domain;
+using Planaffe.Domain.History;
+using Planaffe.Domain.Issues;
+using Planaffe.Domain.Projects;
+
+namespace Planaffe.Application.Acts;
+
+/// <summary>
+/// What a <c>PATCH</c> carries: present fields change, a field present as
+/// <c>null</c> clears, an absent one is left alone.
+/// </summary>
+public sealed record IssueChanges(
+    string? Title,
+    bool DescriptionGiven,
+    string? Description,
+    bool ResultGiven,
+    string? Result,
+    Priority? Priority,
+    bool? Ready,
+    bool AssigneeGiven,
+    string? Assignee,
+    bool EpicGiven,
+    string? Epic,
+    IReadOnlyList<string>? Labels,
+    string? Status);
+
+/// <summary>
+/// The scalar fields, the assignee and the epic by name and key, and the label
+/// set with its groups enforced — under the row's lock, guarded by
+/// <c>If-Match</c> against <c>updated_at</c> (<c>docs/api.md</c>, Concurrency
+/// on text fields). Every change is a history entry.
+/// </summary>
+public sealed class ChangeIssue(
+    ICallerIdentity callerIdentity,
+    IProjects projects,
+    ILabels labels,
+    IEpics epics,
+    IIdentities identities,
+    IIssues issues,
+    IHistory history,
+    ITransactions transactions,
+    IssueAssembler assembler,
+    InstanceSettings settings,
+    TimeProvider clock)
+{
+    public async Task<IssueShape> ExecuteAsync(
+        string key, IssueChanges changes, string? ifMatch, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        var caller = callerIdentity.Caller;
+
+        IssueStatus? parking = null;
+        if (changes.Status is not null)
+        {
+            parking = changes.Status.ToLowerInvariant() switch
+            {
+                "backlog" => IssueStatus.Backlog,
+                "todo" => IssueStatus.Todo,
+                _ => throw new Refusal(RefusalCode.Transition, "The status changes through the acts — claim, release, close, review, reopen — not through PATCH; only backlog and todo are written, as parking (ADR 0016)."),
+            };
+        }
+
+        var before = await issues.LiveAsync(key, settings, cancellationToken);
+
+        if (parking is not null)
+        {
+            await ClaimGate.RefuseIfHeldByAnotherAsync(before, caller, history, identities, cancellationToken);
+        }
+        var project = await projects.FindByIdAsync(before.ProjectId, cancellationToken)
+            ?? throw new InvalidOperationException($"Issue {before.Key} has no project row.");
+
+        if (changes.Ready is { } ready && !Issue.ReadyMayBeSetBy(caller.Kind, project.TriageRequired, ready))
+        {
+            throw new Refusal(RefusalCode.ReadyRequiresUser, $"Triage is required in {project.Key}: an agent may clear ready and never set it (VISION 10).");
+        }
+
+        var expected = Expected(ifMatch);
+        var newLabels = changes.Labels is null ? null : await labels.ResolveLabelsAsync(project, changes.Labels, "labels", cancellationToken);
+        var assignee = changes is { AssigneeGiven: true, Assignee: not null }
+            ? await identities.FindByNameAsync(changes.Assignee, cancellationToken) ?? throw Refusal.Validation("assignee", $"No identity named {changes.Assignee}.")
+            : null;
+        var epic = changes is { EpicGiven: true, Epic: not null } ? await EpicAsync(project, changes.Epic, cancellationToken) : null;
+
+        await transactions.RunAsync(async () =>
+        {
+            var issue = await issues.LoadForWriteAsync(before.Id, cancellationToken)
+                ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
+
+            if (expected is { } version && issue.UpdatedAt != version)
+            {
+                throw new Refusal(
+                    RefusalCode.Stale,
+                    $"{before.Key} changed at {issue.UpdatedAt:yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'}; you last read it at {version:yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'}.",
+                    new Dictionary<string, object?> { ["current"] = await assembler.CompleteAsync(before, cancellationToken) });
+            }
+
+            var now = clock.GetUtcNow();
+
+            if (parking is { } target)
+            {
+                var from = issue.Status;
+                issue.MoveTo(target, now);
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, ClaimHistory.SnakeCase(from), ClaimHistory.SnakeCase(target)));
+            }
+
+            if (changes.Title is not null && changes.Title != issue.Title)
+            {
+                var old = issue.Title;
+                Validated.Field("title", () => { issue.Retitle(changes.Title, now); return true; });
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Title, old, issue.Title));
+            }
+
+            if (changes.DescriptionGiven && (changes.Description ?? string.Empty) != issue.Description)
+            {
+                issue.Describe(changes.Description, now);
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Description));
+            }
+
+            if (changes.ResultGiven && changes.Result != issue.Result)
+            {
+                issue.RecordResult(changes.Result, now);
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Result));
+            }
+
+            if (changes.Priority is { } priority && priority != issue.Priority)
+            {
+                var old = issue.Priority;
+                Validated.Field("priority", () => { issue.Prioritize(priority, now); return true; });
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Priority, ((int)old).ToString(CultureInfo.InvariantCulture), ((int)priority).ToString(CultureInfo.InvariantCulture)));
+            }
+
+            if (changes.Ready is { } flag && flag != issue.Ready)
+            {
+                issue.SetReady(flag, now);
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Ready, (!flag).ToString().ToLowerInvariant(), flag.ToString().ToLowerInvariant()));
+            }
+
+            if (changes.AssigneeGiven && assignee?.Id != issue.AssigneeId)
+            {
+                var old = issue.AssigneeId;
+                issue.Assign(assignee?.Id, now);
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Assignee, old?.ToString(), assignee?.Id.ToString()));
+            }
+
+            if (changes.EpicGiven && epic?.Id != issue.EpicId)
+            {
+                var old = issue.EpicId is { } oldId ? await epics.FindAsync(oldId, cancellationToken) : null;
+                issue.AttachTo(epic?.Id, now);
+                history.Add(HistoryEntry.OnIssue(
+                    issue.Id, caller.Id, now, HistoryField.Epic,
+                    old is null ? null : EpicKey.Of(project.Key, old.Number),
+                    epic is null ? null : EpicKey.Of(project.Key, epic.Number)));
+
+                if (epic is { Closed: true })
+                {
+                    epic.Reopen(now);
+                    history.Add(HistoryEntry.OnEpic(epic.Id, caller.Id, now, HistoryField.Status, "closed", "open", "reopened by attaching an issue"));
+                }
+            }
+
+            if (newLabels is not null)
+            {
+                var current = (await issues.LabelsOfAsync([issue.Id], cancellationToken)).Select(l => l.Label).ToList();
+                foreach (var gone in current.Where(c => newLabels.All(n => n.Id != c.Id)))
+                {
+                    await issues.DetachAsync(issue.Id, gone.Id, cancellationToken);
+                    history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Label, oldValue: gone.Name));
+                }
+
+                foreach (var added in newLabels.Where(n => current.All(c => c.Id != n.Id)))
+                {
+                    issues.Attach(IssueLabel.Attach(issue.Id, added.Id));
+                    history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Label, newValue: added.Name));
+                }
+
+                if (current.Count != newLabels.Count || current.Any(c => newLabels.All(n => n.Id != c.Id)))
+                {
+                    issue.Touch(now);
+                }
+            }
+
+            // The holder's write is the sign of life (VISION 11); anybody else's
+            // moves updated_at and nothing about the claim.
+            issue.ExtendClaimIfHeldBy(caller.Id, caller.Kind, now, settings.ClaimExpiry);
+
+            await issues.SaveAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
+
+        var after = await issues.FindLiveAsync(before.ProjectKey, before.Number, cancellationToken)
+            ?? throw new InvalidOperationException($"Issue {before.Key} vanished under its own write.");
+
+        return await assembler.CompleteAsync(after, cancellationToken);
+    }
+
+    /// <summary>The `If-Match` value — the `updated_at` as the client last read it, quoted or not.</summary>
+    /// <exception cref="Refusal"><c>validation</c> when it is not a timestamp.</exception>
+    public static DateTimeOffset? Expected(string? ifMatch)
+    {
+        if (string.IsNullOrWhiteSpace(ifMatch))
+        {
+            return null;
+        }
+
+        var text = ifMatch.Trim().Trim('"');
+        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
+            ? parsed
+            : throw Refusal.Validation("If-Match", "If-Match carries the updated_at as it was read, quoted.");
+    }
+
+    private async Task<Domain.Epics.Epic> EpicAsync(Project project, string key, CancellationToken cancellationToken)
+    {
+        if (!EpicKey.TryParse(key, out var projectKey, out var number) || projectKey != project.Key)
+        {
+            throw Refusal.Validation("epic", $"{key} is not an epic key of {project.Key}; an epic and its issues stay in one project.");
+        }
+
+        return await epics.FindLiveAsync(project.Id, number, cancellationToken)
+            ?? throw Refusal.Validation("epic", $"No epic {key}.");
+    }
+}

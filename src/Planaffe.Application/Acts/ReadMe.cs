@@ -1,0 +1,52 @@
+using Planaffe.Application.Ports;
+using Planaffe.Domain.Identities;
+
+namespace Planaffe.Application.Acts;
+
+/// <summary>
+/// How every identity appears inside another object (<c>docs/api.md</c>,
+/// Shapes).
+/// </summary>
+public sealed record IdentityRef(Guid Id, IdentityKind Kind, string Name)
+{
+    public static IdentityRef Of(Identity identity) => new(identity.Id, identity.Kind, identity.Name);
+}
+
+/// <summary>The token a caller came in under, as <c>GET /me</c> shows it.</summary>
+public sealed record TokenRef(string Prefix, DateTimeOffset CreatedAt);
+
+/// <summary>
+/// The caller, as <c>GET /me</c> answers: an <see cref="IdentityRef"/> plus
+/// <c>administrator</c>, the <c>owner</c> of an agent, and the token.
+/// </summary>
+public sealed record Me(
+    Guid Id,
+    IdentityKind Kind,
+    string Name,
+    bool Administrator,
+    IdentityRef? Owner,
+    TokenRef Token);
+
+/// <summary>
+/// Who am I — the one read every client makes first, to learn which kind of
+/// token it holds and under which name it will appear in the history.
+/// </summary>
+public sealed class ReadMe(ICallerIdentity callerIdentity, IIdentities identities)
+{
+    public async Task<Me> ExecuteAsync(CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller;
+
+        var owner = caller.OwnerId is { } ownerId
+            ? await identities.FindAsync(ownerId, cancellationToken)
+            : null;
+
+        return new Me(
+            caller.Id,
+            caller.Kind,
+            caller.Name,
+            caller.Administrator,
+            owner is null ? null : IdentityRef.Of(owner),
+            new TokenRef(caller.TokenPrefix, caller.TokenCreatedAt));
+    }
+}
