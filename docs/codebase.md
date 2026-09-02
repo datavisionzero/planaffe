@@ -4,8 +4,8 @@
 live: how the repository is laid out, which project holds what, which way the
 dependencies point, and what is built by which toolchain.
 
-**`src/` holds the four .NET projects and the Go CLI** — `src/web/` has not been
-created. Domain carries the types of cut one, named
+**`src/` holds the four .NET projects, the Go CLI and the web application.**
+Domain carries the types of cut one, named
 after `CONTEXT.md`; Infrastructure carries the schema (`Persistence/`: the
 context, one configuration per table, the migrations and the migrator that
 applies them); Api is the host that runs the migrator before it serves. The
@@ -140,7 +140,18 @@ published output.
 Its own layout follows the shell
 ([ADR 0006](./adr/0006-the-web-application-is-a-shell-before-it-is-a-screen.md)):
 one folder per area — `shell`, `issues`, `epics`, `releases`, `projects`,
-`settings`, `session`, `shared`, `api` — where each area owns its routes.
+`settings`, `session`, `shared`, `api` — where each area owns its screens and
+`shell/Shell.tsx` owns the routes. `components/ui/` is what the shadcn CLI
+generated and `index.css` is the token layer; both are the repository's to
+edit. `api/client.ts` is the one way to the instance — `openapi-fetch` over the
+types `npm run generate` writes from the contract — and it adds the bearer
+token every request carries.
+
+The application signs in the way `pa` does: a user token, pasted once and kept
+in the browser (`session/`). There is no session on the instance to keep, and
+the API has one door (ADR 0015). A local `npm run build` lands in
+`src/Planaffe.Api/wwwroot/`, which the API serves with every path no endpoint
+took falling back to `index.html`, so that `/PLAN/ready` is a link that works.
 
 ## The HTTP contract is an artifact, not an intention
 

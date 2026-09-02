@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.OpenApi;
+using Microsoft.OpenApi;
 using Planaffe.Application.Acts;
 using Planaffe.Domain.Issues;
 
@@ -79,6 +81,7 @@ public static class IssueEndpoints
                     cancellationToken))
             .WithName("ListIssues")
             .WithSummary("A page of slim issues, filtered and sorted; `status` and `label` repeat.")
+            .AddOpenApiOperationTransformer(RepeatableFilters)
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
         door.MapGet("/{key}", (string key, ReadIssue read, CancellationToken cancellationToken) => read.ExecuteAsync(key, cancellationToken))
@@ -228,4 +231,42 @@ public static class IssueEndpoints
 
     private static string? Text(JsonElement body, string property) =>
         body.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.String ? value.GetString() : null;
+
+    /// <summary>
+    /// <c>status</c> and <c>label</c> repeat, which minimal APIs read from the
+    /// raw query and cannot describe by binding. Said here, so that the
+    /// generated clients (ADR 0005) know the two filters docs/api.md names.
+    /// </summary>
+    private static Task RepeatableFilters(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)
+    {
+        operation.Parameters ??= [];
+        operation.Parameters.Insert(1, new OpenApiParameter
+        {
+            Name = "status",
+            In = ParameterLocation.Query,
+            Description = "The derived status; repeat the parameter for several.",
+            Style = ParameterStyle.Form,
+            Explode = true,
+            Schema = new OpenApiSchema
+            {
+                Type = JsonSchemaType.Array,
+                Items = new OpenApiSchemaReference(nameof(IssueStatus), context.Document),
+            },
+        });
+        operation.Parameters.Insert(5, new OpenApiParameter
+        {
+            Name = "label",
+            In = ParameterLocation.Query,
+            Description = "A label the issue carries; repeat the parameter for several, all of which it must carry.",
+            Style = ParameterStyle.Form,
+            Explode = true,
+            Schema = new OpenApiSchema
+            {
+                Type = JsonSchemaType.Array,
+                Items = new OpenApiSchema { Type = JsonSchemaType.String },
+            },
+        });
+
+        return Task.CompletedTask;
+    }
 }

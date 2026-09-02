@@ -18,6 +18,10 @@ migrations, creates the first administrator and their token from the two
 bootstrap variables, and listens on port 8080. `GET /version` answers without a
 token; everything else takes `Authorization: Bearer <token>`.
 
+The same port serves the web application: open it in a browser and paste a
+user token — the bootstrap token, or one from `pa token create`. It stays in
+that browser until signed out or revoked; the instance keeps no session.
+
 The bootstrap token is the first administrator's user token — what the CLI
 carries as `PLANAFFE_TOKEN`. The first agent gets its own token from that
 administrator, one command later (`POST /agents`, `pa agent create`).

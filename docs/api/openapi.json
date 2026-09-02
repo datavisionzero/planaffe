@@ -1478,6 +1478,17 @@
             }
           },
           {
+            "name": "status",
+            "in": "query",
+            "description": "The derived status; repeat the parameter for several.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/IssueStatus"
+              }
+            }
+          },
+          {
             "name": "ready",
             "in": "query",
             "schema": {
@@ -1498,6 +1509,17 @@
             "schema": {
               "type": "integer",
               "format": "int32"
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "description": "A label the issue carries; repeat the parameter for several, all of which it must carry.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {

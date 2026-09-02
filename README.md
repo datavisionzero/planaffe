@@ -29,7 +29,11 @@ cut is the backend:
   the history; epics; soft deletion with the purge; the `Idempotency-Key`.
 - The CLI (`pa`) covers the whole of cut one — `next`, the issue verbs and the
   acts, questions, projects, labels, epics, identities — and the container image
-  and the Compose file exist. The web application is not written yet.
+  and the Compose file exist.
+- The web application is a shell: navigation over the seven views, project
+  switcher, account menu, command palette, one route per view with the filter
+  in the URL, a drawer on a phone, and Markdown rendered in the browser. The
+  screens behind the views arrive one ticket at a time.
 
 The contract is [`docs/api/openapi.json`](docs/api/openapi.json), captured from
 a running instance and checked in; [`docs/api.md`](docs/api.md) describes it in

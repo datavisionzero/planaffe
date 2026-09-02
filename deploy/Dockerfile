@@ -1,13 +1,25 @@
-# One image, carrying the API and — once it exists — the built SPA: the two
-# toolchains of ADR 0002 and ADR 0004 meet here and nowhere else. The runtime
-# image carries neither of them.
+# One image, carrying the API and the built SPA: the two toolchains of ADR 0002
+# and ADR 0004 meet here and nowhere else. The runtime image carries neither of
+# them.
 #
 # Build context is the repository root:
 #   docker build -f deploy/Dockerfile -t planaffe .
-#
-# The web stage is not here yet. The single-page application arrives with its
-# own ticket (the web shell, cut three), and this file gains a Node stage that
-# builds it and a COPY into ./wwwroot then. Until then the image serves the API.
+
+# ---------------------------------------------------------------- the SPA ----
+FROM node:24-alpine AS web
+WORKDIR /web
+
+COPY src/web/package.json src/web/package-lock.json ./
+RUN npm ci
+
+# The API layer is generated from the contract before the build runs (ADR
+# 0005), so the document has to be in this stage — at the path `npm run
+# generate` reaches for, two levels above src/web/. Copied before the sources
+# because it changes less often than they do.
+COPY docs/api/openapi.json /docs/api/openapi.json
+
+COPY src/web/ ./
+RUN npm run build -- --outDir dist --emptyOutDir
 
 # ------------------------------------------------------------- the server ----
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
@@ -54,6 +66,7 @@ WORKDIR /app
 RUN apk add --no-cache krb5-libs
 
 COPY --from=build /app ./
+COPY --from=web /web/dist ./wwwroot
 
 # The operational verbs the CLI deliberately does not have — the ones that
 # need the connection string — run as `docker compose exec planaffe planaffe …`

@@ -157,6 +157,14 @@ app.MapIssues();
 app.MapConversation();
 app.MapEpics();
 
+// The web application: built by its own toolchain into wwwroot at image build
+// time (deploy/Dockerfile) or by a local `npm run build`; in development the
+// Vite dev server serves it and this finds nothing. Every path no endpoint
+// took is the SPA's — its router decides what `/PLAN/ready` is.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.MapFallbackToFile("index.html");
+
 app.Run();
 
 /// <summary>
