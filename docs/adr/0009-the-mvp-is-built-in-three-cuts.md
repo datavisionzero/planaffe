@@ -10,7 +10,8 @@ still everything VISION 14 lists; the cuts only say what exists first.
 
 ## The cuts
 
-**Cut one — the switch-over.** Project with its *triage required* switch, the
+**Cut one — the switch-over.** Project with its *triage required* and *review
+required* switches, the
 issue with the field set of VISION 8 except `release` and `parent`, the status
 set, the claim and its expiry, the history, labels with groups, the epic as a
 bracket, `blocks`/`blocked_by`, the question, `pa next --claim` evaluating the

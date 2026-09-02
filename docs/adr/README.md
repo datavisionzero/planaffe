@@ -37,3 +37,4 @@ material value to understanding the decision.
 - [0011 – The API carries no version, and migrations only run forward](./0011-the-api-carries-no-version-and-migrations-only-run-forward.md)
 - [0012 – A list returns a slim issue, and only a single issue is complete](./0012-a-list-returns-a-slim-issue-and-only-a-single-issue-is-complete.md)
 - [0013 – Deleting is a soft delete with a floor, and identities are never deleted](./0013-deleting-is-a-soft-delete-with-a-floor-and-identities-are-never-deleted.md)
+- [0014 – Review is a status, and whether a close lands there is a project switch](./0014-review-is-a-status-and-a-project-switch.md)

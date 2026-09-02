@@ -55,9 +55,16 @@ _Avoid_: owner, superuser, root, maintainer
 
 **Project**:
 The bracket every piece of content belongs to, carrying the **project key** that
-prefixes everything in it. It is not a repository: one project spans as many
-repositories as it likes.
+prefixes everything in it. It is not a repository: normally one project is one
+repository, it may span several, and planaffe models no repository either way.
 _Avoid_: workspace, team, space, repository
+
+**Project file**:
+The `.planaffe` file in the root of a repository, checked in, pointing from that
+repository at exactly one project by its project key and optionally naming the
+`repo` label of this repository. Never the other way round: a project does not
+list its repositories.
+_Avoid_: config file, manifest, workspace file, dotfile
 
 **Issue**:
 The unit of work. Everything else in this section is either a bracket around
@@ -72,8 +79,8 @@ _Avoid_: subtask, child issue, checklist item
 
 **Epic**:
 A theme several issues hang under, and a description that is the shared context
-for whoever works on them. A bracket, not a unit of work: no assignee, no
-priority, no claim.
+for whoever works on them — a living document that whoever works under it keeps
+current. A bracket, not a unit of work: no assignee, no priority, no claim.
 _Avoid_: initiative, theme, feature, parent, milestone
 
 **Release**:
@@ -83,7 +90,8 @@ freezes it and opens the next.
 _Avoid_: milestone, version, sprint, iteration
 
 **Label**:
-A free tag defined per project, and the only extensibility the product offers.
+A free tag defined per project, optionally carrying a one-line description of
+what it means there, and the only extensibility the product offers.
 _Avoid_: tag, category, custom field
 
 **Label group**:
@@ -128,8 +136,21 @@ _Avoid_: id, number, reference
 
 **Status**:
 The one fixed set an issue moves through: `backlog`, `todo`, `in_progress`,
-`done`, `canceled`. It is not configurable and has no variants.
+`review`, `done`, `canceled`. It is not configurable and has no variants.
+`backlog` and `todo` answer *when* (parked, or due); an issue is born in `todo`.
 _Avoid_: state, workflow state, stage, column
+
+**Review**:
+The status between delivered and accepted: the claim is released, the result is
+written, and the issue waits for a human — neither workable nor claimed. An
+agent's close lands here only where **review required** is on.
+_Avoid_: QA, verification, acceptance, pending, awaiting approval
+
+**Done**:
+The work the issue asked for is delivered the way the project delivers — its
+convention, not planaffe's, which checks nothing. Where review is required,
+`done` is a human's word; otherwise it is the agent's.
+_Avoid_: completed, finished, merged, shipped, resolved
 
 **Closed**:
 Derived, not a status: an issue whose status is `done` or `canceled`. Everything
@@ -151,13 +172,21 @@ _Avoid_: ready (that is the field), available, eligible, actionable
 **Triage required**:
 The project switch that makes `ready` binding for **workable**. Off by default,
 because a solo developer who trusts whoever writes the issues should not have to
-flag them.
+flag them. It guards the entrance; **review required** guards the exit.
 _Avoid_: review, approval, gate, moderation
+
+**Review required**:
+The project switch that makes an agent's close land in **review** instead of
+`done`. Off by default, for the same reason as triage required: whoever trusts
+their agents should not have to accept every issue by hand. A user's close goes
+to `done` either way.
+_Avoid_: approval, sign-off, QA gate, acceptance
 
 **Claim**:
 The exclusive hold one identity takes on an issue, won atomically by exactly one
-claimant, expiring by itself after inactivity, and released by working the issue
-to a close. It says who is working **now**.
+claimant, expiring by itself after inactivity when an agent holds it and never
+when a user does, and released by handing the issue over — into review or to a
+close. It says who is working **now**.
 _Avoid_: lock, reservation, assignment, checkout
 
 **Assignee**:

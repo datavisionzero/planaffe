@@ -1,6 +1,6 @@
 # Product Vision
 
-> **Status:** The hierarchy (7.), the field set (8.) and the workflow (9.) are settled after research — evidence in [`docs/research/hierarchy-and-fields.md`](docs/research/hierarchy-and-fields.md). How an agent learns that it is its turn (15.9) is settled after research — evidence in [`docs/research/waking-agents-and-triggers.md`](docs/research/waking-agents-and-triggers.md). What is still open is in section 17.
+> **Status:** The hierarchy (7.), the field set (8.) and the workflow (9.) are settled after research — evidence in [`docs/research/hierarchy-and-fields.md`](docs/research/hierarchy-and-fields.md); the workflow gained `review` afterwards ([ADR 0014](docs/adr/0014-review-is-a-status-and-a-project-switch.md)). How an agent learns that it is its turn (15.9) is settled after research — evidence in [`docs/research/waking-agents-and-triggers.md`](docs/research/waking-agents-and-triggers.md). What is still open is in section 17.
 
 ## 1. Elevator Pitch
 
@@ -100,7 +100,7 @@ Commitments that matter to agents:
 - **`--json` prints the complete object** wherever it prints one object: `issue view` is every field, no guessing field names, no second call. **Lists are the exception** — they return a slim issue without the Markdown bodies, and they are paginated. Four hundred AI-written tickets in full are not an answer an agent can afford to receive, and context budget is the one hard resource in this target group ([ADR 0012](docs/adr/0012-a-list-returns-a-slim-issue-and-only-a-single-issue-is-complete.md)).
 - **Errors go to stderr, data to stdout.** Always, in the error case too.
 - **Speaking exit codes.** A lost claim is a different code than a network error — an agent has to be able to tell whether to try again.
-- **Configuration through environment variables** (`PLANAFFE_URL`, `PLANAFFE_TOKEN`) plus an optional `.planaffe` file in the repository that fixes the project. Whoever is in the repository never has to name the project.
+- **Configuration through environment variables** (`PLANAFFE_URL`, `PLANAFFE_TOKEN`) plus an optional `.planaffe` file in the repository that fixes the project — and, where one project spans several repositories, the label that marks this repository's tickets (13.). Whoever is in the repository never has to name the project.
 - **Never interactive when stdin is not a terminal.** No editor, no prompt, no pager — an agent must never hang.
 - **`--wait` instead of polling.** `pa next --wait <seconds>` blocks until a matching ticket is there or the deadline passes, and then returns exactly what it returns without it. That turns a loop with `sleep` into one line without idle time — and later, the same line into the wake-up mechanism from 15.9.
 
@@ -124,6 +124,7 @@ Concretely, as far as the data allows:
 - **Open question:** the question sits at the very top with an answer field, the ticket description collapsed below it. Whoever can answer the question without the context does not have to read the rest.
 - **Blocked:** the blocker sits at the top, with title and status. The only relevant information is what is being waited for.
 - **In progress:** who is working on it and since when — visible before you scroll.
+- **In review:** the `result` sits at the top, and `done` or back to `todo` is one action each.
 - **Long descriptions** are collapsed after the first paragraphs, opened fully with one click.
 
 Deliberately **no** summarisation logic, no heuristic guessing what is important. Only the re-ordering of what is already structured: labels, blockers, claims, comments. If the information lives in prose alone, we show the prose.
@@ -180,9 +181,10 @@ No assignee, no priority, no claim, no due date. Work happens on issues, not on 
 
 - An issue belongs to **at most one** epic. The field is optional — most issues have none.
 - Epics are **not nested**. One level, no more.
-- **Progress is derived**, not maintained: `PLAN-E3 · 3 of 7 done`.
+- **Progress is derived**, not maintained, and it counts what is closed: `PLAN-E3 · 5 of 7 closed · 4 done · 1 canceled`. The question an epic answers is whether anything is left; `canceled` is a decision that stays visible, not progress, so it is shown apart rather than hidden in either number.
 - An epic can be closed while issues are still open — with a warning, but without a blockade (guiding principle 4).
 - The epic's description is the **shared context for agents**: whoever claims an issue of the epic gets it delivered along with the ticket by the CLI.
+- It is a **living document**, not a frozen brief. Whatever changes the plan — a decision taken in one ticket that the others have to know about — is written into the epic's description by whoever took it, agent or human; whatever concerns one ticket stays on that ticket. The epic's history records that the description changed, as an issue's does.
 
 ### The Question
 
@@ -269,7 +271,7 @@ Seventeen fields — comparable to Linear's core, considerably leaner than GitLa
 | `title` | **required** | one line |
 | `description` | optional | Markdown, no images — the assignment |
 | `result` | optional | Markdown — what was done |
-| `status` | default `backlog` | see 9. |
+| `status` | default `todo` | see 9. |
 | `ready` | default `false` | "implementable without asking first", see 10. |
 | `priority` | default `0` | `0`–`4` |
 | `labels` | optional | several, optionally grouped |
@@ -288,11 +290,13 @@ Seventeen fields — comparable to Linear's core, considerably leaner than GitLa
 
 **Assignment and result are two fields.** `description` says what is to be done; `result` says what was done, and is filled when closing. Two different authors at two different times, read on two different occasions. Without a field of its own, the agent appends its report to the description, and then assignment and result sit mixed together in the ticket. The result also feeds the release notes.
 
-**`result` is expected but not enforced.** Closing without a result goes through; CLI and interface point it out but stop nobody. A mandatory field at the most frequent status change of all would be exactly the intermediate dialog guiding principle 4 rules out — and an enforced field gets filled with "done" anyway. On `canceled`, the `result` holds the reason instead of the outcome: same field, same question — why is this ticket closed?
+**`result` is expected but not enforced.** Closing without a result goes through, and so does handing a ticket into `review` (9.); CLI and interface point it out but stop nobody. A mandatory field at the most frequent status change of all would be exactly the intermediate dialog guiding principle 4 rules out — and an enforced field gets filled with "done" anyway. On `canceled`, the `result` holds the reason instead of the outcome: same field, same question — why is this ticket closed?
 
 **Labels can be collected into groups.** Within a group only one label applies at a time — setting another replaces the previous one. This is not a custom-field construction kit but a property of the label itself: it optionally carries a group name.
 
 The benefit: a group "kind" with `bug`, `feature` and `chore` replaces the type field we left out, without a ticket being able to be `bug` and `chore` at the same time. The model is Linear, which has the same concept.
+
+**A label carries a description.** One line of Markdown, optional, saying what the label means in this project. For an agent the project's label set *is* the schema, and a schema without a word of documentation gets guessed at: `bug` explains itself, `area:infra` does not. `pa label list` prints the descriptions, the ticket an agent receives carries the project's labels with them (15.5), and the default group "kind" ships with its own.
 
 **Assignee is single-valued.** GitLab, Linear and Jira allow exactly one; GitLab even makes multiple assignment a paid add-on. For a system whose core feature is exclusive claiming, "several are responsible" would be contradictory anyway.
 
@@ -318,13 +322,23 @@ The benefit: a group "kind" with `bug`, `feature` and `chore` replaces the type 
 **A single status set, fixed in the schema** — not configurable, no selectable variants:
 
 ```
-backlog → todo → in_progress → done
-                             ↘ canceled
+backlog → todo → in_progress → [review] → done
+                                        ↘ canceled
 ```
 
-`done` and `canceled` set the issue to closed automatically. Whoever only wants `open`/`closed` uses `todo` and `done` and ignores the rest.
+`done` and `canceled` set the issue to closed automatically. Whoever only wants `open`/`closed` uses `todo` and `done` and ignores the rest. `review` is passed through only where the project asks for it (below).
 
-**Why no choice between workflow variants:** no comparison system offers such a thing — they either have a fixed set or full configurability. A choice would be a third route nobody takes, and it would force CLI and UI to support two status models. The set above is exactly Linear's default workflow and matches GitLab's default.
+**`backlog` and `todo` answer *when*; `ready` answers *how well*.** `backlog` is a decision about time: not now, do not pull this. `todo` is the opposite: pull it as soon as it is workable (10.). `ready` (8.) is a statement about the ticket itself: concrete enough to implement without asking. The two are independent — a concrete ticket can be parked, a vague one can be due — and neither is derived from the other. **A ticket is born in `todo`.** Whoever creates it has decided it should be done; parking it in `backlog` is the explicit act, not the default. Otherwise an agent that breaks an assignment into seven tickets leaves seven that `next` never hands out, and the solo developer gets exactly the clicking work 10. promises to spare them. With triage required, `ready` protects against a sloppy ticket being pulled; without it, the creator is trusted anyway.
+
+**What `done` means.** The work the ticket asked for is delivered the way the project delivers — merged, pushed, tagged: the project's convention, not ours. planaffe does not check it and cannot; it has no repository (13.). What it does is give the moment *before* `done` a place:
+
+**`review` is the status between delivered and accepted.** An agent that has finished hands the ticket over: the claim is released, the `result` is written, and the ticket is neither workable nor claimed — it waits for a human, in "needs you" (10.), next to the open questions. From there it goes to `done`, or back to `todo` with a comment or a question, one action each. Without this status a ticket that is finished but not yet looked at has nowhere to be: keep the claim and it expires overnight, release it and the next agent does the work again, close it and the release records something nobody checked.
+
+**The switch: review required.** Whether an agent's close lands in `review` or in `done` is a project switch, off by default — the mirror image of triage required (10.): triage guards the entrance, review guards the exit. Off, an agent's close is a close, and `done` means what the agent says it means; whoever trusts their agents clicks nothing. On, an agent's close lands in `review`, and `done` is a human's word — which is what makes the release a record rather than a claim (7.). A human closing a ticket goes straight to `done` either way; the switch is about what an agent's word is worth, and that is the question triage required already asks about the other end.
+
+**Reopening is one movement wherever it starts**, and `review` back to `todo` is the same one: the status becomes `todo`, `closed_at` is cleared, there is no claim, and the `result` stays — the history shows that it is old, and the next close overwrites it. The ticket leaves a release that is still open and stays in one already published (7.).
+
+**Why no choice between workflow variants:** no comparison system offers such a thing — they either have a fixed set or full configurability. A choice would be a third route nobody takes, and it would force CLI and UI to support two status models. The set above is Linear's default workflow, which also matches GitLab's, plus `review` — added after the research once the human's review turned out to be the one moment of the agent cycle without a place ([ADR 0014](docs/adr/0014-review-is-a-status-and-a-project-switch.md)).
 
 Everything else happens through **labels**, not through status — the practice that has proven itself in agentic work (GitLab workflow labels, the approach of Matt Pocock and others). With exactly one exception:
 
@@ -344,7 +358,7 @@ Everything in the previous sections — status, priority, blockers, labels, clai
 
 A ticket is **workable** when all of this holds — `ready` is one of the conditions and not the word for their sum ([`CONTEXT.md`](CONTEXT.md)):
 
-1. Status is `todo` — not `backlog` (not up yet), not `in_progress` (already running).
+1. Status is `todo` — not `backlog` (not up yet), not `in_progress` (already running), not `review` (delivered, waiting for a human).
    A ticket in `in_progress` whose **claim has expired** counts here like `todo`: the claim is evaluated on read (see 11.), and the status falls back with it. Without this rule, the ticket of a crashed agent would vanish from the selection permanently.
 2. It is **not claimed**, or the claim has expired.
 3. **No open blocker.** All tickets in `blocked_by` are closed.
@@ -362,6 +376,8 @@ That matters because tickets in this target group are usually **created by an ag
 The way back matters just as much: if an agent claims a ticket and notices that it is too vague, it asks a **question** (see 7.) and releases the ticket. With that it is automatically no longer workable and lands in "needs you" — nobody has to remember to flip a flag.
 
 **Triage happens in the chat, not in the interface.** Whoever sees that PLAN-14 is stuck does not open the web app and type around in it, but tells their agent: "answer the open question in PLAN-14 like this and make the ticket more concrete." The agent answers the question and rewrites the ticket. The interface shows where it is stuck; acting happens through the CLI.
+
+The history then says that the agent answered — under its token, which belongs to the human who instructed it (12.). That is deliberate. *Which* human is answered by ownership; a second identity on every entry for "on whose instruction" would be a field on every record for a distinction nobody has needed yet, and it can be added later without rewriting anything. What is lost with that is real and stays lost: whether a human decided or the agent did on its own. A convention covers it as far as a convention can: **a question is answered by a human; an agent answers it only when told to.**
 
 ### The switch: triage required
 
@@ -389,7 +405,7 @@ The question belongs in a fixed place for humans as well:
 
 - **"Ready for agents"** — what an agent would pull now, in exactly that order.
 - **"In progress"** — who is working on what, since when, in which epic.
-- **"Needs you"** — open questions first, then blocked tickets and those without `ready`. This is the human's work list: provide supply so the agents do not run dry.
+- **"Needs you"** — open questions first, then tickets in `review`, then blocked tickets and those without `ready`. This is the human's work list: provide supply so the agents do not run dry.
 
 ## 11. Claiming — the Core Feature for Agent Operation
 
@@ -399,9 +415,11 @@ Several agents work in parallel. It must not happen that two touch the same issu
 - A claim belongs to an identity (human or agent) and carries a timestamp — visible in the UI and the CLI.
 - The typical agent cycle is one command: "give me the next ready issue and claim it for me".
 
-**Claim and status belong together.** Claiming sets the issue to `in_progress`, releasing sets it back to `todo`, closing releases the claim. One step, not two (guiding principle 4).
+**Claim and status belong together.** Claiming sets the issue to `in_progress`, releasing sets it back to `todo`, closing — or handing the issue into `review` (9.) — releases the claim. One step, not two (guiding principle 4).
 
 **A claim expires after four hours of inactivity.** Every change to the issue — a comment, a status change, an edit — extends it. That way a crashed agent blocks nothing permanently.
+
+**A claim held by a user does not expire.** Expiry exists for agents, because that is where runs die. A human who goes home with a claim has not crashed, and a ticket handed to an agent overnight because its human went to bed is the wrong kind of surprise. A forgotten human claim is visible in "in progress" and taken over with `claim --force`.
 
 Deliberately part of it:
 
@@ -457,7 +475,8 @@ Every further human is invited by an administrator, and every further token is c
 - **CLI distribution:** a single, easily installed binary or package that talks to any instance. It is cut from the same tag as the server, names its version to the installation and is told the installation's in return, so a mismatch is a message rather than a missing endpoint. The API itself carries no version in its paths, and migrations only ever run forward ([ADR 0011](docs/adr/0011-the-api-carries-no-version-and-migrations-only-run-forward.md)).
 - **Waiting is solved in Postgres, not next to it.** Wherever a client waits for an event (`--wait`, see 6.1 and 15.9), `LISTEN`/`NOTIFY` wakes it with a deadline as the fallback — no broker, no Redis, no scheduler. The price is stated in the research and is worth paying, but it is real: `LISTEN` does not get along with transaction pooling and needs its own connection outside every pool; whoever puts the app behind a reverse proxy has to raise its timeouts. Both belong in the documentation before they belong in support requests.
 - **The installation speaks HTTP and expects a reverse proxy for TLS.** No certificate handling of our own — and whoever puts one in front raises its timeouts, because a waiting client holds its connection open (see above).
-- **A project is not a repository.** One project spans as many repositories as it likes; the `.planaffe` file points from a repository at exactly one project, and never the other way round. planaffe knows nothing about repositories, which is the whole point of 2.1 — one place for tickets, wherever the code lives.
+- **A project is normally one repository, and never has to be.** The usual shape is one repository, one project. A project may span several — a product cut into backend, frontend and infrastructure keeps one epic across all three — but either way planaffe models no repository: no object, no field, no URL. It knows nothing about repositories, which is the whole point of 2.1 — one place for tickets, wherever the code lives. Where a project does span several, the convention is a label group `repo` with one label per repository: an issue carries the label of the repository it concerns, or none when it concerns no particular one. The group is not created by default; whoever needs it creates it. When the git integration comes (15.1), the repository becomes an object with a URL and the label group migrates into it — not before, because a repository without an identity is a label in disguise.
+- **The `.planaffe` file** sits in the root of a repository and is checked in, like `.nvmrc`. It points from the repository at exactly one project, never the other way round — a project does not list its repositories. It holds the project key, so that nobody working in the repository has to name the project, and optionally the `repo` label of this repository, so that `pa next` run here hands out only issues carrying that label or none. It holds no URL and no token; those come from the environment. A file naming a label the project does not have is an error on the first command, not a silent empty result.
 - **Getting out is as documented as getting in.** `pg_dump` is the export, and `pa export --json` is the readable one. There is no importer in the product: an agent reads `gh issue list --json` and creates the issues through the CLI, which is the ability this product is built for. The documentation shows it rather than leaving it as a gap.
 - **Ticket content is not trustworthy.** What planaffe delivers to an agent was often written by another agent. Anthropic explicitly wraps such payloads as "untrusted data", OpenAI warns to sanitise input from issue text. That is already true today and changes nothing about the architecture — but it belongs in the documentation, not in a footnote.
 
@@ -467,7 +486,7 @@ This is the scope of version 1.0, not the order it is built in. It is built in t
 
 **Included:**
 
-- Create, switch, manage projects
+- Create, switch, manage projects, with the two switches *triage required* and *review required*
 - Issues: create, view, edit, comment, change status, close — as Markdown
 - Questions: ask, list, answer — filterable across the project
 - Epics: create, assign issues, see progress, close
@@ -499,7 +518,7 @@ None of this belongs in the MVP. It is here so that we keep it in mind while bui
 
 ### 15.1 Already noted
 
-Attachments and images with interchangeable storage · an MCP server as a second agent interface · webhooks and notifications · git integration (issue references from commits and branches) · a light board view · due dates (together with notifications) · an optional sprint level for teams that need one.
+Attachments and images with interchangeable storage · an MCP server as a second agent interface · webhooks and notifications · git integration (issue references from commits and branches; the repository becomes an object with a URL, and the `repo` label group from 13. migrates into it) · a light board view · due dates (together with notifications) · an optional sprint level for teams that need one.
 
 Two of these have a narrower role after the research than they had when they were written down, and that is important enough to note here:
 
@@ -546,7 +565,7 @@ Why this belongs in the issue tracker and not in a note-taking app: the stub is 
 
 An issue tracker for humans is built for skimming: you see a list, click into it, scroll to the comments, open the epic on the side. An agent cannot do that — it has one pass, and what it does not get in that pass is missing while it works.
 
-That is why reading a ticket, for an agent, is **one operation that delivers everything needed**: the ticket itself, its epic's description, the project instructions (15.3), the questions already answered, the handover state of a previous run (15.10) and the outcome of the tickets that blocked it. Not as references it has to load one by one, but together.
+That is why reading a ticket, for an agent, is **one operation that delivers everything needed**: the ticket itself with its comments, its epic's description, the project's labels with their descriptions (8.), the project instructions (15.3), the questions already answered, the handover state of a previous run (15.10) and the outcome of the tickets that blocked it. Not as references it has to load one by one, but together.
 
 That is more than a convenience: every extra fetch is a place where an agent misses something the issue tracker has known all along. And claiming is the natural moment — whoever takes a ticket gets everything belonging to it with it.
 
@@ -622,7 +641,7 @@ Unsorted, not yet decided:
 - From `git clone` to the first issue created in under five minutes, with a single command.
 - An AI agent can carry out its complete working cycle through the CLI, without a human opening the UI.
 - A status change and a claim cost exactly one action each.
-- A new user understands the entire field set and workflow without a manual.
+- The five-minute path in the README is the only documentation a new user needs for their first complete agent cycle.
 - Operations consist of Postgres backups — nothing else.
 
 ## 17. Open Points
@@ -631,7 +650,7 @@ The substantive questions are settled: hierarchy, epics, sub-issues, the field s
 
 The wake-up mechanism is settled as well: a held outgoing connection instead of a webhook, `pa next --wait` as the smallest building block, the expiry deadline before the trigger (15.9). Evidence in [`docs/research/waking-agents-and-triggers.md`](docs/research/waking-agents-and-triggers.md).
 
-The commissioning path, the life of a token (12.), the product language, pagination, deletion, versioning and the way out of the product (13., 6.1) were settled afterwards and are recorded where they belong, with the reasoning in [`docs/adr/`](docs/adr/).
+The commissioning path, the life of a token (12.), the product language, pagination, deletion, versioning and the way out of the product (13., 6.1) were settled afterwards and are recorded where they belong, with the reasoning in [`docs/adr/`](docs/adr/). So were, in a second product review, what `done` means and the `review` status with its switch (9., [ADR 0014](docs/adr/0014-review-is-a-status-and-a-project-switch.md)), the birth status `todo`, the claim of a user that does not expire (11.), the label description (8.), the epic as a living document (7.) and the relation of project to repository (13.).
 
 Two things remain open, and neither blocks the start:
 
