@@ -27,6 +27,8 @@ planaffe/
 ├─ docs/                      the product, the decisions, and this
 │  ├─ adr/
 │  ├─ research/
+│  ├─ storage.md              the data model: tables, constraints, what is derived on read
+│  ├─ api.md                  the HTTP surface: endpoints, shapes, errors, exit codes
 │  └─ api/openapi.json        the HTTP contract, checked in
 ├─ deploy/                    the Dockerfile, Compose, and nothing else
 ├─ src/
@@ -55,7 +57,7 @@ cheapest possible check that nothing has leaked into it.
 
 **`Planaffe.Domain` holds the rules.** The issue with its closed field set and
 its key, the status set and what closes an issue, the priority scale and the
-order it sorts in, the seven conditions of workability, the claim and its expiry,
+order it sorts in, the eight conditions of workability, the claim and its expiry,
 the label and the group that admits one value at a time, the epic as a bracket,
 the release as a record rather than a plan, the question that is a state rather
 than a comment. The test of whether something belongs here is stated in ADR

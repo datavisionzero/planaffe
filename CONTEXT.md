@@ -207,8 +207,21 @@ and never when a user does, and released by handing the issue over — into revi
 or to a close — or by letting go, which lands in `todo`. Taken directly on any
 open unclaimed issue except one in review, held several at a time by one
 identity, and taken over a user's head only by a user. It says who is working
-**now**.
+**now**. Letting go is `release` in the API and the CLI — the verb on an issue,
+which is not the **Release** that is a record.
 _Avoid_: lock, reservation, assignment, checkout
+
+**Park**:
+The act of moving an open, unclaimed issue into `backlog` — the explicit
+decision that it is not up yet — and the only status move that is a field
+write rather than an act of its own; `todo` is the way back.
+_Avoid_: defer, snooze, freeze, archive
+
+**Reopen**:
+The one movement to `todo` from `review`, `done` or `canceled`: `closed_at`
+cleared, no claim, the result kept until the next close overwrites it. Back from
+`review` it is the rejection and comes with a comment.
+_Avoid_: reject, revert, undo, unresolve
 
 **Assignee**:
 Who should be responsible for an issue — set by hand, persistent, and present
