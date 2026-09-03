@@ -22,8 +22,8 @@ src/web/src/api/schema.d.ts
 
 # Go
 /dist/
-planaffe
-pa
+/planaffe
+/pa
 
 # Node
 node_modules/
