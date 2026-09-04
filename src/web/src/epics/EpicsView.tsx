@@ -1,20 +1,18 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { api, describe, type EpicSummary } from "@/api/client";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/shared/PageHeader";
-import { pathKey } from "@/shell/views";
+import { keyPath } from "@/shell/views";
+
+type Loaded = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; items: EpicSummary[] };
 
 /**
  * The epics of the project with their progress, counted at read time by the
- * instance. The epic's own view — description on top, its issues below
- * (VISION 6.2) — arrives with its ticket; until then a key in the URL is shown
- * in this list.
+ * instance. Each row is the way into the epic's own view.
  */
-type Loaded = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; items: EpicSummary[] };
-
 export function EpicsView() {
-  const { project, number } = useParams();
-  const key = number === undefined ? undefined : pathKey(project!, number);
+  const { project } = useParams();
   const [known, setKnown] = useState<{ of: string | undefined; loaded: Loaded } | null>(null);
   const loaded: Loaded = known !== null && known.of === project ? known.loaded : { at: "asking" };
 
@@ -45,7 +43,9 @@ export function EpicsView() {
 
   return (
     <>
-      <PageHeader title="Epics" meta={loaded.at === "known" ? `${loaded.items.length}` : undefined} />
+      <PageHeader title="Epics" meta={loaded.at === "known" ? `${loaded.items.length}` : undefined}>
+        <Button size="sm" render={<Link to={`/${project}/epics/new`} />}>New epic</Button>
+      </PageHeader>
       {loaded.at === "failed" && <p className="p-4 text-sm text-destructive">{loaded.why}</p>}
       {loaded.at === "known" && (
         <ul className="divide-y">
@@ -53,21 +53,20 @@ export function EpicsView() {
             const share = epic.progress.total === 0 ? 0 : epic.progress.closed / epic.progress.total;
 
             return (
-              <li
-                key={epic.key}
-                className={`flex h-10 items-center gap-3 px-4 ${epic.key === key ? "bg-accent" : ""}`}
-              >
-                <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{epic.key}</span>
-                <span className="min-w-0 flex-1 truncate">{epic.title}</span>
-                <span className="hidden w-32 items-center gap-2 sm:flex">
-                  <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                    <span className="block h-full bg-brand" style={{ width: `${Math.round(share * 100)}%` }} />
+              <li key={epic.key}>
+                <Link to={keyPath(epic.key)} className="flex h-10 items-center gap-3 px-4 hover:bg-accent">
+                  <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{epic.key}</span>
+                  <span className="min-w-0 flex-1 truncate">{epic.title}</span>
+                  <span className="hidden w-32 items-center gap-2 sm:flex">
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                      <span className="block h-full bg-brand" style={{ width: `${Math.round(share * 100)}%` }} />
+                    </span>
+                    <span className="w-12 text-right font-mono text-xs text-muted-foreground">
+                      {epic.progress.closed}/{epic.progress.total}
+                    </span>
                   </span>
-                  <span className="w-12 text-right font-mono text-xs text-muted-foreground">
-                    {epic.progress.closed}/{epic.progress.total}
-                  </span>
-                </span>
-                <span className="text-xs text-muted-foreground">{epic.status}</span>
+                  <span className="text-xs text-muted-foreground">{epic.status}</span>
+                </Link>
               </li>
             );
           })}

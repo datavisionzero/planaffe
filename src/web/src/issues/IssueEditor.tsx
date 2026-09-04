@@ -61,11 +61,24 @@ type IssueDraft = { title: string; description: string; priority: number; ready:
 function IssueForm({ initial, submit, saving, error, onSubmit, onCancel }: { initial?: Issue; submit: string; saving: boolean; error?: string; onSubmit: (draft: IssueDraft) => void; onCancel?: () => void }) {
   const [draft, setDraft] = useState<IssueDraft>({ title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name).join(", ") ?? "", epic: initial?.epic?.key ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []).join(", ") ?? "", status: initial?.status === "backlog" ? "backlog" : "todo" });
   const set = <K extends keyof IssueDraft>(key: K, value: IssueDraft[K]) => setDraft((old) => ({ ...old, [key]: value }));
+  const [reopens, setReopens] = useState<string>();
+
+  // Attaching an issue to a closed epic reopens the epic, silently as far as
+  // the HTTP call goes. The human interface asks for the warning, so the epic
+  // that was typed is read when the field is left and says what saving will do.
+  async function askAboutEpic(value: string) {
+    const key = value.trim();
+    setReopens(undefined);
+    if (key === "" || key.toUpperCase() === (initial?.epic?.key ?? "").toUpperCase()) return;
+    const { data } = await api.GET("/epics/{key}", { params: { path: { key } } });
+    if (data?.status === "closed") setReopens(`${data.key} is closed. Saving attaches this issue and reopens the epic.`);
+  }
   return <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => { event.preventDefault(); void onSubmit(draft); }}>
     <label className="grid gap-1 text-sm font-medium">Title<Input required autoFocus value={draft.title} onChange={(e) => set("title", e.target.value)} /></label>
     <MarkdownField label="Description" value={draft.description} onChange={(value) => set("description", value)} />
     <div className="grid gap-3 sm:grid-cols-3"><Select label="Priority" value={draft.priority} onChange={(value) => set("priority", Number(value))}>{[0,1,2,3,4].map((x) => <option key={x} value={x}>{priorityLabel(x)}</option>)}</Select>{parkable(initial) ? <Select label="Status" value={draft.status} onChange={(value) => set("status", value as "backlog" | "todo")}><option value="todo">Todo</option><option value="backlog">Backlog</option></Select> : <Select label="Status" hint="Changed through the issue's own actions" value={initial!.status} disabled onChange={() => undefined}><option value={initial!.status}>{statusLabel(initial!.status)}</option></Select>}<label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={draft.ready} onChange={(e) => set("ready", e.target.checked)} /> Ready</label></div>
-    <div className="grid gap-3 sm:grid-cols-2"><Text label="Labels" hint="Comma separated" value={draft.labels} change={(v) => set("labels", v)} /><Text label="Epic" value={draft.epic} change={(v) => set("epic", v)} /><Text label="Parent issue" value={draft.parent} change={(v) => set("parent", v)} /><Text label="Assignee" value={draft.assignee} change={(v) => set("assignee", v)} />{!initial && <Text label="Blocked by" hint="Comma separated issue keys" value={draft.blockedBy} change={(v) => set("blockedBy", v)} />}</div>
+    <div className="grid gap-3 sm:grid-cols-2"><Text label="Labels" hint="Comma separated" value={draft.labels} change={(v) => set("labels", v)} /><Text label="Epic" value={draft.epic} change={(v) => set("epic", v)} leave={(v) => void askAboutEpic(v)} /><Text label="Parent issue" value={draft.parent} change={(v) => set("parent", v)} /><Text label="Assignee" value={draft.assignee} change={(v) => set("assignee", v)} />{!initial && <Text label="Blocked by" hint="Comma separated issue keys" value={draft.blockedBy} change={(v) => set("blockedBy", v)} />}</div>
+    {reopens && <p role="status" className="text-sm text-brand">{reopens}</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <div className="flex justify-end gap-2">{onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}<Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button></div>
   </form>;
@@ -77,7 +90,7 @@ export function MarkdownField({ label, value, onChange, required }: { label: str
   return <div className="grid gap-1 text-sm font-medium"><span className="flex items-center justify-between"><label htmlFor={id}>{label}</label><button type="button" className="text-xs font-normal text-brand hover:underline" onClick={() => setPreview((x) => !x)}>{preview ? "Edit" : "Preview"}</button></span>{preview ? <div className="min-h-32 rounded-lg border p-3"><Markdown>{value || "_Nothing to preview._"}</Markdown></div> : <textarea id={id} required={required} value={value} onChange={(e) => onChange(e.target.value)} className="min-h-32 rounded-lg border bg-background px-3 py-2 font-mono text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" />}</div>;
 }
 
-function Text({ label, hint, value, change }: { label: string; hint?: string; value: string; change: (value: string) => void }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<Input value={value} onChange={(e) => change(e.target.value)} /></label>; }
+function Text({ label, hint, value, change, leave }: { label: string; hint?: string; value: string; change: (value: string) => void; leave?: (value: string) => void }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<Input value={value} onChange={(e) => change(e.target.value)} onBlur={leave && ((e) => leave(e.target.value))} /></label>; }
 function Select({ label, hint, value, disabled, onChange, children }: { label: string; hint?: string; value: string | number; disabled?: boolean; onChange: (value: string) => void; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<select className="h-8 rounded-lg border bg-background px-2 disabled:text-muted-foreground" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>{children}</select></label>; }
 function blank(value: string) { return value.trim() || null; }
 function words(value: string) { return value.split(",").map((x) => x.trim()).filter(Boolean); }

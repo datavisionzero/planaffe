@@ -17,11 +17,13 @@ type ActionDialogProps = {
   title: string;
   description: string;
   confirmLabel: string;
+  /** Destructive by default; `default` for a consequential move that removes nothing. */
+  confirmVariant?: "destructive" | "default";
   onConfirm: () => Promise<void>;
 };
 
 /** A focused, reversible confirmation surface for consequential actions. */
-export function ActionDialog({ trigger, title, description, confirmLabel, onConfirm }: ActionDialogProps) {
+export function ActionDialog({ trigger, title, description, confirmLabel, confirmVariant = "destructive", onConfirm }: ActionDialogProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -56,7 +58,7 @@ export function ActionDialog({ trigger, title, description, confirmLabel, onConf
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
           <DialogClose render={<Button variant="outline" disabled={busy} />}>Cancel</DialogClose>
-          <Button variant="destructive" disabled={busy} onClick={() => void confirm()}>
+          <Button variant={confirmVariant} disabled={busy} onClick={() => void confirm()}>
             {busy ? "Working…" : confirmLabel}
           </Button>
         </DialogFooter>

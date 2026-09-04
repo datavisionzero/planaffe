@@ -24,8 +24,10 @@ import { Palette } from "./Palette";
 import { views } from "./views";
 
 // The Markdown pipeline of ADR 0007 weighs more than the shell; it arrives
-// with the first issue or release opened, not with the frame.
+// with the first issue, epic or release opened, not with the frame.
 const IssueView = lazy(() => import("@/issues/IssueView").then((module) => ({ default: module.IssueView })));
+const EpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.EpicView })));
+const NewEpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.NewEpicView })));
 const ReleaseView = lazy(() => import("@/releases/ReleaseView").then((module) => ({ default: module.ReleaseView })));
 
 /**
@@ -120,7 +122,8 @@ export function Shell() {
             <Route path="issues/new" element={<NewIssueView />} />
             <Route path="issues/:number" element={<Suspense fallback={null}><IssueView /></Suspense>} />
             <Route path="epics" element={<EpicsView />} />
-            <Route path="epics/:number" element={<EpicsView />} />
+            <Route path="epics/new" element={<Suspense fallback={null}><NewEpicView /></Suspense>} />
+            <Route path="epics/:number" element={<Suspense fallback={null}><EpicView /></Suspense>} />
             <Route path="releases" element={<ReleasesView />} />
             <Route path="releases/:name" element={<Suspense fallback={null}><ReleaseView /></Suspense>} />
             <Route path="labels" element={<LabelsView />} />
