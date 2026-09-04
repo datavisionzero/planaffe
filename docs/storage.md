@@ -352,6 +352,16 @@ because the update has to lock the row it changes, and it is the row, not the
 view, that it changes. The view is where a query that merely reads cannot forget
 either rule; the write path is small enough to be read as a whole.
 
+The query behind `next` repeats them a **third** time. It computes the two
+derived rules in a CTE, picks a candidate from it, and takes the candidate's
+lock with `for update of i skip locked`. When another writer changed that row
+while the query ran, Postgres locks the new version and rechecks the query's
+conditions against it — but only those naming the locked table, because a CTE
+is not run again for the recheck. So every condition on the candidate's own row
+appears twice, once on the CTE for the plan and once on `issue i` for the
+recheck. Without the second copy, an issue claimed and committed inside that
+window came back as a candidate and `next` answered `claim-held`.
+
 ### Blockers
 
 ```sql

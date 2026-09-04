@@ -75,6 +75,22 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
            and d.claimed_by is null
            and (d.assignee_id is null or d.assignee_id = {1})
            and (not {2} or d.ready)
+           -- Every condition on the candidate's own row, a second time, on the
+           -- row the lock is taken on rather than on the snapshot the CTE was
+           -- built from. `for update` rechecks a row another writer changed
+           -- while this query ran, and that recheck can only see the quals that
+           -- name `i`: a CTE is not run again for it. Without these, an issue
+           -- claimed and committed in that window came back as a candidate, and
+           -- `next` answered `claim-held` instead of handing out the next one —
+           -- a refusal the caller cannot act on and VISION 11 does not allow.
+           and i.deleted_at is null
+           and i.project_id = {0}
+           and (case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+                     then 'todo' else i.status end) = 'todo'
+           and (case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+                     then null else i.claimed_by end) is null
+           and (i.assignee_id is null or i.assignee_id = {1})
+           and (not {2} or i.ready)
            and not exists (select 1 from question q where q.issue_id = d.id and q.answer is null)
            and not exists (select 1 from blocker b join derived f on f.id = b.blocker_id
                             where b.blocked_id = d.id and f.status not in ('done', 'canceled'))

@@ -268,6 +268,50 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
         Assert.Equal(1, await reader.History.CountAsync(h => h.Field == "claim", Ct));
     }
 
+    /// <summary>
+    /// The window between the candidate query's snapshot and the lock it takes
+    /// on the row it picked. Somebody claiming that row inside the window used
+    /// to come back as `claim-held`: `for update` rechecks a row another writer
+    /// changed, but the recheck only sees the conditions naming the locked
+    /// table, and they all named the CTE. `next` refuses nothing a caller can
+    /// act on (VISION 11) — it hands out the next issue instead.
+    /// </summary>
+    /// <remarks>
+    /// The rows are there to widen the window, not because the count matters:
+    /// the query has to take long enough for the claim beside it to commit
+    /// while it runs. Without the recheck this fails on nearly every attempt.
+    /// </remarks>
+    [Fact]
+    public async Task An_issue_claimed_while_next_is_choosing_is_not_the_one_next_hands_out()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        for (var batch = 0; batch < 6; batch++)
+        {
+            await Issues(admin, [.. Enumerable.Range(0, 100).Select(n => new { title = $"Work {batch}-{n}" })]);
+        }
+
+        using var agent = await Agent(instance, admin, "one");
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            var preview = await agent.GetFromJsonAsync<JsonElement>("/projects/PLAN/next?limit=1", Ct);
+            var top = preview.GetProperty("items")[0].GetProperty("key").GetString()!;
+
+            var asking = agent.PostAsJsonAsync("/projects/PLAN/next", new { }, Ct);
+            await Task.Delay(attempt, Ct);
+            using var stolen = await admin.PostAsJsonAsync($"/issues/{top}/claim", new { }, Ct);
+            Assert.Equal(HttpStatusCode.OK, stolen.StatusCode);
+
+            using var answer = await asking;
+            Assert.True(answer.StatusCode == HttpStatusCode.OK,
+                $"Attempt {attempt}: expected OK, got {answer.StatusCode}: {await answer.Content.ReadAsStringAsync(Ct)}");
+
+            var handed = (await answer.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("issue");
+            Assert.NotEqual(top, handed.GetProperty("key").GetString());
+            Assert.Equal("in_progress", handed.GetProperty("status").GetString());
+        }
+    }
+
     private static async Task<HttpClient> Project(AnInstance instance)
     {
         var admin = instance.ClientWith(AnInstance.BootstrapToken);
