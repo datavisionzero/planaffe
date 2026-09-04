@@ -103,3 +103,28 @@ export function viewPath(project: string, view: View): string {
 
 /** `PLAN-42` and `PLAN-E4` — what a pasted key looks like, case aside. */
 export const keyPattern = /^([A-Z][A-Z0-9]*)-(E?\d+)$/i;
+
+/**
+ * The address of an issue or an epic. The path carries the project already, so
+ * it carries the number alone and does not repeat itself: `PLAN-42` lives at
+ * `/PLAN/issues/42` and `PLAN-E4` at `/PLAN/epics/E4`. The project comes from
+ * the key, not from the page the link sits on, so a blocker in another project
+ * leads to that project and not to a stranger of the same number here.
+ */
+export function keyPath(key: string): string {
+  const parts = keyPattern.exec(key);
+
+  if (parts === null) {
+    return "/";
+  }
+
+  const project = parts[1]!.toUpperCase();
+  const number = parts[2]!.toUpperCase();
+
+  return number.startsWith("E") ? `/${project}/epics/${number}` : `/${project}/issues/${number}`;
+}
+
+/** The key a `/:project/issues/:number` address names — the way back from `keyPath`. */
+export function pathKey(project: string, number: string): string {
+  return `${project.toUpperCase()}-${number.toUpperCase()}`;
+}

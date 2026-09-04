@@ -31,6 +31,11 @@ available in the browser.
 | `/:project/settings` | Project settings | name, switches, labels, members and project lifecycle | one column |
 | `/admin` | Instance administration | users, roles, project access, deleted projects and SMTP status | tabular data becomes labelled rows |
 
+`:number` is the part of a key after its project prefix ([`CONTEXT.md`](../CONTEXT.md)):
+`PLAN-42` is at `/PLAN/issues/42`, `PLAN-E3` at `/PLAN/epics/E3`. A link to an
+issue or an epic takes its project from the key it names and not from the
+address it sits on, so a blocker in another project leads to that project.
+
 The application shell persists around every project route. Its project switcher
 contains only projects the caller can access. Non-administrators do not see the
 admin entry, but hiding navigation is never the authorization check.

@@ -8,7 +8,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { rememberProject } from "@/projects/useProjects";
 import { useSession } from "@/session/useSession";
 import { cn } from "@/lib/utils";
-import { keyPattern, viewPath, views } from "./views";
+import { keyPath, keyPattern, viewPath, views } from "./views";
 
 type Command = {
   id: string;
@@ -74,7 +74,7 @@ function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "op
         label: `Open ${project}-${number}`,
         hint: isEpic ? "epic" : "issue",
         group: "Go to",
-        run: go(isEpic ? `/${project}/epics/${project}-${number}` : `/${project}/issues/${project}-${number}`),
+        run: go(keyPath(`${project}-${number}`)),
       });
     }
 

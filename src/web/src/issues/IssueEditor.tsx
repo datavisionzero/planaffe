@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
+import { keyPath } from "@/shell/views";
 import { priorityLabel } from "./priority";
 import { statusLabel } from "./statusLabel";
 
@@ -22,7 +23,7 @@ export function NewIssueView() {
       const item: NewIssue = { ref: null, title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: words(draft.labels), epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), blocked_by: words(draft.blockedBy), blocks: [], status: draft.status };
       const { data, error: problem, response } = await api.POST("/issues", { body: { project: project!, issues: [item] } });
       if (!data) { setError(describe(problem, response.status)); return; }
-      void navigate(`/${project}/issues/${data.items[0].key}`, { replace: true });
+      void navigate(keyPath(data.items[0].key), { replace: true });
     } catch { setError("The instance did not answer."); } finally { setSaving(false); }
   }
 

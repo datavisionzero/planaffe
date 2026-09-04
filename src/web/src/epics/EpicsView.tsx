@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { api, describe, type EpicSummary } from "@/api/client";
 import { PageHeader } from "@/shared/PageHeader";
+import { pathKey } from "@/shell/views";
 
 /**
  * The epics of the project with their progress, counted at read time by the
@@ -12,7 +13,8 @@ import { PageHeader } from "@/shared/PageHeader";
 type Loaded = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; items: EpicSummary[] };
 
 export function EpicsView() {
-  const { project, key } = useParams();
+  const { project, number } = useParams();
+  const key = number === undefined ? undefined : pathKey(project!, number);
   const [known, setKnown] = useState<{ of: string | undefined; loaded: Loaded } | null>(null);
   const loaded: Loaded = known !== null && known.of === project ? known.loaded : { at: "asking" };
 

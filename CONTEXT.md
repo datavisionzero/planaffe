@@ -164,6 +164,15 @@ The project-scoped identifier of an epic, e.g. `PLAN-E3`, drawn from a sequence
 of its own.
 _Avoid_: id, number, reference
 
+**Number**:
+The part of a key after its project prefix — `42` in `PLAN-42`, `E3` in
+`PLAN-E3`. It exists for one reason: the web application's addresses carry the
+project already, so they carry the number alone and do not repeat themselves,
+`/PLAN/issues/42` and `/PLAN/epics/E3`. It is not another name for the key —
+that is what the two entries above warn against — and outside an address it
+names nothing, because a number without its project belongs to no issue.
+_Avoid_: id, short key, slug
+
 ## States and acts
 
 **Status**:

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/shared/PageHeader";
-import type { View } from "@/shell/views";
+import { keyPath, type View } from "@/shell/views";
 import { priorityLabel } from "./priority";
 import { StatusDot } from "./status";
 
@@ -97,7 +97,7 @@ export function IssueListView({ view }: { view: View }) {
         event.preventDefault();
         const next = Math.max(0, Math.min(page.items.length - 1, active + (event.key === "j" ? 1 : -1)));
         setActive(next); virtualizer.scrollToIndex(next, { align: "auto" });
-      } else if (!editing && event.key === "Enter" && page.items[active]) void navigate(`/${project}/issues/${page.items[active].key}`);
+      } else if (!editing && event.key === "Enter" && page.items[active]) void navigate(keyPath(page.items[active].key));
       else if (!editing && event.key === "c") { event.preventDefault(); void navigate(`/${project}/issues/new`); }
       else if (event.key === "Escape" && filtersOpen) setFiltersOpen(false);
     }
@@ -126,7 +126,7 @@ export function IssueListView({ view }: { view: View }) {
     {page.at === "failed" && !page.items.length && <p className="p-4 text-sm text-destructive">{page.why}</p>}
     {page.at === "known" && !page.items.length && <div className="flex flex-1 flex-col items-center justify-center gap-1 p-8 text-center"><p className="text-sm">{explicit ? "No issues match these filters." : "No issues yet."}</p><p className="text-xs text-muted-foreground">{view.hint}</p></div>}
     {!!page.items.length && <div ref={scrollElement} onScroll={(event) => sessionStorage.setItem(storageKey, String(event.currentTarget.scrollTop))} className="min-h-0 flex-1 overflow-auto" role="listbox" aria-label={`${view.label} issues`} aria-busy={page.at === "asking"}>
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>{visibleItems.map((row) => <IssueRow key={page.items[row.index].key} issue={page.items[row.index]} project={project} active={row.index === active} onActive={() => setActive(row.index)} style={{ transform: `translateY(${row.start}px)`, height: row.size }} />)}</div>
+      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>{visibleItems.map((row) => <IssueRow key={page.items[row.index].key} issue={page.items[row.index]} active={row.index === active} onActive={() => setActive(row.index)} style={{ transform: `translateY(${row.start}px)`, height: row.size }} />)}</div>
       {page.at === "failed" && <p className="border-t p-3 text-center text-xs text-destructive">{page.why} <button className="underline" onClick={() => void requestPage()}>Try again</button></p>}
     </div>}
   </div>;
@@ -148,8 +148,8 @@ function Filter({ label, name, value, change, children }: { label: string; name:
   return <label className="grid gap-1 text-xs text-muted-foreground">{label}<select value={value} onChange={(event) => change(name, event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm text-foreground">{children}</select></label>;
 }
 
-function IssueRow({ issue, project, active, onActive, style }: { issue: IssueSummary; project?: string; active: boolean; onActive: () => void; style: React.CSSProperties }) {
-  return <div role="option" aria-selected={active} className="absolute left-0 top-0 w-full border-b" style={style} onMouseMove={onActive}><Link to={`/${project}/issues/${issue.key}`} className={`grid h-full grid-cols-[auto_4.5rem_1fr_auto] items-center gap-x-2 px-3 hover:bg-accent focus-visible:bg-accent focus-visible:outline-hidden sm:grid-cols-[auto_5rem_minmax(8rem,1fr)_auto_auto_auto] ${active ? "bg-accent/70" : ""}`}><StatusDot status={issue.status} /><span className="font-mono text-xs text-muted-foreground">{issue.key}</span><span className="min-w-0 truncate"><span>{issue.title}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground sm:hidden">{issue.claim?.holder.name ?? issue.labels.join(" · ")}</span></span><span className="hidden items-center gap-1 md:flex">{issue.labels.slice(0, 3).map((name) => <Badge key={name} variant="secondary" className="font-normal">{name}</Badge>)}</span><span className="hidden max-w-32 truncate text-xs text-muted-foreground sm:inline">{issue.claim?.holder.name ?? issue.assignee?.name}</span><span className="w-6 text-right font-mono text-xs text-muted-foreground">{priorityLabel(issue.priority)}</span></Link></div>;
+function IssueRow({ issue, active, onActive, style }: { issue: IssueSummary; active: boolean; onActive: () => void; style: React.CSSProperties }) {
+  return <div role="option" aria-selected={active} className="absolute left-0 top-0 w-full border-b" style={style} onMouseMove={onActive}><Link to={keyPath(issue.key)} className={`grid h-full grid-cols-[auto_4.5rem_1fr_auto] items-center gap-x-2 px-3 hover:bg-accent focus-visible:bg-accent focus-visible:outline-hidden sm:grid-cols-[auto_5rem_minmax(8rem,1fr)_auto_auto_auto] ${active ? "bg-accent/70" : ""}`}><StatusDot status={issue.status} /><span className="font-mono text-xs text-muted-foreground">{issue.key}</span><span className="min-w-0 truncate"><span>{issue.title}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground sm:hidden">{issue.claim?.holder.name ?? issue.labels.join(" · ")}</span></span><span className="hidden items-center gap-1 md:flex">{issue.labels.slice(0, 3).map((name) => <Badge key={name} variant="secondary" className="font-normal">{name}</Badge>)}</span><span className="hidden max-w-32 truncate text-xs text-muted-foreground sm:inline">{issue.claim?.holder.name ?? issue.assignee?.name}</span><span className="w-6 text-right font-mono text-xs text-muted-foreground">{priorityLabel(issue.priority)}</span></Link></div>;
 }
 
 function Loading() { return <div className="divide-y" aria-busy>{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex h-11 items-center gap-3 px-4"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 flex-1" /></div>)}</div>; }

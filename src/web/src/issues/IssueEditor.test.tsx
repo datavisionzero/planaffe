@@ -12,7 +12,7 @@ it("creates one issue with its fields and opens it", async () => {
   const instance = installInstance({
     "POST /issues": { status: 201, body: { items: [{ key: "PLAN-10" }] } },
   });
-  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /><Route path="/:project/issues/:key" element={<p>Created issue</p>} /></Routes>);
+  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /><Route path="/:project/issues/:number" element={<p>Created issue</p>} /></Routes>);
   const user = userEvent.setup();
 
   await user.type(screen.getByLabelText("Title"), "Human action");

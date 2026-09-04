@@ -115,9 +115,9 @@ export function Shell() {
                 <Route key={view.id} path={view.path} element={<IssueListView view={view} />} />
               ))}
             <Route path="issues/new" element={<NewIssueView />} />
-            <Route path="issues/:key" element={<Suspense fallback={null}><IssueView /></Suspense>} />
+            <Route path="issues/:number" element={<Suspense fallback={null}><IssueView /></Suspense>} />
             <Route path="epics" element={<EpicsView />} />
-            <Route path="epics/:key" element={<EpicsView />} />
+            <Route path="epics/:number" element={<EpicsView />} />
             <Route path="releases" element={<ReleasesView />} />
             <Route path="labels" element={<LabelsView />} />
             <Route path="settings" element={<ProjectSettingsView />} />
