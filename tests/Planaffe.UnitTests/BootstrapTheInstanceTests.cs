@@ -101,6 +101,8 @@ public sealed class BootstrapTheInstanceTests
         public Task<IReadOnlyList<AgentRow>> ListAgentsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task RecordRenameAsync(Agent agent, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task RecordMetadataAsync(Agent agent, AgentMetadataReport report, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class StoppedClock(DateTimeOffset now) : TimeProvider

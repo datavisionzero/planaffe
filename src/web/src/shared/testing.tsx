@@ -70,6 +70,8 @@ export const aUser = {
   administrator: true,
   owner: null,
   token: { prefix: "pa_abcd", created_at: "2026-09-02T10:00:00Z" },
+  metadata: null,
+  metadata_reported_at: null,
 };
 
 export const aProject = {

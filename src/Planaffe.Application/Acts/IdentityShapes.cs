@@ -21,7 +21,9 @@ public sealed record AgentSummary(
     string Name,
     IdentityRef Owner,
     DateTimeOffset CreatedAt,
-    TokenSummary Token);
+    TokenSummary Token,
+    AgentMetadata? Metadata,
+    DateTimeOffset? MetadataReportedAt);
 
 /// <summary>
 /// The secret, shown once (VISION 12): here and in no other response. What the

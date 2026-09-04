@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -12,9 +13,11 @@ using Planaffe.Infrastructure.Persistence;
 namespace Planaffe.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PlanaffeDbContext))]
-    partial class PlanaffeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260904071656_AddAgentMetadata")]
+    partial class AddAgentMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

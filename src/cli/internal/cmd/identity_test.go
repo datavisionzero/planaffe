@@ -12,9 +12,12 @@ import (
 
 func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 	const me = `{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer","administrator":true,"owner":null,"token":{"prefix":"pa_a1b2c","created_at":"2026-09-02T14:00:00.000000Z"}}`
+	const agentMe = `{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"quiet-otter-42","administrator":false,"owner":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"token":{"prefix":"pa_secre","created_at":"2026-09-02T14:00:00.000000Z"},"metadata":{"kind":"codex","harness":null,"environment":"container","version":"1.2.3"},"metadata_reported_at":"2026-09-04T07:30:00Z"}`
 	const issued = `{"id":"0198e0c0-0000-7000-8000-00000000000b","prefix":"pa_secre","secret":"pa_secret-shown-once-and-nowhere-else-at-all-43chars","created_at":"2026-09-02T14:00:00.000000Z"}`
 	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
 		switch {
+		case r.Method == http.MethodPatch && r.URL.Path == "/me/metadata":
+			return 200, agentMe
 		case r.URL.Path == "/me":
 			return 200, me
 		case r.URL.Path == "/version":
@@ -26,7 +29,7 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/agents":
 			return 201, `{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"quiet-otter-42","owner":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"created_at":"2026-09-02T14:00:00.000000Z","token":` + issued + `}`
 		case r.URL.Path == "/agents":
-			return 200, `[{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"quiet-otter-42","owner":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"created_at":"2026-09-02T14:00:00.000000Z","token":{"id":"0198e0c0-0000-7000-8000-00000000000b","prefix":"pa_secre","created_at":"2026-09-02T14:00:00.000000Z","revoked_at":null}}]`
+			return 200, `[{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"quiet-otter-42","owner":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"created_at":"2026-09-02T14:00:00.000000Z","token":{"id":"0198e0c0-0000-7000-8000-00000000000b","prefix":"pa_secre","created_at":"2026-09-02T14:00:00.000000Z","revoked_at":null},"metadata":{"kind":"codex","harness":"cli","environment":"container","version":"1.2.3"},"metadata_reported_at":"2026-09-04T07:30:00Z"}]`
 		case r.Method == http.MethodPatch:
 			return 200, `{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"brisk-heron-7","owner":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"created_at":"2026-09-02T14:00:00.000000Z","token":{"id":"0198e0c0-0000-7000-8000-00000000000b","prefix":"pa_secre","created_at":"2026-09-02T14:00:00.000000Z","revoked_at":null}}`
 		case r.Method == http.MethodDelete:
@@ -51,11 +54,13 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		stderr string
 	}{
 		{[]string{"me"}, "GET", "/me", nil, "maintainer (user)  administrator", ""},
+		{[]string{"me", "set", "--kind", "codex", "--harness", "none", "--environment", "container", "--version", "1.2.3"}, "PATCH", "/me/metadata", map[string]any{"kind": "codex", "harness": nil, "environment": "container", "version": "1.2.3"}, "metadata:", ""},
 		{[]string{"version"}, "GET", "/version", nil, "pa 0.0.0-dev\nplanaffe 0.0.0-dev", ""},
 		{[]string{"user", "create", "other"}, "POST", "/users", map[string]any{"name": "other"}, "token: pa_secret-shown-once", "shown once"},
 		{[]string{"user", "list"}, "GET", "/users", nil, "maintainer", ""},
 		{[]string{"agent", "create", "--name", "quiet-otter-42"}, "POST", "/agents", map[string]any{"name": "quiet-otter-42"}, "token: pa_secret-shown-once", "shown once"},
 		{[]string{"agent", "list"}, "GET", "/agents", nil, "quiet-otter-42", ""},
+		{[]string{"agent", "view", "0198e0c0-0000-7000-8000-000000000001"}, "GET", "/agents", nil, "environment: container", ""},
 		{[]string{"agent", "rename", "0198e0c0-0000-7000-8000-000000000001", "--name", "brisk-heron-7"}, "PATCH", "/agents/0198e0c0-0000-7000-8000-000000000001", map[string]any{"name": "brisk-heron-7"}, "renamed to brisk-heron-7", ""},
 		{[]string{"agent", "revoke", "0198e0c0-0000-7000-8000-000000000001"}, "DELETE", "/agents/0198e0c0-0000-7000-8000-000000000001", nil, "revoked", ""},
 		{[]string{"token", "create"}, "POST", "/tokens", nil, "token: pa_secret-shown-once", "shown once"},

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/datavisionzero/planaffe/src/cli/internal/api"
 )
@@ -291,6 +292,66 @@ func Me(w io.Writer, me api.Me) {
 		fmt.Fprintf(w, "owner: %s\n", me.Owner.Name)
 	}
 	fmt.Fprintf(w, "token: %s…  since %s\n", me.Token.Prefix, me.Token.CreatedAt.Format("2006-01-02"))
+	metadata(w, me.Metadata, me.MetadataReportedAt)
+}
+
+func Agents(w io.Writer, agents []api.AgentSummary) {
+	for _, a := range agents {
+		state := a.Token.Prefix + "…"
+		if a.Token.RevokedAt != nil {
+			state = "revoked " + a.Token.RevokedAt.Format("2006-01-02")
+		}
+		fmt.Fprintf(w, "%-36s %-24s owner: %-16s %s", a.Id, a.Name, a.Owner.Name, state)
+		if summary := metadataSummary(a.Metadata); summary != "" {
+			fmt.Fprintf(w, "  metadata: %s", summary)
+			if a.MetadataReportedAt != nil {
+				fmt.Fprintf(w, " (%s)", a.MetadataReportedAt.Format("2006-01-02"))
+			}
+		}
+		fmt.Fprintln(w)
+	}
+}
+
+func Agent(w io.Writer, a api.AgentSummary) {
+	fmt.Fprintf(w, "%s (%s)\nid: %s\nowner: %s\n", a.Name, a.Kind, a.Id, a.Owner.Name)
+	state := a.Token.Prefix + "…  since " + a.Token.CreatedAt.Format("2006-01-02")
+	if a.Token.RevokedAt != nil {
+		state = "revoked " + a.Token.RevokedAt.Format("2006-01-02")
+	}
+	fmt.Fprintf(w, "token: %s\n", state)
+	metadata(w, a.Metadata, a.MetadataReportedAt)
+}
+
+func metadata(w io.Writer, m *api.AgentMetadata, at *time.Time) {
+	if m == nil || at == nil {
+		return
+	}
+	fmt.Fprintf(w, "metadata: %s", at.Format("2006-01-02 15:04"))
+	for _, field := range []struct {
+		name  string
+		value *string
+	}{{"kind", m.Kind}, {"harness", m.Harness}, {"environment", m.Environment}, {"version", m.Version}} {
+		if field.value != nil {
+			fmt.Fprintf(w, "  %s: %s", field.name, *field.value)
+		}
+	}
+	fmt.Fprintln(w)
+}
+
+func metadataSummary(m *api.AgentMetadata) string {
+	if m == nil {
+		return ""
+	}
+	parts := []string{}
+	for _, field := range []struct {
+		name  string
+		value *string
+	}{{"kind", m.Kind}, {"harness", m.Harness}, {"environment", m.Environment}, {"version", m.Version}} {
+		if field.value != nil {
+			parts = append(parts, field.name+"="+*field.value)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // Reasons prints why nothing was handed out, in the words of VISION 10.

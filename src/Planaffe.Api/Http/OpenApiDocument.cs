@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 using Planaffe.Api.Hosting;
+using Planaffe.Domain.Identities;
 using Planaffe.Domain.Issues;
 
 namespace Planaffe.Api.Http;
@@ -67,6 +68,22 @@ public static class OpenApiDocument
                 {
                     schema.Type = nullable ? JsonSchemaType.String | JsonSchemaType.Null : JsonSchemaType.String;
                     schema.Format = "date-time";
+                }
+
+                if (type == typeof(AgentMetadataRequest))
+                {
+                    schema.AdditionalPropertiesAllowed = false;
+                }
+
+                if (type == typeof(AgentMetadataRequest) || type == typeof(AgentMetadata))
+                {
+                    foreach (var property in schema.Properties?.Values ?? Enumerable.Empty<IOpenApiSchema>())
+                    {
+                        if (property is OpenApiSchema concrete)
+                        {
+                            concrete.MaxLength = Agent.MetadataValueMaxLength;
+                        }
+                    }
                 }
 
                 Plain(schema);

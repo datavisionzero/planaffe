@@ -86,6 +86,11 @@ stores for the rows, the identity of the caller, the id source, the wake-up
 channel a waiting client listens on, and the clock — which is `TimeProvider` from
 the base class libraries rather than a port of ours.
 
+The agent metadata back channel is one of those acts: an agent changes only its
+own last report, while Infrastructure writes the same snapshot to its history
+in the same transaction. The history deliberately has no read port yet; cut two
+keeps it for later without opening a second surface before one is needed.
+
 **`Planaffe.Infrastructure` answers those ports.** EF Core declares the tables
 and owns the self-applying migrations, so there is exactly one place that creates
 schema. A migration is added with the pinned tool in `.config/dotnet-tools.json`

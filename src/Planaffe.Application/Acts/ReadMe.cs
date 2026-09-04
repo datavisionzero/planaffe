@@ -25,7 +25,9 @@ public sealed record Me(
     string Name,
     bool Administrator,
     IdentityRef? Owner,
-    TokenRef Token);
+    TokenRef Token,
+    AgentMetadata? Metadata,
+    DateTimeOffset? MetadataReportedAt);
 
 /// <summary>
 /// Who am I — the one read every client makes first, to learn which kind of
@@ -40,6 +42,9 @@ public sealed class ReadMe(ICallerIdentity callerIdentity, IIdentities identitie
         var owner = caller.OwnerId is { } ownerId
             ? await identities.FindAsync(ownerId, cancellationToken)
             : null;
+        var agent = caller.IsAgent
+            ? await identities.FindAgentAsync(caller.Id, cancellationToken)
+            : null;
 
         return new Me(
             caller.Id,
@@ -47,6 +52,8 @@ public sealed class ReadMe(ICallerIdentity callerIdentity, IIdentities identitie
             caller.Name,
             caller.Administrator,
             owner is null ? null : IdentityRef.Of(owner),
-            new TokenRef(caller.TokenPrefix, caller.TokenCreatedAt));
+            new TokenRef(caller.TokenPrefix, caller.TokenCreatedAt),
+            agent?.Metadata,
+            agent?.MetadataReportedAt);
     }
 }

@@ -167,6 +167,7 @@ person. Extension members carry what the code needs — the holder on
 | status | type | when |
 |---|---|---|
 | 400 | `validation` | a field is missing, malformed or over its limit; `errors` maps field to message |
+| 400 | `unknown-field` | a closed request object contains a field it does not define; `field` names it |
 | 400 | `cursor-invalid` | the cursor does not fit the filters or is not one the server issued |
 | 401 | `unauthenticated` | no token, an unknown token, or a revoked one |
 | 403 | `forbidden` | the identity may not do this — an agent creating a project, a non-administrator creating a user, an agent setting `ready` under triage required (`ready-requires-user`), an agent forcing a user's claim (`claim-protected`) |
@@ -200,7 +201,7 @@ can branch without parsing:
 | 1 | unexpected | 500, a response the CLI cannot parse, a bug in the CLI |
 | 2 | usage | bad arguments, `PLANAFFE_URL` or `PLANAFFE_TOKEN` unset, a `.planaffe` file the CLI cannot read |
 | 3 | not found | 404 `not-found`, 404 `deleted` |
-| 4 | refused | 400 `validation`, 422 of every type |
+| 4 | refused | 400 `validation`, 400 `unknown-field`, 422 of every type |
 | 5 | conflict | 409 `claim-held`, 409 `claim-lost`, 409 `idempotency-mismatch`, 409 `release-exists` |
 | 6 | stale | 412 `stale` |
 | 7 | denied | 401, 403 |

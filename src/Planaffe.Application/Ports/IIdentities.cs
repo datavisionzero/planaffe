@@ -53,4 +53,7 @@ public interface IIdentities
     /// <summary>Writes back the name just given to <paramref name="agent"/>.</summary>
     /// <exception cref="Domain.Refusal">As <see cref="AddAsync"/>.</exception>
     Task RecordRenameAsync(Agent agent, CancellationToken cancellationToken);
+
+    /// <summary>Writes the latest report and its immutable history row atomically.</summary>
+    Task RecordMetadataAsync(Agent agent, AgentMetadataReport report, CancellationToken cancellationToken);
 }

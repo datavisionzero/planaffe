@@ -13,6 +13,8 @@ namespace Planaffe.Domain.Identities;
 /// </remarks>
 public sealed class Agent : Identity
 {
+    public const int MetadataValueMaxLength = 100;
+
     private Agent()
     {
     }
@@ -30,8 +32,49 @@ public sealed class Agent : Identity
     /// </summary>
     public Guid OwnerId { get; private init; }
 
+    /// <summary>The last stable facts this agent reported about itself.</summary>
+    public AgentMetadata? Metadata { get; private set; }
+
+    public DateTimeOffset? MetadataReportedAt { get; private set; }
+
     public override IdentityKind Kind => IdentityKind.Agent;
 
     public static Agent Create(string name, Guid ownerId, DateTimeOffset createdAt) =>
         new(Guid.CreateVersion7(), NormalizeName(name), ownerId, createdAt);
+
+    /// <summary>
+    /// Applies one report. A field not present stays as it was; a present null
+    /// clears it. The returned value is the immutable snapshot kept in history.
+    /// </summary>
+    public AgentMetadata ReportMetadata(
+        bool kindGiven, string? kind,
+        bool harnessGiven, string? harness,
+        bool environmentGiven, string? environment,
+        bool versionGiven, string? version,
+        DateTimeOffset reportedAt)
+    {
+        var previous = Metadata ?? AgentMetadata.Empty;
+        var reported = new AgentMetadata(
+            kindGiven ? NormalizeMetadata("kind", kind) : previous.Kind,
+            harnessGiven ? NormalizeMetadata("harness", harness) : previous.Harness,
+            environmentGiven ? NormalizeMetadata("environment", environment) : previous.Environment,
+            versionGiven ? NormalizeMetadata("version", version) : previous.Version);
+
+        Metadata = reported;
+        MetadataReportedAt = reportedAt;
+        return reported;
+    }
+
+    private static string? NormalizeMetadata(string field, string? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        return value.Length <= MetadataValueMaxLength
+            ? value
+            : throw new ArgumentException(
+                $"Agent metadata {field} is at most {MetadataValueMaxLength} characters.", field);
+    }
 }

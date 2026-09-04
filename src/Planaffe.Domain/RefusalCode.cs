@@ -19,6 +19,9 @@ public enum RefusalCode
     /// <summary>A field is missing, malformed or over its limit; <c>errors</c> maps field to message.</summary>
     Validation,
 
+    /// <summary>A closed request object contains a field it does not define.</summary>
+    UnknownField,
+
     /// <summary>The cursor does not fit the filters or is not one the server issued.</summary>
     CursorInvalid,
 

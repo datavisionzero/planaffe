@@ -38,6 +38,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<AuthenticateToken>();
 builder.Services.AddScoped<BootstrapTheInstance>();
 builder.Services.AddScoped<ReadMe>();
+builder.Services.AddScoped<ReportAgentMetadata>();
 
 // The human side of the permission line (docs/api.md, Who may do what): users,
 // agents and tokens are a user's acts, users an administrator's.

@@ -62,10 +62,44 @@ public sealed class AgentConfiguration : IEntityTypeConfiguration<Agent>
         // required on every agent row, by the check constraint above.
         builder.Property(a => a.OwnerId).HasColumnName("owner_id");
 
+        builder.OwnsOne(a => a.Metadata, metadata =>
+        {
+            metadata.ToJson("metadata");
+            metadata.Property(m => m.Kind).HasJsonPropertyName("kind");
+            metadata.Property(m => m.Harness).HasJsonPropertyName("harness");
+            metadata.Property(m => m.Environment).HasJsonPropertyName("environment");
+            metadata.Property(m => m.Version).HasJsonPropertyName("version");
+        });
+
+        builder.Property(a => a.MetadataReportedAt).HasColumnName("metadata_reported_at");
+
         builder.HasOne<Identity>()
             .WithMany()
             .HasForeignKey(a => a.OwnerId)
             .HasConstraintName("fk_identity_owner")
             .OnDelete(DeleteBehavior.NoAction);
+    }
+}
+
+public sealed class AgentMetadataReportConfiguration : IEntityTypeConfiguration<AgentMetadataReport>
+{
+    public void Configure(EntityTypeBuilder<AgentMetadataReport> builder)
+    {
+        builder.ToTable("identity_metadata");
+        builder.HasKey(r => r.Id).HasName("pk_identity_metadata");
+        builder.Property(r => r.Id).HasColumnName("id");
+        builder.Property(r => r.IdentityId).HasColumnName("identity_id").IsRequired();
+        builder.Property(r => r.ReportedAt).HasColumnName("reported_at").IsRequired();
+        builder.HasIndex(r => new { r.IdentityId, r.ReportedAt }).HasDatabaseName("identity_metadata_identity");
+        builder.HasOne<Agent>().WithMany().HasForeignKey(r => r.IdentityId)
+            .HasConstraintName("fk_identity_metadata_identity").OnDelete(DeleteBehavior.NoAction);
+        builder.OwnsOne(r => r.Metadata, metadata =>
+        {
+            metadata.ToJson("metadata");
+            metadata.Property(m => m.Kind).HasJsonPropertyName("kind");
+            metadata.Property(m => m.Harness).HasJsonPropertyName("harness");
+            metadata.Property(m => m.Environment).HasJsonPropertyName("environment");
+            metadata.Property(m => m.Version).HasJsonPropertyName("version");
+        });
     }
 }

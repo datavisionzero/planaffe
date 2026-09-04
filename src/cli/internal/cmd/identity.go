@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -22,7 +24,7 @@ func identityCommands(g *globals) []*cobra.Command {
 }
 
 func newMe(g *globals) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use: "me", Short: "Who the token says you are: the identity, its kind, its role, the token it came in under.", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, c, err := g.load()
@@ -43,6 +45,55 @@ func newMe(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.AddCommand(newMeSet(g))
+	return cmd
+}
+
+func newMeSet(g *globals) *cobra.Command {
+	var kind, harness, environment, harnessVersion string
+	cmd := &cobra.Command{
+		Use: "set", Short: "Report stable metadata about this agent; `none` clears a field. Agent tokens only.", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			body := map[string]any{}
+			for flag, value := range map[string]string{"kind": kind, "harness": harness, "environment": environment, "version": harnessVersion} {
+				if cmd.Flags().Changed(flag) {
+					if value == "none" {
+						body[flag] = nil
+					} else {
+						body[flag] = value
+					}
+				}
+			}
+			if len(body) == 0 {
+				return &config.UsageError{Message: "nothing to report: pass --kind, --harness, --environment or --version."}
+			}
+			encoded, err := json.Marshal(body)
+			if err != nil {
+				return err
+			}
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			resp, err := c.ReportAgentMetadataWithBodyWithResponse(cmd.Context(), "application/json", bytes.NewReader(encoded))
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			render.Me(cmd.OutOrStdout(), *resp.JSON200)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&kind, "kind", "", "what the agent is; `none` clears")
+	cmd.Flags().StringVar(&harness, "harness", "", "what it runs in; `none` clears")
+	cmd.Flags().StringVar(&environment, "environment", "", "where it runs; `none` clears")
+	cmd.Flags().StringVar(&harnessVersion, "version", "", "the harness version; `none` clears")
+	return cmd
 }
 
 // newVersion prints both sides — and, when they do not fit, says so with exit
@@ -187,14 +238,38 @@ func newAgent(g *globals) *cobra.Command {
 			if g.json {
 				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
 			}
-			for _, a := range *resp.JSON200 {
-				state := a.Token.Prefix + "…"
-				if a.Token.RevokedAt != nil {
-					state = "revoked " + a.Token.RevokedAt.Format("2006-01-02")
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%-36s %-24s owner: %-16s %s\n", a.Id, a.Name, a.Owner.Name, state)
-			}
+			render.Agents(cmd.OutOrStdout(), *resp.JSON200)
 			return nil
+		},
+	}
+	view := &cobra.Command{
+		Use: "view ID", Short: "One agent with its owner, token state and last reported metadata.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := agentID(args[0])
+			if err != nil {
+				return err
+			}
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			resp, err := c.ListAgentsWithResponse(cmd.Context())
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			for _, agent := range *resp.JSON200 {
+				if agent.Id == id {
+					if g.json {
+						return render.JSON(cmd.OutOrStdout(), agent)
+					}
+					render.Agent(cmd.OutOrStdout(), agent)
+					return nil
+				}
+			}
+			return &client.Failure{Code: exit.NotFound, Message: fmt.Sprintf("no agent %s", id)}
 		},
 	}
 	var newName string
@@ -252,7 +327,7 @@ func newAgent(g *globals) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(create, list, rename, revoke)
+	cmd.AddCommand(create, list, view, rename, revoke)
 	return cmd
 }
 

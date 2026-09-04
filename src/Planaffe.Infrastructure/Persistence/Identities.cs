@@ -66,6 +66,12 @@ public sealed class Identities(PlanaffeDbContext context) : IIdentities
         await SaveOrRefuseTheNameAsync(identity.Name, cancellationToken);
     }
 
+    public async Task RecordMetadataAsync(Agent agent, AgentMetadataReport report, CancellationToken cancellationToken)
+    {
+        context.AgentMetadataReports.Add(report);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     public Task RecordRenameAsync(Agent agent, CancellationToken cancellationToken) =>
         SaveOrRefuseTheNameAsync(agent.Name, cancellationToken);
 

@@ -1,4 +1,7 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Planaffe.Application.Acts;
+using Planaffe.Domain;
 
 namespace Planaffe.Api.Http;
 
@@ -10,6 +13,42 @@ public sealed record CreateUserRequest(string? Name, bool? Administrator);
 public sealed record CreateAgentRequest(string? Name);
 
 public sealed record RenameAgentRequest(string? Name);
+
+public sealed class AgentMetadataRequest
+{
+    private string? _kind;
+    private string? _harness;
+    private string? _environment;
+    private string? _version;
+
+    public string? Kind
+    {
+        get => _kind;
+        init { _kind = value; KindGiven = true; }
+    }
+    public string? Harness
+    {
+        get => _harness;
+        init { _harness = value; HarnessGiven = true; }
+    }
+    public string? Environment
+    {
+        get => _environment;
+        init { _environment = value; EnvironmentGiven = true; }
+    }
+    public string? Version
+    {
+        get => _version;
+        init { _version = value; VersionGiven = true; }
+    }
+
+    [JsonIgnore] public bool KindGiven { get; private init; }
+    [JsonIgnore] public bool HarnessGiven { get; private init; }
+    [JsonIgnore] public bool EnvironmentGiven { get; private init; }
+    [JsonIgnore] public bool VersionGiven { get; private init; }
+
+    [JsonExtensionData] public Dictionary<string, JsonElement>? UnknownFields { get; init; }
+}
 
 /// <summary>
 /// Users, agents and tokens (<c>docs/api.md</c>): the human side of the
@@ -70,6 +109,25 @@ public static class IdentityEndpoints
             .WithSummary("Revoke an agent's token. The identity stays. Its owner or an administrator.")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        door.MapPatch("/me/metadata", (AgentMetadataRequest? request, ReportAgentMetadata report, CancellationToken cancellationToken) =>
+            {
+                request ??= new AgentMetadataRequest();
+                if (request.UnknownFields?.Keys.FirstOrDefault() is { } field)
+                {
+                    throw new Refusal(RefusalCode.UnknownField, $"Agent metadata has no field {field}.",
+                        new Dictionary<string, object?> { ["field"] = field });
+                }
+                return report.ExecuteAsync(new AgentMetadataChanges(
+                    request.KindGiven, request.Kind,
+                    request.HarnessGiven, request.Harness,
+                    request.EnvironmentGiven, request.Environment,
+                    request.VersionGiven, request.Version), cancellationToken);
+            })
+            .WithName("ReportAgentMetadata")
+            .WithSummary("Report the caller agent's stable metadata. An omitted field stays; null clears it.")
+            .Produces<Me>()
+            .ProducesProblem(StatusCodes.Status400BadRequest);
 
         door.MapGet("/tokens", (ListTokens list, CancellationToken cancellationToken) => list.ExecuteAsync(cancellationToken))
             .WithName("ListTokens")

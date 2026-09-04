@@ -399,6 +399,67 @@
         }
       }
     },
+    "/me/metadata": {
+      "patch": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Report the caller agent's stable metadata. An omitted field stays; null clears it.",
+        "operationId": "ReportAgentMetadata",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentMetadataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tokens": {
       "get": {
         "tags": [
@@ -3887,6 +3948,79 @@
   },
   "components": {
     "schemas": {
+      "AgentMetadata": {
+        "required": [
+          "kind",
+          "harness",
+          "environment",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "harness": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "environment": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AgentMetadataRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "harness": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "environment": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "AgentSummary": {
         "required": [
           "id",
@@ -3894,7 +4028,9 @@
           "name",
           "owner",
           "created_at",
-          "token"
+          "token",
+          "metadata",
+          "metadata_reported_at"
         ],
         "type": "object",
         "properties": {
@@ -3917,6 +4053,23 @@
           },
           "token": {
             "$ref": "#/components/schemas/TokenSummary"
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentMetadata"
+              }
+            ]
+          },
+          "metadata_reported_at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -5163,7 +5316,9 @@
           "name",
           "administrator",
           "owner",
-          "token"
+          "token",
+          "metadata",
+          "metadata_reported_at"
         ],
         "type": "object",
         "properties": {
@@ -5192,6 +5347,23 @@
           },
           "token": {
             "$ref": "#/components/schemas/TokenRef"
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentMetadata"
+              }
+            ]
+          },
+          "metadata_reported_at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },

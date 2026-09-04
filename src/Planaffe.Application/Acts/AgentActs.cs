@@ -69,7 +69,8 @@ public sealed class ListAgents(ICallerIdentity callerIdentity, IIdentities ident
         [
             .. (await identities.ListAgentsAsync(cancellationToken)).Select(row => new AgentSummary(
                 row.Agent.Id, row.Agent.Kind, row.Agent.Name,
-                IdentityRef.Of(row.Owner), row.Agent.CreatedAt, TokenSummary.Of(row.Token))),
+                IdentityRef.Of(row.Owner), row.Agent.CreatedAt, TokenSummary.Of(row.Token),
+                row.Agent.Metadata, row.Agent.MetadataReportedAt)),
         ];
     }
 }
@@ -98,7 +99,53 @@ public sealed class RenameAgent(ICallerIdentity callerIdentity, IIdentities iden
 
         return new AgentSummary(
             row.Agent.Id, row.Agent.Kind, row.Agent.Name,
-            IdentityRef.Of(row.Owner), row.Agent.CreatedAt, TokenSummary.Of(row.Token));
+            IdentityRef.Of(row.Owner), row.Agent.CreatedAt, TokenSummary.Of(row.Token),
+            row.Agent.Metadata, row.Agent.MetadataReportedAt);
+    }
+}
+
+public sealed record AgentMetadataChanges(
+    bool KindGiven, string? Kind,
+    bool HarnessGiven, string? Harness,
+    bool EnvironmentGiven, string? Environment,
+    bool VersionGiven, string? Version);
+
+/// <summary>An agent reports stable facts about itself; nobody writes them on its behalf.</summary>
+public sealed class ReportAgentMetadata(ICallerIdentity callerIdentity, IIdentities identities, TimeProvider clock)
+{
+    public async Task<Me> ExecuteAsync(AgentMetadataChanges changes, CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller;
+        if (!caller.IsAgent)
+        {
+            throw new Refusal(RefusalCode.Forbidden, "A user has no agent metadata to report.");
+        }
+
+        var agent = await identities.FindAgentAsync(caller.Id, cancellationToken)
+            ?? throw new InvalidOperationException($"Authenticated agent {caller.Id} does not exist.");
+
+        var now = clock.GetUtcNow();
+        AgentMetadata reported;
+        try
+        {
+            reported = agent.ReportMetadata(
+                changes.KindGiven, changes.Kind,
+                changes.HarnessGiven, changes.Harness,
+                changes.EnvironmentGiven, changes.Environment,
+                changes.VersionGiven, changes.Version,
+                now);
+        }
+        catch (ArgumentException invalid)
+        {
+            throw Refusal.Validation(invalid.ParamName ?? "metadata", invalid.Message);
+        }
+
+        await identities.RecordMetadataAsync(agent, AgentMetadataReport.Create(agent.Id, now, reported), cancellationToken);
+
+        var owner = await identities.FindAsync(agent.OwnerId, cancellationToken)
+            ?? throw new InvalidOperationException($"Agent {agent.Id} has no owner; the schema does not allow that.");
+        return new Me(agent.Id, agent.Kind, agent.Name, false, IdentityRef.Of(owner),
+            new TokenRef(caller.TokenPrefix, caller.TokenCreatedAt), agent.Metadata, agent.MetadataReportedAt);
     }
 }
 

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Npgsql;
 
 namespace Planaffe.IntegrationTests;
 
@@ -13,6 +14,75 @@ namespace Planaffe.IntegrationTests;
 public sealed class IdentityEndpointTests(PostgresFixture postgres)
 {
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task An_agent_reports_partial_metadata_and_every_report_is_kept()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        using var created = await admin.PostAsJsonAsync("/agents", new { name = "quiet-otter-42" }, Ct);
+        var agent = await created.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        var id = agent.GetProperty("id").GetGuid();
+        using var asAgent = instance.ClientWith(agent.GetProperty("token").GetProperty("secret").GetString()!);
+
+        using var first = await asAgent.PatchAsJsonAsync("/me/metadata", new
+        {
+            kind = "codex", harness = "cli", environment = "container", version = "1.2.3",
+        }, Ct);
+        Assert.True(first.StatusCode == HttpStatusCode.OK,
+            $"{await first.Content.ReadAsStringAsync(Ct)}\n{string.Join('\n', instance.Errors)}");
+        var reported = await first.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal("codex", reported.GetProperty("metadata").GetProperty("kind").GetString());
+        Assert.NotEqual(JsonValueKind.Null, reported.GetProperty("metadata_reported_at").ValueKind);
+
+        // Absent keeps the old value; null clears it.
+        using var second = await asAgent.PatchAsJsonAsync("/me/metadata", new { harness = (string?)null, version = "1.2.4" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        reported = await second.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        var metadata = reported.GetProperty("metadata");
+        Assert.Equal("codex", metadata.GetProperty("kind").GetString());
+        Assert.Equal(JsonValueKind.Null, metadata.GetProperty("harness").ValueKind);
+        Assert.Equal("container", metadata.GetProperty("environment").GetString());
+        Assert.Equal("1.2.4", metadata.GetProperty("version").GetString());
+
+        // A user sees the last report in the management list.
+        var agents = await admin.GetFromJsonAsync<JsonElement>("/agents", Ct);
+        var listed = Assert.Single(agents.EnumerateArray());
+        Assert.Equal("1.2.4", listed.GetProperty("metadata").GetProperty("version").GetString());
+        Assert.NotEqual(JsonValueKind.Null, listed.GetProperty("metadata_reported_at").ValueKind);
+
+        // The write keeps both complete snapshots; no read endpoint exposes this history yet.
+        await using var connection = new NpgsqlConnection(instance.ConnectionString);
+        await connection.OpenAsync(Ct);
+        await using var command = new NpgsqlCommand(
+            "select metadata::text from identity_metadata where identity_id = @id order by reported_at", connection);
+        command.Parameters.AddWithValue("id", id);
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        var snapshots = new List<string>();
+        while (await reader.ReadAsync(Ct)) snapshots.Add(reader.GetString(0));
+        Assert.Equal(2, snapshots.Count);
+        Assert.Contains("\"harness\": \"cli\"", snapshots[0], StringComparison.Ordinal);
+        Assert.Contains("\"harness\": null", snapshots[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Only_an_agent_reports_metadata_and_the_shape_is_closed()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+
+        using var forbidden = await admin.PatchAsJsonAsync("/me/metadata", new { kind = "user" }, Ct);
+        await Problem(forbidden, HttpStatusCode.Forbidden, "forbidden", string.Join('\n', instance.Errors));
+
+        using var asAgent = instance.ClientWith(await AgentSecretAsync(admin));
+        using var unknown = await asAgent.PatchAsJsonAsync("/me/metadata", new { model = "not-stable" }, Ct);
+        var unknownProblem = await Problem(unknown, HttpStatusCode.BadRequest, "unknown-field");
+        Assert.Equal("model", unknownProblem.GetProperty("field").GetString());
+
+        using var tooLong = await asAgent.PatchAsJsonAsync("/me/metadata", new { environment = new string('x', 101) }, Ct);
+        var validation = await Problem(tooLong, HttpStatusCode.BadRequest, "validation");
+        Assert.True(validation.GetProperty("errors").TryGetProperty("environment", out _));
+    }
 
     [Fact]
     public async Task A_user_creates_an_agent_the_agent_works_and_a_revoked_agent_still_has_its_name()

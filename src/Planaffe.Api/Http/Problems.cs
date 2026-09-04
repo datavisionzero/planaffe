@@ -27,7 +27,7 @@ public static class Problems
 
     public static int StatusOf(RefusalCode code) => code switch
     {
-        RefusalCode.Validation or RefusalCode.CursorInvalid => StatusCodes.Status400BadRequest,
+        RefusalCode.Validation or RefusalCode.UnknownField or RefusalCode.CursorInvalid => StatusCodes.Status400BadRequest,
         RefusalCode.Unauthenticated => StatusCodes.Status401Unauthorized,
         RefusalCode.Forbidden or RefusalCode.ReadyRequiresUser or RefusalCode.ClaimProtected =>
             StatusCodes.Status403Forbidden,
@@ -47,6 +47,7 @@ public static class Problems
     public static string TitleOf(RefusalCode code) => code switch
     {
         RefusalCode.Validation => "A field is missing, malformed or over its limit",
+        RefusalCode.UnknownField => "The request contains a field this object does not define",
         RefusalCode.CursorInvalid => "The cursor does not fit this request",
         RefusalCode.WaitTooLong => "The requested wait exceeds one hour",
         RefusalCode.Unauthenticated => "No token, an unknown token, or a revoked one",

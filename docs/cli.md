@@ -140,11 +140,13 @@ Identities (ADR 0015) — a secret is printed once, to stdout, and nowhere else:
 
 ```
 pa me                                      # who the token says you are
+pa me set --kind codex --harness cli --environment container --version 1.2.3
+                                           # agents report stable metadata; `none` clears a field
 pa version                                 # pa's version and the instance's; exit 9 when they do not fit
 pa user create NAME [--administrator]      # administrators only; the first user token, once
 pa user list
 pa agent create [--name NAME]              # users only; the agent's one token, once
-pa agent list · pa agent rename <id> --name NAME · pa agent revoke <id>
+pa agent list · pa agent view <id> · pa agent rename <id> --name NAME · pa agent revoke <id>
 pa token create · pa token list · pa token revoke <id>
 ```
 
