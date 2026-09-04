@@ -63,6 +63,7 @@ public static class IssueEndpoints
                 string? author,
                 bool? blocked,
                 bool? has_open_question,
+                string? q,
                 bool? deleted,
                 string? sort,
                 string? order,
@@ -78,7 +79,7 @@ public static class IssueEndpoints
                         priority_min,
                         priority_max,
                         [.. http.Query["label"].OfType<string>()],
-                        epic, assignee, claimed, author, blocked, has_open_question, deleted, sort, order, cursor, limit),
+                        epic, assignee, claimed, author, blocked, has_open_question, q, deleted, sort, order, cursor, limit),
                     cancellationToken))
             .WithName("ListIssues")
             .WithSummary("A page of slim issues, filtered and sorted; `status` and `label` repeat.")

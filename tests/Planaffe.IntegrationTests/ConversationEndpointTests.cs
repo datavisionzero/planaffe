@@ -139,6 +139,41 @@ public sealed class ConversationEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Full_text_search_finds_issue_text_comments_questions_and_answers_without_changing_order()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await Issues(admin,
+            new { title = "Parser", description = "Handles claim-expired identifiers" },
+            new { title = "Database", description = "Uses a transaction for update" },
+            new { title = "Unrelated", description = "Nothing useful here" });
+
+        await admin.PostAsJsonAsync("/issues/PLAN-1/comments", new { body = "A flaky regression" }, Ct);
+        using var asked = await admin.PostAsJsonAsync("/issues/PLAN-2/questions", new { question = "Which isolation level?" }, Ct);
+        var questionId = (await asked.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+        await admin.PostAsJsonAsync($"/questions/{questionId}/answer", new { answer = "Serializable mode" }, Ct);
+        await admin.PatchAsJsonAsync("/issues/PLAN-3", new { result = "The migration is complete" }, Ct);
+
+        static string[] Keys(JsonElement page) =>
+            [.. page.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()!)];
+
+        using var identifierResponse = await admin.GetAsync("/issues?q=claim-expired", Ct);
+        Assert.True(identifierResponse.IsSuccessStatusCode, string.Join("\n", instance.Errors));
+        Assert.Equal(["PLAN-1"], Keys(await identifierResponse.Content.ReadFromJsonAsync<JsonElement>(Ct)));
+        Assert.Equal(["PLAN-2"], Keys(await admin.GetFromJsonAsync<JsonElement>("/issues?q=%22for%20update%22", Ct)));
+        Assert.Equal(["PLAN-1"], Keys(await admin.GetFromJsonAsync<JsonElement>("/issues?q=flaky", Ct)));
+        Assert.Equal(["PLAN-2"], Keys(await admin.GetFromJsonAsync<JsonElement>("/issues?q=isolation", Ct)));
+        Assert.Equal(["PLAN-3"], Keys(await admin.GetFromJsonAsync<JsonElement>("/issues?q=migration", Ct)));
+        Assert.Equal(["PLAN-2", "PLAN-3"], Keys(await admin.GetFromJsonAsync<JsonElement>("/issues?sort=created&q=mode%20OR%20migration", Ct)));
+
+        var questions = await admin.GetFromJsonAsync<JsonElement>("/questions?project=PLAN&open=false&q=serializable", Ct);
+        Assert.Equal(["Which isolation level?"], questions.GetProperty("items").EnumerateArray().Select(q => q.GetProperty("question").GetString()));
+
+        var empty = await admin.GetFromJsonAsync<JsonElement>("/issues?q=%20%20", Ct);
+        Assert.Equal(3, empty.GetProperty("total").GetInt32());
+    }
+
+    [Fact]
     public async Task Reading_a_question_waits_for_its_answer_and_returns_open_at_the_deadline()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

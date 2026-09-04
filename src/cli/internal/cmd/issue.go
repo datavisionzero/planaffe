@@ -200,6 +200,7 @@ func newIssueList(g *globals) *cobra.Command {
 		order           string
 		cursor          string
 		limit           int
+		search          string
 	)
 
 	cmd := &cobra.Command{
@@ -214,7 +215,7 @@ func newIssueList(g *globals) *cobra.Command {
 
 			params := &api.ListIssuesParams{
 				Project: optional(cfg.Project), Epic: optional(epic), Assignee: optional(assignee),
-				Claimed: optional(claimed), Author: optional(author), Sort: optional(sort), Order: optional(order), Cursor: optional(cursor),
+				Claimed: optional(claimed), Author: optional(author), Q: optional(search), Sort: optional(sort), Order: optional(order), Cursor: optional(cursor),
 			}
 			if ready {
 				params.Ready = &ready
@@ -273,6 +274,7 @@ func newIssueList(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&blocked, "blocked", false, "only issues with an open blocker")
 	cmd.Flags().BoolVar(&hasOpenQuestion, "has-open-question", false, "only issues with an open question")
 	cmd.Flags().BoolVar(&deleted, "deleted", false, "only issues in their grace period — the one read that sees deleted rows")
+	cmd.Flags().StringVarP(&search, "query", "q", "", "full-text search in issue text, comments and questions")
 	cmd.Flags().StringVar(&sort, "sort", "", "updated, created or priority")
 	cmd.Flags().StringVar(&order, "order", "", "asc or desc")
 	cmd.Flags().StringVar(&cursor, "cursor", "", "the next page, as the previous one said")

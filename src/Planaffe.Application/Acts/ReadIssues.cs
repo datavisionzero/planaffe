@@ -26,6 +26,7 @@ public sealed record IssueListRequest(
     string? Author,
     bool? Blocked,
     bool? HasOpenQuestion,
+    string? Search,
     bool? Deleted,
     string? Sort,
     string? Order,
@@ -162,6 +163,7 @@ public sealed class ListIssues(
             authorId,
             request.Blocked,
             request.HasOpenQuestion,
+            Search(request.Search),
             request.Deleted ?? false);
     }
 
@@ -195,4 +197,7 @@ public sealed class ListIssues(
             : value is >= 0 and <= 4
                 ? (Priority)value
                 : throw Refusal.Validation(field, "Priority is 0 to 4.");
+
+    private static string? Search(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

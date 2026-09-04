@@ -404,6 +404,12 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
             rows = open ? rows.Where(r => r.Question.Answer == null) : rows.Where(r => r.Question.Answer != null);
         }
 
+        if (query.Search is { } search)
+        {
+            rows = rows.Where(r => EF.Property<NpgsqlTsVector>(r.Question, "Search")
+                .Matches(EF.Functions.WebSearchToTsQuery("simple", search)));
+        }
+
         var total = await rows.CountAsync(cancellationToken);
 
         rows = rows.OrderBy(r => r.Question.AskedAt).ThenBy(r => r.Question.Id);
@@ -577,6 +583,14 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
             rows = open
                 ? rows.Where(r => context.Questions.Any(q => q.IssueId == r.Id && q.Answer == null))
                 : rows.Where(r => !context.Questions.Any(q => q.IssueId == r.Id && q.Answer == null));
+        }
+
+        if (query.Search is { } search)
+        {
+            rows = rows.Where(r =>
+                context.Issues.Any(i => i.Id == r.Id && EF.Property<NpgsqlTsVector>(i, "Search").Matches(EF.Functions.WebSearchToTsQuery("simple", search)))
+                || context.Comments.Any(c => c.IssueId == r.Id && EF.Property<NpgsqlTsVector>(c, "Search").Matches(EF.Functions.WebSearchToTsQuery("simple", search)))
+                || context.Questions.Any(q => q.IssueId == r.Id && EF.Property<NpgsqlTsVector>(q, "Search").Matches(EF.Functions.WebSearchToTsQuery("simple", search))));
         }
 
         return rows;

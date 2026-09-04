@@ -27,6 +27,7 @@ func newQuestionList(g *globals) *cobra.Command {
 		issue    string
 		cursor   string
 		limit    int
+		search   string
 	)
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -37,7 +38,7 @@ func newQuestionList(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			params := &api.ListQuestionsParams{Project: optional(cfg.Project), Issue: optional(issue), Cursor: optional(cursor)}
+			params := &api.ListQuestionsParams{Project: optional(cfg.Project), Issue: optional(issue), Q: optional(search), Cursor: optional(cursor)}
 			open := true
 			switch {
 			case all:
@@ -79,6 +80,7 @@ func newQuestionList(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&answered, "answered", false, "the answered ones instead")
 	cmd.Flags().BoolVar(&all, "all", false, "open and answered alike")
 	cmd.Flags().StringVar(&issue, "issue", "", "only this issue's")
+	cmd.Flags().StringVarP(&search, "query", "q", "", "full-text search in questions and answers")
 	cmd.Flags().StringVar(&cursor, "cursor", "", "the next page, as the previous one said")
 	cmd.Flags().IntVar(&limit, "limit", 50, "1 to 200")
 	return cmd

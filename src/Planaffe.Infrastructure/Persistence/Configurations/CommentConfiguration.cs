@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using NpgsqlTypes;
 using Planaffe.Domain.Identities;
 using Planaffe.Domain.Issues;
 using Planaffe.Domain.Projects;
@@ -31,6 +32,10 @@ public sealed class CommentConfiguration : IEntityTypeConfiguration<Comment>
             .OnDelete(DeleteBehavior.NoAction);
 
         builder.Property(c => c.Body).HasColumnName("body").IsRequired();
+        builder.Property<NpgsqlTsVector>("Search")
+            .HasColumnName("search")
+            .HasComputedColumnSql("to_tsvector('simple', body)", stored: true);
+        builder.HasIndex("Search").HasMethod("GIN").HasDatabaseName("comment_search");
         builder.Property(c => c.CreatedAt).HasColumnName("created_at").IsRequired();
 
         builder.HasIndex(c => new { c.IssueId, c.CreatedAt }).HasDatabaseName("comment_issue");
@@ -80,6 +85,11 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
         builder.Property(q => q.AskedAt).HasColumnName("asked_at").IsRequired();
 
         builder.Property(q => q.Answer).HasColumnName("answer");
+
+        builder.Property<NpgsqlTsVector>("Search")
+            .HasColumnName("search")
+            .HasComputedColumnSql("to_tsvector('simple', question || ' ' || coalesce(answer, ''))", stored: true);
+        builder.HasIndex("Search").HasMethod("GIN").HasDatabaseName("question_search");
 
         builder.Property(q => q.AnsweredBy).HasColumnName("answered_by");
         builder.HasOne<Identity>()

@@ -44,8 +44,8 @@ public static class ConversationEndpoints
             .RequireAuthorization()
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
-        questions.MapGet(string.Empty, (string? project, bool? open, string? issue, string? cursor, int? limit, ListQuestions list, CancellationToken cancellationToken) =>
-                list.ExecuteAsync(new QuestionListRequest(project, open, issue, cursor, limit), cancellationToken))
+        questions.MapGet(string.Empty, (string? project, bool? open, string? issue, string? q, string? cursor, int? limit, ListQuestions list, CancellationToken cancellationToken) =>
+                list.ExecuteAsync(new QuestionListRequest(project, open, issue, q, cursor, limit), cancellationToken))
             .WithName("ListQuestions")
             .WithSummary("Questions across the project with their issue, oldest first; open ones by default.")
             .ProducesProblem(StatusCodes.Status400BadRequest)

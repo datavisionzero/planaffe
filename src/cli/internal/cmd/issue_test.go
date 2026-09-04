@@ -101,7 +101,7 @@ func TestIssueListSendsEveryFilterAndRepeatsStatusAndLabel(t *testing.T) {
 
 	code, _, errOut := run(t, server, repository(t, "project = PLAN\n"), "issue", "list",
 		"--status", "todo", "--status", "in_progress", "--label", "bug", "--label", "cut-1", "--ready", "--priority-min", "2",
-		"--epic", "none", "--assignee", "me", "--claimed", "false", "--author", "maintainer", "--blocked", "--deleted", "--sort", "priority", "--limit", "10")
+		"--epic", "none", "--assignee", "me", "--claimed", "false", "--author", "maintainer", "--blocked", "--deleted", "--query", "claim expired", "--sort", "priority", "--limit", "10")
 	if code != exit.OK || errOut != "" {
 		t.Fatalf("code %d, stderr %q", code, errOut)
 	}
@@ -113,7 +113,7 @@ func TestIssueListSendsEveryFilterAndRepeatsStatusAndLabel(t *testing.T) {
 	if got := q["label"]; len(got) != 2 {
 		t.Errorf("label = %v", got)
 	}
-	for key, want := range map[string]string{"project": "PLAN", "ready": "true", "priority_min": "2", "epic": "none", "assignee": "me", "claimed": "false", "author": "maintainer", "blocked": "true", "deleted": "true", "sort": "priority", "limit": "10"} {
+	for key, want := range map[string]string{"project": "PLAN", "ready": "true", "priority_min": "2", "epic": "none", "assignee": "me", "claimed": "false", "author": "maintainer", "blocked": "true", "deleted": "true", "q": "claim expired", "sort": "priority", "limit": "10"} {
 		if q.Get(key) != want {
 			t.Errorf("%s = %q, want %q", key, q.Get(key), want)
 		}

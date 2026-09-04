@@ -118,9 +118,9 @@ func TestQuestionListDefaultsToOpenAndTheProject(t *testing.T) {
 		t.Errorf("query %v", q)
 	}
 
-	_, _, _ = run(t, server, repository(t, "project = PLAN\n"), "question", "list", "--answered", "--issue", "PLAN-42")
+	_, _, _ = run(t, server, repository(t, "project = PLAN\n"), "question", "list", "--answered", "--issue", "PLAN-42", "-q", "serializable mode")
 	q = f.requests[1].URL.Query()
-	if q.Get("open") != "false" || q.Get("issue") != "PLAN-42" {
+	if q.Get("open") != "false" || q.Get("issue") != "PLAN-42" || q.Get("q") != "serializable mode" {
 		t.Errorf("query %v", q)
 	}
 	_, _, _ = run(t, server, repository(t, "project = PLAN\n"), "question", "list", "--all")

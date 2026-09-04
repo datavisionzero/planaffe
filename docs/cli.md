@@ -75,6 +75,7 @@ pa needs-you --limit 20 --json
 pa issue create "Title" --description-file - --priority 3 --ready --label feature --epic PLAN-E2 --blocked-by PLAN-40
 pa issue create --file batch.json          # several wired-up issues in one transaction (below)
 pa issue list --status todo --label bug --assignee me --sort priority
+pa issue list -q '"for update" -flaky' # full text: issue fields, comments and questions
 pa issue list --deleted                    # the grace period, the one read that sees deleted rows
 pa issue view PLAN-42 [--json]             # the complete issue, epic description and all
 pa issue edit PLAN-42 --title "…" --priority 2 --assignee none --label a --label b --if-match "<updated_at>"
@@ -109,7 +110,7 @@ pa issue park PLAN-42 · pa issue unpark PLAN-42
 pa issue comment PLAN-42 "…" | --file -    # whoever can go on comments
 pa issue ask PLAN-42 "…" | --file -        # whoever cannot go on asks; the claim stays
 pa issue ask PLAN-42 "…" --wait 600        # wait for the answer, at most for the rest of that claim
-pa question list [--answered | --all] [--issue PLAN-42]
+pa question list [--answered | --all] [--issue PLAN-42] [-q "serializable"]
 pa question answer <id> "…" | --file -
 ```
 

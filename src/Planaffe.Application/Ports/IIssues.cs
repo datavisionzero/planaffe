@@ -102,6 +102,7 @@ public sealed record IssueQuery(
     Guid? AuthorId,
     bool? Blocked,
     bool? HasOpenQuestion,
+    string? Search,
     bool Deleted);
 
 /// <summary>
@@ -263,7 +264,7 @@ public interface IIssues
 public sealed record QuestionRow(Question Question, string IssueKey, string IssueTitle);
 
 /// <param name="Open"><c>true</c>: unanswered only; <c>false</c>: answered only; <c>null</c>: both.</param>
-public sealed record QuestionQuery(Guid? ProjectId, bool? Open, Guid? IssueId);
+public sealed record QuestionQuery(Guid? ProjectId, bool? Open, Guid? IssueId, string? Search);
 
 /// <summary>Where a page of questions ended: asked when, and the id.</summary>
 public sealed record QuestionPosition(DateTimeOffset AskedAt, Guid Id);

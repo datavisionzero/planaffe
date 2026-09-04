@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using NpgsqlTypes;
 using Planaffe.Domain.Epics;
 using Planaffe.Domain.Identities;
 using Planaffe.Domain.Issues;
@@ -69,6 +70,11 @@ public sealed class IssueConfiguration : IEntityTypeConfiguration<Issue>
             .IsRequired();
 
         builder.Property(i => i.Result).HasColumnName("result");
+
+        builder.Property<NpgsqlTsVector>("Search")
+            .HasColumnName("search")
+            .HasComputedColumnSql("to_tsvector('simple', title || ' ' || description || ' ' || coalesce(result, ''))", stored: true);
+        builder.HasIndex("Search").HasMethod("GIN").HasDatabaseName("issue_search");
 
         // The sentinel says which value means "not set, take the default":
         // `todo`, the birth status. Without it EF Core would take the enum's

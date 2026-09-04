@@ -262,7 +262,7 @@ internal static class Waits
     }
 }
 
-public sealed record QuestionListRequest(string? Project, bool? Open, string? Issue, string? Cursor, int? Limit);
+public sealed record QuestionListRequest(string? Project, bool? Open, string? Issue, string? Search, string? Cursor, int? Limit);
 
 /// <summary>
 /// "Are there open questions?" as a list (VISION 7): across the project, oldest
@@ -280,7 +280,8 @@ public sealed class ListQuestions(IProjects projects, IIdentities identities, II
 
         Guid? projectId = request.Project is null ? null : (await projects.LiveAsync(request.Project, settings, cancellationToken)).Id;
         Guid? issueId = request.Issue is null ? null : (await issues.LiveAsync(request.Issue, settings, cancellationToken)).Id;
-        var query = new QuestionQuery(projectId, request.Open ?? true, issueId);
+        var query = new QuestionQuery(projectId, request.Open ?? true, issueId,
+            string.IsNullOrWhiteSpace(request.Search) ? null : request.Search.Trim());
 
         var after = request.Cursor is null ? null : Questions.Decode(request.Cursor, query);
         var page = await issues.ListQuestionsAsync(query, after, limit, cancellationToken);
