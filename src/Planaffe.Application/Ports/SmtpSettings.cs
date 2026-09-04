@@ -45,10 +45,27 @@ public sealed record SmtpSettings(
             throw new ArgumentException($"{HostVariable} is required when another SMTP variable is set.", HostVariable);
         }
 
+        Uri? baseUrl = null;
+        if (!string.IsNullOrWhiteSpace(publicUrl))
+        {
+            if (!Uri.TryCreate(publicUrl, UriKind.Absolute, out baseUrl)
+                || baseUrl.Scheme is not ("http" or "https")
+                || baseUrl.Query.Length > 0 || baseUrl.Fragment.Length > 0
+                || baseUrl.AbsolutePath != "/" || publicUrl.EndsWith('/'))
+            {
+                throw new ArgumentException($"{PublicUrlVariable} has to be an absolute http(s) origin without a trailing slash.", PublicUrlVariable);
+            }
+
+            if (!development && baseUrl.Scheme != "https")
+            {
+                throw new ArgumentException($"{PublicUrlVariable} has to use https outside Development.", PublicUrlVariable);
+            }
+        }
+
         if (!hasHost)
         {
             return new(null, 587, null, null, SmtpSecurity.StartTls, null,
-                string.IsNullOrWhiteSpace(fromName) ? "planaffe" : fromName.Trim(), null);
+                string.IsNullOrWhiteSpace(fromName) ? "planaffe" : fromName.Trim(), baseUrl);
         }
 
         var chosenPort = string.IsNullOrWhiteSpace(port) ? 587
@@ -78,17 +95,9 @@ public sealed record SmtpSettings(
             throw new ArgumentException($"{FromAddressVariable} has to be an email address.", FromAddressVariable);
         }
 
-        if (!Uri.TryCreate(publicUrl, UriKind.Absolute, out var baseUrl)
-            || baseUrl.Scheme is not ("http" or "https")
-            || baseUrl.Query.Length > 0 || baseUrl.Fragment.Length > 0
-            || baseUrl.AbsolutePath != "/" || publicUrl!.EndsWith('/'))
+        if (baseUrl is null)
         {
             throw new ArgumentException($"{PublicUrlVariable} has to be an absolute http(s) origin without a trailing slash.", PublicUrlVariable);
-        }
-
-        if (!development && baseUrl.Scheme != "https")
-        {
-            throw new ArgumentException($"{PublicUrlVariable} has to use https outside Development.", PublicUrlVariable);
         }
 
         return new(host!.Trim(), chosenPort, hasUsername ? username!.Trim() : null,

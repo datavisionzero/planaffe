@@ -15,6 +15,17 @@ public sealed class SmtpSettingsTests
     }
 
     [Fact]
+    public void Public_url_is_available_for_browser_security_without_smtp()
+    {
+        var settings = SmtpSettings.FromVariables(
+            null, null, null, null, null, null, null,
+            "https://plan.example.test", development: false);
+
+        Assert.False(settings.Configured);
+        Assert.Equal(new Uri("https://plan.example.test"), settings.PublicUrl);
+    }
+
+    [Fact]
     public void A_complete_development_configuration_is_normalized()
     {
         var settings = SmtpSettings.FromVariables(
