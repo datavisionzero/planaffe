@@ -20,6 +20,6 @@ export function Activate({ onActivated }: { onActivated: (me: Me) => void }) {
     <form onSubmit={submit} className="space-y-5">
       {!invitation && <Field label="Bootstrap token"><Input id="bootstrap token" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} /></Field>}
       <Field label="Password"><Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
-      {refusal && <p role="alert" className="text-destructive text-sm">{refusal}</p>}<Button className="w-full" disabled={password.length < 12 || (!invitation && !token)}>Continue</Button>
+      {refusal && <p role="alert" className="text-destructive text-sm">{refusal}</p>}<Button type="submit" className="w-full" disabled={password.length < 12 || (!invitation && !token)}>Continue</Button>
     </form></AuthFrame>;
 }
