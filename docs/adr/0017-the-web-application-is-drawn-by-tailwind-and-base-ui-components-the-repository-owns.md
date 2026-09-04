@@ -66,10 +66,20 @@ decision; the token set is the first ticket after this one.
 primitive sits behind a repository-owned component, which is the move shadcn
 itself made from Radix to Base UI; going the other way is the same work.
 
-**Three things are decided later, on purpose**: the exact token set, the icon
-library (both candidates are permissively licensed), and how code in Markdown
-is highlighted — `rehype-highlight` weighs more than the whole primitive layer
-and is lazy-loaded or replaced, not shipped whole.
+**Two things are decided later, on purpose**: the exact token set and the icon
+library (both candidates are permissively licensed).
+
+**Code in Markdown is not highlighted.** The third question this decision left
+open is settled here, at the cheap end. What is written into a planaffe
+description, result or comment is shell lines, issue keys, JSON fragments and a
+few lines lifted out of a file, in whatever languages the projects it tracks
+are written in — `rehype-highlight` carries highlight.js for that and weighs
+more than the whole primitive layer, and a small highlighter buys its size by
+knowing one language family well and every other one badly, which is worse than
+plain text on a tracker that is not about one language. A fenced block is
+monospace on its own ground with the word the fence named printed above it, and
+the mapping in `Markdown.tsx` is the single place a later decision would put a
+highlighter behind a dynamic import.
 
 **`react-markdown` needs a `urlTransform` of ours.** Its default admits `irc`,
 `ircs` and `xmpp` beside `http`, `https` and `mailto`;

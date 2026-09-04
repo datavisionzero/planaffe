@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,8 @@ const components: Components = {
   hr: ({ className, ...props }) => <hr className={cn("my-4", className)} {...props} />,
   code: ({ className, children, ...props }) => {
     // A fenced block arrives as `code` inside `pre` with a language class; an
-    // inline span arrives bare. Highlighting is decided later (ADR 0017).
+    // inline span arrives bare. Neither is highlighted: ADR 0017 settles that
+    // nothing tokenizes code here, and the fence's own word says the language.
     const fenced = /language-/.test(className ?? "");
 
     return (
@@ -57,9 +58,20 @@ const components: Components = {
       </code>
     );
   },
-  pre: ({ className, ...props }) => (
-    <pre className={cn("my-3 overflow-x-auto rounded-md border bg-muted p-3 text-xs leading-5", className)} {...props} />
-  ),
+  pre: ({ className, children, ...props }) => {
+    const language = languageOf(children);
+
+    return (
+      <div className="my-3 overflow-hidden rounded-md border bg-muted">
+        {language !== undefined && (
+          <div className="border-b px-3 py-1 font-mono text-[0.7rem] text-muted-foreground">{language}</div>
+        )}
+        <pre className={cn("overflow-x-auto p-3 text-xs leading-5", className)} {...props}>
+          {children}
+        </pre>
+      </div>
+    );
+  },
   table: ({ className, ...props }) => (
     <div className="my-3 overflow-x-auto">
       <table className={cn("w-full border-collapse text-sm", className)} {...props} />
@@ -74,6 +86,21 @@ const components: Components = {
       <input className={cn("mr-1.5 align-middle accent-brand", className)} {...props} disabled />
     ) : null,
 };
+
+/**
+ * The language a fence named, from the `language-…` class `react-markdown` puts
+ * on the `code` inside the `pre`. Nothing acts on it but the label: the block
+ * is not highlighted (ADR 0017).
+ */
+function languageOf(children: ReactNode): string | undefined {
+  const first = Children.toArray(children)[0];
+
+  if (!isValidElement<{ className?: string }>(first)) {
+    return undefined;
+  }
+
+  return /language-([\w+#-]+)/.exec(first.props.className ?? "")?.[1];
+}
 
 export function Markdown({ children, className }: { children: string; className?: string }) {
   return (

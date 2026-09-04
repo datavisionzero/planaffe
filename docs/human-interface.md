@@ -116,5 +116,8 @@ trigger, to what the screen offers next. The phone layout performs the same acti
 desktop layout.
 
 The shell renders before project data, navigation does not remount it, list rows
-are virtualized, and Markdown highlighting is lazy. Loading, empty, error and
-permission states are designed states rather than blank screens.
+are virtualized, and the Markdown pipeline arrives with the first screen that
+renders Markdown rather than with the frame. Fenced code is not highlighted; it
+carries the language its fence named ([ADR 0017](./adr/0017-the-web-application-is-drawn-by-tailwind-and-base-ui-components-the-repository-owns.md)).
+Loading, empty, error and permission states are designed states rather than
+blank screens.

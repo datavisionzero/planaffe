@@ -49,4 +49,20 @@ describe("the Markdown pipeline (ADR 0007)", () => {
     expect(container.querySelector("pre code")).toHaveTextContent("pa next --claim");
     expect(container.querySelectorAll("code")).toHaveLength(2);
   });
+
+  // ADR 0017: nothing tokenizes code here, so the word the fence named is what
+  // says what the block is.
+  it("names the language of a fenced block and highlights nothing", () => {
+    const { container } = render(<Markdown>{"```csharp\nvar x = 1;\n```"}</Markdown>);
+
+    expect(screen.getByText("csharp")).toBeInTheDocument();
+    expect(container.querySelectorAll("pre code span")).toHaveLength(0);
+  });
+
+  it("says nothing above a fence that named nothing", () => {
+    const { container } = render(<Markdown>{"```\nplain\n```"}</Markdown>);
+
+    expect(container.querySelector("pre")).toHaveTextContent("plain");
+    expect(container.querySelector("pre")?.previousElementSibling).toBeNull();
+  });
 });
