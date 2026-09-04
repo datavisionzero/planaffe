@@ -159,6 +159,40 @@ describe("the shell (ADR 0006)", () => {
     expect(await screen.findByRole("heading", { name: /PLAN-13/ })).toBeInTheDocument();
   });
 
+  // The shell is not remounted by navigation (ADR 0006), so the frame kept the
+  // list it had asked for once: on arrival at the project just created there
+  // was no current project, and every link in the frame was drawn disabled.
+  it("has the project a screen just created when it navigates there", async () => {
+    const created = { ...aProject, key: "NEW", name: "the new one" };
+    let made = false;
+    installInstance({
+      "GET /projects": () => (made ? [aProject, created] : [aProject]),
+      "POST /projects": () => { made = true; return { status: 201, body: created }; },
+      "GET /issues": { items: [], total: 0, has_more: false, next_cursor: null },
+      "GET /projects/NEW/labels": [],
+    });
+    renderAt(
+      "/projects/new",
+      <SessionProvider value={{ me: aUser, signOut: vi.fn() }}>
+        <Shell />
+      </SessionProvider>,
+    );
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByLabelText("Key"), "NEW");
+    await user.type(screen.getByLabelText("Name"), "the new one");
+    await user.click(screen.getByRole("button", { name: "Create project" }));
+
+    const navigation = await screen.findByRole("navigation");
+    await waitFor(() =>
+      expect(within(navigation).getByRole("link", { name: views[0].label })).toHaveAttribute(
+        "href",
+        `/NEW/${views[0].path}`,
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Switch project" })).toHaveTextContent("the new one");
+  });
+
   it("shows who is signed in, top right", async () => {
     shell("/PLAN/ready");
     const user = userEvent.setup();

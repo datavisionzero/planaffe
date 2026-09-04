@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api, type Project } from "@/api/client";
+import { ProjectsContext, type ProjectList } from "./context";
 
 /**
  * The projects the signed-in identity can see, asked once per load and
@@ -11,32 +12,51 @@ export type Projects =
   | { at: "failed" }
   | { at: "known"; projects: Project[] };
 
-export function useProjects(): Projects {
+export function useProjects(): ProjectList {
   const [projects, setProjects] = useState<Projects>({ at: "asking" });
+  const live = useRef(true);
+
+  const reload = useCallback(async () => {
+    try {
+      const { data } = await api.GET("/projects");
+
+      if (live.current) {
+        setProjects(data === undefined ? { at: "failed" } : { at: "known", projects: data });
+      }
+    } catch {
+      if (live.current) {
+        setProjects({ at: "failed" });
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    let current = true;
-
+    live.current = true;
     void (async () => {
-      try {
-        const { data } = await api.GET("/projects");
-
-        if (current) {
-          setProjects(data === undefined ? { at: "failed" } : { at: "known", projects: data });
-        }
-      } catch {
-        if (current) {
-          setProjects({ at: "failed" });
-        }
-      }
+      await reload();
     })();
 
     return () => {
-      current = false;
+      live.current = false;
     };
-  }, []);
+  }, [reload]);
 
-  return projects;
+  return { projects, reload };
+}
+
+/**
+ * The same list, for a screen under the shell. A screen that adds a project
+ * calls `reload` before it navigates there, or the frame keeps a list the new
+ * project is not in and every link in it goes dead.
+ */
+export function useProjectList(): ProjectList {
+  const list = useContext(ProjectsContext);
+
+  if (list === null) {
+    throw new Error("useProjectList is only for screens under the shell.");
+  }
+
+  return list;
 }
 
 /**

@@ -11,7 +11,8 @@ import { NewIssueView } from "@/issues/IssueEditor";
 import { LabelsView } from "@/projects/LabelsView";
 import { ProjectSwitcher } from "@/projects/ProjectSwitcher";
 import { NewProjectView } from "@/projects/NewProjectView";
-import { lastProject, rememberProject, useProjects } from "@/projects/useProjects";
+import { ProjectsContext } from "@/projects/context";
+import { lastProject, rememberProject, useProjects, type Projects } from "@/projects/useProjects";
 import { ReleasesView } from "@/releases/ReleasesView";
 import { SettingsView } from "@/settings/SettingsView";
 import { AdminView } from "@/settings/AdminView";
@@ -33,7 +34,8 @@ const IssueView = lazy(() => import("@/issues/IssueView").then((module) => ({ de
  */
 export function Shell() {
   const location = useLocation();
-  const projects = useProjects();
+  const list = useProjects();
+  const projects = list.projects;
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const match = matchPath("/:project/*", location.pathname);
@@ -66,6 +68,10 @@ export function Shell() {
   const known = projects.at === "known" ? projects.projects : [];
 
   return (
+    // The list and the way back to it (ADR 0006: the shell is not remounted by
+    // navigation): a screen that adds a project asks the frame to catch up
+    // rather than leaving it on a list the new project is not in.
+    <ProjectsContext.Provider value={list}>
     <SidebarProvider>
       <AppSidebar project={current} />
       <SidebarInset>
@@ -121,6 +127,7 @@ export function Shell() {
 
       <Palette open={paletteOpen} onOpenChange={setPaletteOpen} projects={known} current={current} />
     </SidebarProvider>
+    </ProjectsContext.Provider>
   );
 }
 
@@ -128,7 +135,7 @@ export function Shell() {
  * `/` is nowhere: it lands in the project the user was in last, or the first
  * one, in "Ready for agents" — the view the product is about.
  */
-function Landing({ projects }: { projects: ReturnType<typeof useProjects> }) {
+function Landing({ projects }: { projects: Projects }) {
   if (projects.at === "asking") {
     return null;
   }
