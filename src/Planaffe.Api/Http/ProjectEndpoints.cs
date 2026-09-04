@@ -82,6 +82,13 @@ public static class ProjectEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
+        door.MapGet("/{key}/needs-you", (string key, string? cursor, int? limit, NeedsYou needsYou, CancellationToken cancellationToken) =>
+                needsYou.ExecuteAsync(key, cursor, limit, cancellationToken))
+            .WithName("ListNeedsYou")
+            .WithSummary("What only a human can resolve: questions, review, unready under triage, then stuck blocker chains.")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         return endpoints;
     }
 }

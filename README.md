@@ -30,6 +30,8 @@ cut is the backend:
 - The CLI (`pa`) covers the whole of cut one — `next`, the issue verbs and the
   acts, questions, projects, labels, epics, identities — and the container image
   and the Compose file exist.
+- Cut two has started: sub-issues and the paginated `needs-you` list exist in
+  the API and the CLI, including the recursive blocker-chain rule.
 - The web application is a shell: navigation over the seven views, project
   switcher, account menu, command palette, one route per view with the filter
   in the URL, a drawer on a phone, and Markdown rendered in the browser. The

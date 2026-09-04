@@ -16,6 +16,13 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
 {
     private const int CycleDepth = 100;
 
+    private sealed class NeedsYouSelection
+    {
+        public Guid Id { get; init; }
+
+        public int Because { get; init; }
+    }
+
     public Task<IssueRow?> FindLiveAsync(string projectKey, int number, CancellationToken cancellationToken) =>
         Live().Where(r => r.ProjectKey == projectKey && r.Number == number).SingleOrDefaultAsync(cancellationToken);
 
@@ -167,6 +174,107 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
             rows.Count(r => r.Status == IssueStatus.Todo && r.AssigneeId != null && r.AssigneeId != query.CallerId),
             rows.Count(r => r.ParentGated));
     }
+
+    // The human's four groups. `walk` follows only open blocker edges and
+    // remembers its path: blocker cycles are refused on write, but the guard
+    // keeps old or manually changed data from making this read recurse forever.
+    // Until project assignment arrives in cut three every live agent can work
+    // in every project, so "a project without agents" is an instance with no
+    // unrevoked agent token. That one predicate becomes project-scoped later;
+    // the blocker traversal and the public shape do not change.
+    private const string NeedsYouBase = """
+        with recursive derived as (
+            select i.id, i.project_id, i.priority, i.created_at, i.number, i.ready,
+                   case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+                        then 'todo' else i.status end as status
+              from issue i
+             where i.deleted_at is null
+        ),
+        walk (root_id, node_id, path) as (
+            select blocked.id, blocker.id, array[blocked.id, blocker.id]
+              from derived blocked
+              join blocker edge on edge.blocked_id = blocked.id
+              join derived blocker on blocker.id = edge.blocker_id
+             where blocked.project_id = {0}
+               and blocked.status not in ('done', 'canceled')
+               and blocker.status not in ('done', 'canceled')
+            union all
+            select walk.root_id, blocker.id, walk.path || blocker.id
+              from walk
+              join blocker edge on edge.blocked_id = walk.node_id
+              join derived blocker on blocker.id = edge.blocker_id
+             where blocker.status not in ('done', 'canceled')
+               and cardinality(walk.path) <= {1}
+               and not blocker.id = any(walk.path)
+        ),
+        stuck as (
+            select distinct walk.root_id
+              from walk
+              join derived terminal on terminal.id = walk.node_id
+             where terminal.status = 'backlog'
+                or exists (select 1 from question q where q.issue_id = terminal.id and q.answer is null)
+                or not exists (select 1 from token t where t.kind = 'agent' and t.revoked_at is null)
+        ),
+        classified as (
+            select candidate.id,
+                   case
+                     when exists (select 1 from question q where q.issue_id = candidate.id and q.answer is null) then 0
+                     when candidate.status = 'review' then 1
+                     when {2} and candidate.status = 'todo' and not candidate.ready then 2
+                     when stuck.root_id is not null then 3
+                   end as because,
+                   candidate.priority, candidate.created_at, candidate.number
+              from derived candidate
+              left join stuck on stuck.root_id = candidate.id
+             where candidate.project_id = {0}
+               and candidate.status not in ('done', 'canceled')
+               and (exists (select 1 from question q where q.issue_id = candidate.id and q.answer is null)
+                    or candidate.status = 'review'
+                    or ({2} and candidate.status = 'todo' and not candidate.ready)
+                    or stuck.root_id is not null)
+        )
+        """;
+
+    public async Task<NeedsYouPageRows> NeedsYouAsync(
+        Guid projectId, bool triageRequired, NeedsYouPosition? after, int limit, CancellationToken cancellationToken)
+    {
+        var parameters = NeedsYouParameters(projectId, triageRequired, after, limit + 1);
+        var afterSql = after is null
+            ? string.Empty
+            : """
+               where because > {3}
+                  or (because = {3} and priority < {4})
+                  or (because = {3} and priority = {4} and created_at > {5})
+                  or (because = {3} and priority = {4} and created_at = {5} and number > {6})
+                  or (because = {3} and priority = {4} and created_at = {5} and number = {6} and id > {7})
+              """;
+
+        var pageSql = NeedsYouBase + "select id as \"Id\", because as \"Because\" from classified " + afterSql
+            + " order by because, priority desc, created_at, number, id limit {8}";
+        var countSql = NeedsYouBase + "select count(*)::int as \"Value\" from classified";
+        var selected = await context.Database.SqlQueryRaw<NeedsYouSelection>(pageSql, parameters)
+            .ToListAsync(cancellationToken);
+        var total = (await context.Database.SqlQueryRaw<int>(countSql, parameters)
+            .ToListAsync(cancellationToken))[0];
+        var hasMore = selected.Count > limit;
+        var page = hasMore ? selected[..limit] : selected;
+
+        return new NeedsYouPageRows(
+            [.. page.Select(row => new NeedsYouRow(row.Id, (NeedsYouBecause)row.Because))], total, hasMore);
+    }
+
+    private static object[] NeedsYouParameters(Guid projectId, bool triageRequired, NeedsYouPosition? after, int limit) =>
+    [
+        projectId,
+        CycleDepth,
+        triageRequired,
+        (int)(after?.Because ?? NeedsYouBecause.Question),
+        (short)(after?.Priority ?? Priority.None),
+        after?.CreatedAt ?? DateTimeOffset.UnixEpoch,
+        after?.Number ?? 0,
+        after?.Id ?? Guid.Empty,
+        limit,
+    ];
 
     private static object[] Parameters(NextQuery query, int limit) =>
     [

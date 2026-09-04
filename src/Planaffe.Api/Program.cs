@@ -84,6 +84,7 @@ builder.Services.AddScoped<IssueEdges>();
 builder.Services.AddScoped<ClaimIssue>();
 builder.Services.AddScoped<ReleaseIssue>();
 builder.Services.AddScoped<Next>();
+builder.Services.AddScoped<NeedsYou>();
 builder.Services.AddScoped<MoveIssue>();
 
 // What hangs on an issue beside its fields: comments, questions, the history.

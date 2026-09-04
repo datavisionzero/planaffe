@@ -114,6 +114,23 @@ public sealed record IssuePosition(DateTimeOffset? Time, Priority? Priority, int
 
 public sealed record IssuePageRows(IReadOnlyList<IssueRow> Items, int Total, bool HasMore);
 
+/// <summary>Why an issue is in the human's work list, in the order VISION 10 gives the groups.</summary>
+public enum NeedsYouBecause
+{
+    Question,
+    Review,
+    Unready,
+    Stuck,
+}
+
+/// <summary>Where a needs-you page ended: group first, then priority, age and identity.</summary>
+public sealed record NeedsYouPosition(NeedsYouBecause Because, Priority Priority, DateTimeOffset CreatedAt, int Number, Guid Id);
+
+/// <summary>An issue selected for needs-you, before its slim shape is assembled.</summary>
+public sealed record NeedsYouRow(Guid Id, NeedsYouBecause Because);
+
+public sealed record NeedsYouPageRows(IReadOnlyList<NeedsYouRow> Items, int Total, bool HasMore);
+
 /// <summary>
 /// What <c>next</c> asks for: the project, the caller the eight conditions are
 /// evaluated for, and the filters of <c>docs/api.md</c> with names already
@@ -169,6 +186,13 @@ public interface IIssues
     Task<IReadOnlyList<Guid>> NextWorkableAsync(NextQuery query, int limit, bool lockOne, CancellationToken cancellationToken);
 
     Task<int> CountWorkableAsync(NextQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// What only a human can resolve: questions, review, unready under triage,
+    /// and blocker chains that reach a dead end (VISION 10).
+    /// </summary>
+    Task<NeedsYouPageRows> NeedsYouAsync(
+        Guid projectId, bool triageRequired, NeedsYouPosition? after, int limit, CancellationToken cancellationToken);
 
     Task<Reasons> ReasonsAsync(NextQuery query, CancellationToken cancellationToken);
 

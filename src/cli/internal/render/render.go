@@ -150,6 +150,27 @@ func Questions(w io.Writer, items []api.ProjectQuestion) {
 	}
 }
 
+// NeedsYou prints the four groups in the order a human should clear them.
+func NeedsYou(w io.Writer, items []api.NeedsYouItem) {
+	headings := map[api.NeedsYouBecause]string{
+		api.NeedsYouBecauseQuestion: "Open questions",
+		api.NeedsYouBecauseReview:   "In review",
+		api.NeedsYouBecauseUnready:  "Not ready",
+		api.NeedsYouBecauseStuck:    "Stuck",
+	}
+	var previous api.NeedsYouBecause
+	for index, item := range items {
+		if index == 0 || item.Because != previous {
+			if index > 0 {
+				fmt.Fprintln(w)
+			}
+			fmt.Fprintf(w, "%s:\n", headings[item.Because])
+			previous = item.Because
+		}
+		Summaries(w, []api.IssueSummary{item.Issue})
+	}
+}
+
 // Project prints one project with its switches.
 func Project(w io.Writer, p api.Project) {
 	fmt.Fprintf(w, "%s  %s\n", p.Key, p.Name)

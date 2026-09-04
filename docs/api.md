@@ -524,12 +524,17 @@ view, not by the instance.
 |---|---|---|---|
 | `GET` | `/projects/{key}/needs-you` | any | what only a human can resolve, in this order: open questions, issues in `review`, then — only where triage is required — issues without `ready`, then stuck issues. A page of `{ issue: IssueSummary, because }` with `because` one of `question`, `review`, `unready`, `stuck` |
 
+Within each group, higher priority comes first and age breaks a tie. The page
+uses the ordinary `cursor` and `limit` query parameters.
+
 **Stuck** is the blocker-chain rule of VISION 10: a blocked issue is on the
 list only when a chain of open blockers from it ends in a dead end — an issue
 that is parked, or has an open question, or is in a project with no agent —
 because a blocker an agent will pull needs nobody and is noise here. The
 predicate is one recursive query over the open edges, evaluated in SQL beside
-`Workable`. The CLI: `pa needs-you`, which prints the four groups under their
+`Workable`. Until project assignment arrives in cut three, agents can work in
+every project, so the last condition means that the instance has no active
+agent token. The CLI: `pa needs-you`, which prints the four groups under their
 headings.
 
 ### Waiting

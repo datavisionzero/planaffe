@@ -1,0 +1,110 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Planaffe.Domain.Issues;
+
+namespace Planaffe.IntegrationTests;
+
+/// <summary>The human work list of VISION 10, including its recursive blocker rule.</summary>
+[Collection(nameof(PostgresCollection))]
+public sealed class NeedsYouEndpointTests(PostgresFixture postgres)
+{
+    private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task The_four_groups_are_ordered_deduplicated_and_paginated()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe", triage_required = true }, Ct);
+        await admin.PostAsJsonAsync("/agents", new { name = "worker" }, Ct);
+
+        using var created = await admin.PostAsJsonAsync("/issues", new
+        {
+            project = "PLAN",
+            issues = new object[]
+            {
+                new { title = "Question and review", priority = 0 },
+                new { title = "Review", priority = 4 },
+                new { title = "Unready", priority = 3 },
+                new { title = "Stuck through a chain", priority = 2, ready = true, blocked_by = new[] { "middle" } },
+                new { @ref = "parked", title = "Parked leaf", status = "backlog" },
+                new { title = "Blocked but an agent can resolve it", ready = true, blocked_by = new[] { "workable" } },
+                new { @ref = "workable", title = "Workable", ready = true },
+                new { @ref = "middle", title = "Middle", ready = true, blocked_by = new[] { "parked" } },
+            },
+        }, Ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        await using (var context = Migrated.ContextFor(instance.ConnectionString))
+        {
+            var user = await context.Users.SingleAsync(Ct);
+            var question = await context.Issues.SingleAsync(issue => issue.Number == 1, Ct);
+            context.Questions.Add(Question.Ask(question.Id, "Which way?", user.Id, Migrated.Now));
+            await context.Database.ExecuteSqlRawAsync("update issue set status = 'review' where number in (1, 2)", Ct);
+            await context.SaveChangesAsync(Ct);
+        }
+
+        var first = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/needs-you?limit=2", Ct);
+        Assert.Equal(5, first.GetProperty("total").GetInt32());
+        Assert.True(first.GetProperty("has_more").GetBoolean());
+        Assert.Equal(
+            [("PLAN-1", "question"), ("PLAN-2", "review")],
+            Entries(first));
+
+        var cursor = Uri.EscapeDataString(first.GetProperty("next_cursor").GetString()!);
+        var second = await admin.GetFromJsonAsync<JsonElement>($"/projects/PLAN/needs-you?limit=2&cursor={cursor}", Ct);
+        Assert.Equal([("PLAN-3", "unready"), ("PLAN-4", "stuck")], Entries(second));
+
+        cursor = Uri.EscapeDataString(second.GetProperty("next_cursor").GetString()!);
+        var third = await admin.GetFromJsonAsync<JsonElement>($"/projects/PLAN/needs-you?limit=2&cursor={cursor}", Ct);
+        Assert.Equal([("PLAN-8", "stuck")], Entries(third));
+        Assert.False(third.GetProperty("has_more").GetBoolean());
+
+        await ProjectEndpointTests.Problem(
+            await admin.GetAsync("/projects/PLAN/needs-you?cursor=not-a-cursor", Ct),
+            HttpStatusCode.BadRequest,
+            "cursor-invalid");
+
+        await ProjectEndpointTests.Problem(
+            await admin.GetAsync($"/projects/NOPE/needs-you?cursor={Uri.EscapeDataString(first.GetProperty("next_cursor").GetString()!)}", Ct),
+            HttpStatusCode.NotFound,
+            "not-found");
+    }
+
+    [Fact]
+    public async Task Unready_is_absent_without_triage_and_no_active_agent_makes_a_blocker_chain_stuck()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+        await admin.PostAsJsonAsync("/agents", new { name = "worker" }, Ct);
+        await admin.PostAsJsonAsync("/issues", new
+        {
+            project = "PLAN",
+            issues = new object[]
+            {
+                new { title = "Unready" },
+                new { title = "Blocked", blocked_by = new[] { "free" } },
+                new { @ref = "free", title = "Free", ready = true },
+            },
+        }, Ct);
+
+        var whileAgentExists = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/needs-you", Ct);
+        Assert.Empty(Entries(whileAgentExists));
+
+        await using (var context = Migrated.ContextFor(instance.ConnectionString))
+        {
+            await context.Database.ExecuteSqlRawAsync("update token set revoked_at = now() where kind = 'agent'", Ct);
+        }
+
+        var withoutAgent = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/needs-you", Ct);
+        Assert.Equal([("PLAN-2", "stuck")], Entries(withoutAgent));
+    }
+
+    private static (string Key, string Because)[] Entries(JsonElement page) =>
+        [.. page.GetProperty("items").EnumerateArray().Select(item => (
+            item.GetProperty("issue").GetProperty("key").GetString()!,
+            item.GetProperty("because").GetString()!))];
+}

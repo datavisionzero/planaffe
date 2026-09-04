@@ -1062,6 +1062,82 @@
         }
       }
     },
+    "/projects/{key}/needs-you": {
+      "get": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "What only a human can resolve: questions, review, unready under triage, then stuck blocker chains.",
+        "operationId": "ListNeedsYou",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedsYouPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{key}/labels": {
       "get": {
         "tags": [
@@ -4708,6 +4784,60 @@
           },
           "token": {
             "$ref": "#/components/schemas/TokenRef"
+          }
+        }
+      },
+      "NeedsYouBecause": {
+        "enum": [
+          "question",
+          "review",
+          "unready",
+          "stuck"
+        ],
+        "type": "string"
+      },
+      "NeedsYouItem": {
+        "required": [
+          "issue",
+          "because"
+        ],
+        "type": "object",
+        "properties": {
+          "issue": {
+            "$ref": "#/components/schemas/IssueSummary"
+          },
+          "because": {
+            "$ref": "#/components/schemas/NeedsYouBecause"
+          }
+        }
+      },
+      "NeedsYouPage": {
+        "required": [
+          "items",
+          "total",
+          "has_more",
+          "next_cursor"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NeedsYouItem"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

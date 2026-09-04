@@ -67,6 +67,8 @@ pa next --claim              # take the highest-ranked workable issue and claim 
 pa next --claim --ready      # only flagged issues, even where triage is not required
 pa next --claim --epic PLAN-E3 --label cut-1 --repo none
 pa next --json               # the page, with reasons
+pa needs-you                 # questions, review, unready under triage, then stuck blocker chains
+pa needs-you --limit 20 --json
 
 pa issue create "Title" --description-file - --priority 3 --ready --label feature --epic PLAN-E2 --blocked-by PLAN-40
 pa issue create --file batch.json          # several wired-up issues in one transaction (below)

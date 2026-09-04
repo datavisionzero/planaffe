@@ -1,0 +1,55 @@
+package cmd
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/datavisionzero/planaffe/src/cli/internal/exit"
+)
+
+func TestNeedsYouPrintsGroupsAndPages(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
+		if r.Method != http.MethodGet || r.URL.Path != "/projects/PLAN/needs-you" {
+			return 404, `{"type":"/problems/not-found","status":404}`
+		}
+		return 200, `{"items":[` +
+			`{"because":"question","issue":{"key":"PLAN-1","project":"PLAN","title":"Answer me","status":"todo","ready":true,"priority":4,"labels":[],"epic":null,"parent":null,"assignee":null,"claim":null,"blocked_by":[],"open_questions":1,"open_blockers":0,"open_sub_issues":0,"created_at":"2026-09-02T14:00:00Z","updated_at":"2026-09-02T14:00:00Z","closed_at":null,"deleted_at":null,"deleted_by":null}},` +
+			`{"because":"review","issue":{"key":"PLAN-2","project":"PLAN","title":"Check me","status":"review","ready":true,"priority":3,"labels":[],"epic":null,"parent":null,"assignee":null,"claim":null,"blocked_by":[],"open_questions":0,"open_blockers":0,"open_sub_issues":0,"created_at":"2026-09-02T14:00:00Z","updated_at":"2026-09-02T14:00:00Z","closed_at":null,"deleted_at":null,"deleted_by":null}}` +
+			`],"total":3,"has_more":true,"next_cursor":"next-page"}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, errOut := run(t, server, repository(t, "project = PLAN\n"), "needs-you", "--limit", "2", "--cursor", "previous")
+	if code != exit.OK {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+	if !strings.Contains(out, "Open questions:\nPLAN-1") || !strings.Contains(out, "In review:\nPLAN-2") {
+		t.Fatalf("unexpected output:\n%s", out)
+	}
+	if !strings.Contains(errOut, "2 of 3; next page: --cursor next-page") {
+		t.Fatalf("unexpected stderr %q", errOut)
+	}
+	query := f.requests[0].URL.Query()
+	if query.Get("limit") != "2" || query.Get("cursor") != "previous" {
+		t.Fatalf("unexpected query %s", f.requests[0].URL.RawQuery)
+	}
+	if f.requests[0].Header.Get("Idempotency-Key") != "" {
+		t.Fatal("a read carries no idempotency key")
+	}
+}
+
+func TestNeedsYouJSONKeepsThePageShape(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) {
+		return 200, `{"items":[],"total":0,"has_more":false,"next_cursor":null}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, errOut := run(t, server, repository(t, "project = PLAN\n"), "needs-you", "--json")
+	if code != exit.OK || errOut != "" || !strings.Contains(out, `"items": []`) || !strings.Contains(out, `"total": 0`) {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errOut)
+	}
+}
