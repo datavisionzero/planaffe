@@ -18,6 +18,14 @@ describe("password sign in", () => {
     expect(calls[0].headers.get("X-Planaffe-CSRF")).toBe("1");
   });
 
+  // Recover and Activate open with an `<h1>`; sign-in was the odd one out.
+  it("opens with a heading, like the other screens in the same frame", () => {
+    installInstance({});
+    renderAt("/login", <SignIn onSignedIn={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument();
+  });
+
   it("shows the indistinguishable refusal", async () => {
     installInstance({ "POST /session": { status: 401, body: { detail: "The email or password is not correct." } } });
     renderAt("/login", <SignIn onSignedIn={vi.fn()} />); const user = userEvent.setup();

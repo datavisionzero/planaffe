@@ -21,7 +21,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
     finally { setAsking(false); }
   }
 
-  return <AuthFrame><form onSubmit={submit} className="space-y-5">
+  return <AuthFrame><h1 className="text-xl font-semibold">Sign in</h1>
+  <form onSubmit={submit} className="space-y-5">
     <Field label="Email"><Input id="email" type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
     <Field label="Password"><Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
     {refusal && <p role="alert" className="text-destructive text-sm">{refusal}</p>}

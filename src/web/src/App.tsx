@@ -72,7 +72,19 @@ export function App() {
 
   switch (standing.at) {
     case "asking":
-      return null;
+      // Not a blank page: the frame of the sign-in screen is already the
+      // truth, and only the sentence under it is waiting.
+      return (
+        <main aria-busy className="flex min-h-svh flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="flex items-center gap-2 text-base font-semibold">
+            <span aria-hidden className="size-4.5 animate-pulse rounded-sm bg-brand" />
+            planaffe
+          </div>
+          <p role="status" className="text-sm text-muted-foreground">
+            Checking your session…
+          </p>
+        </main>
+      );
 
     case "unreachable":
       return (

@@ -107,11 +107,12 @@ export function Shell() {
           <SidebarTrigger className="md:hidden" />
           <Separator orientation="vertical" className="mr-1 h-4! md:hidden" />
           <ProjectSwitcher
-            projects={known}
+            projects={projects}
             current={current}
             viewPath={viewPath.split("/")[0] || "ready"}
             open={switcherOpen}
             onOpenChange={setSwitcherOpen}
+            reload={list.reload}
           />
           <div className="flex-1" />
           <Button
@@ -150,12 +151,12 @@ export function Shell() {
               ))}
             <Route path="needs-you" element={<NeedsYouView />} />
             <Route path="issues/new" element={<NewIssueView />} />
-            <Route path="issues/:number" element={<Suspense fallback={null}><IssueView /></Suspense>} />
+            <Route path="issues/:number" element={<Suspense fallback={<Busy title="Loading the screen…" />}><IssueView /></Suspense>} />
             <Route path="epics" element={<EpicsView />} />
-            <Route path="epics/new" element={<Suspense fallback={null}><NewEpicView /></Suspense>} />
-            <Route path="epics/:number" element={<Suspense fallback={null}><EpicView /></Suspense>} />
+            <Route path="epics/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewEpicView /></Suspense>} />
+            <Route path="epics/:number" element={<Suspense fallback={<Busy title="Loading the screen…" />}><EpicView /></Suspense>} />
             <Route path="releases" element={<ReleasesView />} />
-            <Route path="releases/:name" element={<Suspense fallback={null}><ReleaseView /></Suspense>} />
+            <Route path="releases/:name" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ReleaseView /></Suspense>} />
             <Route path="labels" element={<LabelsView />} />
             <Route path="settings" element={<ProjectSettingsView />} />
           </Route>
@@ -174,7 +175,7 @@ export function Shell() {
  */
 function Landing({ projects }: { projects: Projects }) {
   if (projects.at === "asking") {
-    return null;
+    return <Busy title="Looking for your projects…" />;
   }
 
   if (projects.at === "failed") {
@@ -193,6 +194,22 @@ function Landing({ projects }: { projects: Projects }) {
   }
 
   return <Navigate to={`/${target.key}/ready`} replace />;
+}
+
+/**
+ * What the frame shows while a screen or the list behind it is still on its
+ * way. Never a blank page, which `docs/human-interface.md` asks for, and never
+ * silent to a screen reader.
+ */
+export function Busy({ title }: { title: string }) {
+  return (
+    <div aria-busy className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+      <span aria-hidden className="size-4.5 animate-pulse rounded-sm bg-brand" />
+      <p role="status" className="text-sm text-muted-foreground">
+        {title}
+      </p>
+    </div>
+  );
 }
 
 export function Empty({ title, children }: { title: string; children?: React.ReactNode }) {

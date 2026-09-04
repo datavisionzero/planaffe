@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
-import { rememberProject } from "./useProjects";
+import { rememberProject, type Projects } from "./useProjects";
 
 /**
  * The project switcher of the header (ADR 0006). Switching keeps the view:
@@ -21,6 +21,10 @@ import { rememberProject } from "./useProjects";
  *
  * The shell owns whether it is open, because `p` opens it from anywhere; the
  * menu closes itself the way every menu does.
+ *
+ * It is handed the list as it stands rather than the projects in it: a list
+ * that could not be loaded is not a list of none, and saying "No project yet."
+ * to somebody whose instance did not answer is the wrong sentence.
  */
 export function ProjectSwitcher({
   projects,
@@ -28,14 +32,17 @@ export function ProjectSwitcher({
   viewPath,
   open,
   onOpenChange,
+  reload,
 }: {
-  projects: Project[];
+  projects: Projects;
   current: Project | undefined;
   viewPath: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  reload: () => Promise<void>;
 }) {
   const navigate = useNavigate();
+  const known = projects.at === "known" ? projects.projects : [];
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
@@ -47,7 +54,7 @@ export function ProjectSwitcher({
         <span className="font-mono text-xs font-medium tracking-wide text-brand">
           {current?.key ?? "—"}
         </span>
-        <span className="hidden sm:inline">{current?.name ?? "No project"}</span>
+        <span className="hidden sm:inline">{current?.name ?? standing[projects.at]}</span>
         <ChevronsUpDownIcon className="size-3.5 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56">
@@ -58,7 +65,7 @@ export function ProjectSwitcher({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        {projects.map((project) => (
+        {known.map((project) => (
           <DropdownMenuItem
             key={project.key}
             onClick={() => {
@@ -71,7 +78,24 @@ export function ProjectSwitcher({
             {project.key === current?.key && <CheckIcon className="size-3.5" />}
           </DropdownMenuItem>
         ))}
-        {projects.length === 0 && (
+        {projects.at === "asking" && (
+          <div role="status" className="px-2 py-1.5 text-xs text-muted-foreground">
+            Loading the projects…
+          </div>
+        )}
+        {projects.at === "failed" && (
+          <div className="space-y-1 px-2 py-1.5 text-xs">
+            <p className="text-destructive">The projects could not be loaded.</p>
+            <button
+              type="button"
+              className="text-brand underline-offset-4 hover:underline"
+              onClick={() => void reload()}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+        {projects.at === "known" && known.length === 0 && (
           <div className="px-2 py-1.5 text-xs text-muted-foreground">
             No project yet.
           </div>
@@ -85,3 +109,10 @@ export function ProjectSwitcher({
     </DropdownMenu>
   );
 }
+
+/** What the trigger says when there is no current project to name. */
+const standing: Record<Projects["at"], string> = {
+  asking: "Loading…",
+  failed: "Projects unavailable",
+  known: "No project",
+};

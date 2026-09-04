@@ -129,6 +129,33 @@ describe("the shell (ADR 0006)", () => {
     expect(window.localStorage.getItem("planaffe.project")).toBe("LOG");
   });
 
+  // The frame used to flatten a failed list into an empty one, so the switcher
+  // claimed there were no projects and the sidebar simply went dead.
+  it("says the project list failed rather than that there are none", async () => {
+    let answers = 0;
+    installInstance({
+      "GET /projects": () => (answers++ === 0 ? { status: 503, body: { detail: "no" } } : [aProject]),
+      "GET /issues": { items: [], total: 0, has_more: false, next_cursor: null },
+      "GET /projects/PLAN/labels": [],
+    });
+    renderAt(
+      "/PLAN/ready",
+      <SessionProvider value={{ me: aUser, signOut: vi.fn() }}>
+        <Shell />
+      </SessionProvider>,
+    );
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Switch project" }));
+
+    expect(await screen.findByText("The projects could not be loaded.")).toBeInTheDocument();
+    expect(screen.queryByText("No project yet.")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("menuitem", { name: /planaffe/ })).toBeInTheDocument();
+  });
+
   it("offers project creation from the project switcher", async () => {
     shell("/PLAN/ready");
     const user = userEvent.setup();
