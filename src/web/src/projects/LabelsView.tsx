@@ -20,9 +20,9 @@ export function LabelsView() {
   }
 
   async function create(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const data = new FormData(event.currentTarget);
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
     const result = await api.POST("/projects/{key}/labels", { params: { path: { key: project! } }, body: { name: String(data.get("name")), group: String(data.get("group")) || null, description: String(data.get("description")) || null } });
-    if (result.data) { event.currentTarget.reset(); await reload(); }
+    if (result.data) { form.reset(); await reload(); }
   }
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function LabelsView() {
             <Input name="name" placeholder="Label" aria-label="Label name" required />
             <Input name="group" placeholder="Optional group" aria-label="Label group" />
             <Input name="description" placeholder="What this label means" aria-label="Label description" />
-            <Button>Create</Button>
+            <Button type="submit">Create</Button>
           </form>
           {groups.map((group) => (
             <section key={group}>
