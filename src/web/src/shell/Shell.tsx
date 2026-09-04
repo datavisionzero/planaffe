@@ -23,8 +23,9 @@ import { Palette } from "./Palette";
 import { views } from "./views";
 
 // The Markdown pipeline of ADR 0007 weighs more than the shell; it arrives
-// with the first issue opened, not with the frame.
+// with the first issue or release opened, not with the frame.
 const IssueView = lazy(() => import("@/issues/IssueView").then((module) => ({ default: module.IssueView })));
+const ReleaseView = lazy(() => import("@/releases/ReleaseView").then((module) => ({ default: module.ReleaseView })));
 
 /**
  * The application shell of ADR 0006: the frame every screen sits in, rendered
@@ -119,6 +120,7 @@ export function Shell() {
             <Route path="epics" element={<EpicsView />} />
             <Route path="epics/:number" element={<EpicsView />} />
             <Route path="releases" element={<ReleasesView />} />
+            <Route path="releases/:name" element={<Suspense fallback={null}><ReleaseView /></Suspense>} />
             <Route path="labels" element={<LabelsView />} />
             <Route path="settings" element={<ProjectSettingsView />} />
           </Route>

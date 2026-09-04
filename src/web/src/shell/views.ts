@@ -124,6 +124,16 @@ export function keyPath(key: string): string {
   return number.startsWith("E") ? `/${project}/epics/${number}` : `/${project}/issues/${number}`;
 }
 
+/**
+ * The address of a release. A release is named by whoever published it — a
+ * version string rather than a key — so the name is escaped into the path, and
+ * the open release is reached under the reserved name the instance gives it,
+ * `unreleased`.
+ */
+export function releasePath(project: string, name: string): string {
+  return `/${project}/releases/${encodeURIComponent(name)}`;
+}
+
 /** The key a `/:project/issues/:number` address names — the way back from `keyPath`. */
 export function pathKey(project: string, number: string): string {
   return `${project.toUpperCase()}-${number.toUpperCase()}`;

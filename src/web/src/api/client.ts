@@ -29,6 +29,8 @@ export type IssueSummary = Schemas["IssueSummary"];
 export type Issue = Schemas["Issue"];
 export type HistoryEntry = Schemas["HistoryEntry"];
 export type EpicSummary = Schemas["EpicSummary"];
+export type ReleaseSummary = Schemas["ReleaseSummary"];
+export type Release = Schemas["Release"];
 export type Problem = Schemas["ProblemDetails"];
 
 /**

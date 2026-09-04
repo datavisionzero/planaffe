@@ -11,15 +11,3 @@ export function PageHeader({ title, meta, children }: { title: ReactNode; meta?:
   );
 }
 
-/** A screen whose ticket has not arrived yet says so, rather than pretending. */
-export function ArrivesLater({ title, hint, cut }: { title: string; hint: string; cut: string }) {
-  return (
-    <>
-      <PageHeader title={title} />
-      <div className="flex flex-1 flex-col items-center justify-center gap-1 p-8 text-center">
-        <p className="text-sm">{hint}</p>
-        <p className="text-xs text-muted-foreground">This view arrives with {cut}.</p>
-      </div>
-    </>
-  );
-}
