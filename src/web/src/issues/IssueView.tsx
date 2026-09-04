@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/shared/Markdown";
+import { ActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
 import { priorityLabel } from "./priority";
 import { StatusDot } from "./status";
@@ -92,7 +93,7 @@ function Actions({ issue, onChanged, onDeleted }: { issue: Issue; onChanged: (is
     <TextAction label="Add comment" placeholder="Write a comment in Markdown…" multiline onRun={async (body) => { const result = await api.POST("/issues/{key}/comments", { params: { path: { key: issue.key } }, body: { body } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, comments: [...issue.comments, result.data] }; }} onChanged={onChanged} />
     <TextAction label="Ask question" placeholder="What do you need to know?" multiline onRun={async (question) => { const result = await api.POST("/issues/{key}/questions", { params: { path: { key: issue.key } }, body: { question } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, questions: [...issue.questions, result.data], open_questions: issue.open_questions + 1 }; }} onChanged={onChanged} />
     <EdgeAction issue={issue} onChanged={onChanged} />
-    <div><Button variant="destructive" onClick={async () => { if (!window.confirm(`Delete ${issue.key}? It can be restored during the grace period.`)) return; const result = await api.DELETE("/issues/{key}", { params: { path: { key: issue.key } } }); if (result.response.ok) onDeleted(); }}>Delete issue</Button></div>
+    <div><ActionDialog trigger={<Button variant="destructive">Delete issue</Button>} title={`Delete ${issue.key}?`} description="The issue will be hidden from the project, but can be restored during the grace period." confirmLabel="Delete issue" onConfirm={async () => { const result = await api.DELETE("/issues/{key}", { params: { path: { key: issue.key } } }); if (!result.response.ok) throw new Error(describe(result.error, result.response.status)); onDeleted(); }} /></div>
   </div></Section>;
 }
 

@@ -3,6 +3,7 @@ import { useParams } from "react-router";
 import { api, describe, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ActionDialog, TextActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
 
 type Label = Schemas["Label"];
@@ -83,8 +84,31 @@ export function LabelsView() {
                     <li key={label.name} className="flex min-h-9 items-center gap-3 px-3 py-1">
                       <span className="font-mono text-xs">{label.name}</span>
                       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{label.description}</span>
-                      <Button variant="ghost" size="sm" onClick={() => { const description = window.prompt("Description", label.description ?? ""); if (description !== null) void api.PATCH("/projects/{key}/labels/{name}", { params: { path: { key: project!, name: label.name } }, body: { name: null, group: label.group, description } }).then(reload); }}>Edit</Button>
-                      <Button variant="ghost" size="sm" onClick={() => { if (window.confirm(`Delete label ${label.name}?`)) void api.DELETE("/projects/{key}/labels/{name}", { params: { path: { key: project!, name: label.name } } }).then(reload); }}>Delete</Button>
+                      <TextActionDialog
+                        trigger={<Button variant="ghost" size="sm">Edit</Button>}
+                        title={`Edit ${label.name}`}
+                        description="Change the one-line description shown wherever this label appears."
+                        label="Description"
+                        initialValue={label.description ?? ""}
+                        required={false}
+                        submitLabel="Save label"
+                        onSubmit={async (description) => {
+                          const result = await api.PATCH("/projects/{key}/labels/{name}", { params: { path: { key: project!, name: label.name } }, body: { name: null, group: label.group, description } });
+                          if (!result.data) throw new Error(describe(result.error, result.response.status));
+                          await reload();
+                        }}
+                      />
+                      <ActionDialog
+                        trigger={<Button variant="ghost" size="sm">Delete</Button>}
+                        title={`Delete ${label.name}?`}
+                        description="The label will disappear from the project, but can be restored during the instance grace period."
+                        confirmLabel="Delete label"
+                        onConfirm={async () => {
+                          const result = await api.DELETE("/projects/{key}/labels/{name}", { params: { path: { key: project!, name: label.name } } });
+                          if (!result.response.ok) throw new Error(describe(result.error, result.response.status));
+                          await reload();
+                        }}
+                      />
                     </li>
                   ))}
               </ul>

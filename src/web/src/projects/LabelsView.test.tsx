@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
@@ -28,4 +28,44 @@ it("creates a label from the form", async () => {
   const request = instance.calls.find((call) => call.method === "POST")!;
   expect(await request.json()).toEqual({ name: "web", group: "area", description: "Browser application" });
   expect(screen.getByLabelText("Label name")).toHaveValue("");
+});
+
+it("edits a label through an in-page dialog", async () => {
+  const label = { name: "web", group: "area", description: "Browser application" };
+  const instance = installInstance({
+    "GET /projects/PLAN/labels": [label],
+    "PATCH /projects/PLAN/labels/web": { body: { ...label, description: "Web application" } },
+  });
+  renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
+  const user = userEvent.setup();
+
+  const row = (await screen.findByText("web")).closest("li")!;
+  await user.click(within(row).getByRole("button", { name: "Edit" }));
+  const dialog = screen.getByRole("dialog", { name: "Edit web" });
+  await user.clear(within(dialog).getByLabelText("Description"));
+  await user.type(within(dialog).getByLabelText("Description"), "Web application");
+  await user.click(within(dialog).getByRole("button", { name: "Save label" }));
+
+  expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "PATCH"))).toBe(true);
+  const request = instance.calls.find((call) => call.method === "PATCH")!;
+  expect(await request.json()).toEqual({ name: null, group: "area", description: "Web application" });
+});
+
+it("requires in-page confirmation before deleting a label", async () => {
+  const label = { name: "web", group: "area", description: "Browser application" };
+  const instance = installInstance({
+    "GET /projects/PLAN/labels": [label],
+    "DELETE /projects/PLAN/labels/web": { status: 204 },
+  });
+  renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
+  const user = userEvent.setup();
+
+  const row = (await screen.findByText("web")).closest("li")!;
+  await user.click(within(row).getByRole("button", { name: "Delete" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Delete web?" })).getByRole("button", { name: "Cancel" }));
+  expect(instance.calls.some((call) => call.method === "DELETE")).toBe(false);
+
+  await user.click(within(row).getByRole("button", { name: "Delete" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Delete web?" })).getByRole("button", { name: "Delete label" }));
+  expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "DELETE"))).toBe(true);
 });
