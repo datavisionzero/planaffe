@@ -37,6 +37,21 @@ public static class ProjectLookup
                 new Dictionary<string, object?> { ["restorable_until"] = project.DeletedAt.Value + settings.DeletionGrace })
             : project;
     }
+
+    /// <summary>The same live lookup as <see cref="LiveAsync"/>, as a fresh read for a long poll.</summary>
+    public static async Task<Project> LiveForReadAsync(
+        this IProjects projects, string key, InstanceSettings settings, CancellationToken cancellationToken)
+    {
+        var project = await projects.FindByKeyForReadAsync(key.Trim().ToUpperInvariant(), cancellationToken)
+            ?? throw new Refusal(RefusalCode.NotFound, $"No project {key}.");
+
+        return project.Deleted
+            ? throw new Refusal(
+                RefusalCode.Deleted,
+                $"Project {project.Key} is deleted and can be restored until at least {project.DeletedAt!.Value + settings.DeletionGrace:u}.",
+                new Dictionary<string, object?> { ["restorable_until"] = project.DeletedAt.Value + settings.DeletionGrace })
+            : project;
+    }
 }
 
 /// <summary>

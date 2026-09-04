@@ -91,6 +91,7 @@ builder.Services.AddScoped<MoveIssue>();
 builder.Services.AddScoped<CommentOnIssue>();
 builder.Services.AddScoped<AskQuestion>();
 builder.Services.AddScoped<AnswerQuestion>();
+builder.Services.AddScoped<ReadQuestion>();
 builder.Services.AddScoped<ListQuestions>();
 builder.Services.AddScoped<ReadHistory>();
 

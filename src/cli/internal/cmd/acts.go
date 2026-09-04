@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -265,17 +267,28 @@ func newIssueComment(g *globals) *cobra.Command {
 }
 
 func newIssueAsk(g *globals) *cobra.Command {
-	var file string
+	var (
+		file string
+		wait int
+	)
 	cmd := &cobra.Command{
 		Use:   "ask KEY [QUESTION]",
 		Short: "Ask: whoever cannot go on says on what. Does not release the claim.",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			waiting := cmd.Flags().Changed("wait")
+			if waiting && wait <= 0 {
+				return &config.UsageError{Message: "--wait must be a positive number of seconds"}
+			}
 			text, err := textArg(cmd, args, file, "a question")
 			if err != nil {
 				return err
 			}
-			_, c, err := g.load()
+			round := wait
+			if round > maximumServerWait {
+				round = maximumServerWait
+			}
+			_, c, err := g.loadForWait(round)
 			if err != nil {
 				return err
 			}
@@ -286,14 +299,57 @@ func newIssueAsk(g *globals) *cobra.Command {
 			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
-			if g.json {
-				return renderJSON(cmd, resp.JSON201)
+			question := resp.JSON201
+			if waiting {
+				remaining := wait
+				issue, err := c.ReadIssueWithResponse(cmd.Context(), args[0])
+				if err != nil {
+					return client.Transport(err)
+				}
+				if err := client.Check(issue.HTTPResponse, issue.Body); err != nil {
+					return err
+				}
+				if issue.JSON200.Claim != nil && issue.JSON200.Claim.Holder.Id == question.AskedBy.Id && issue.JSON200.Claim.ExpiresAt != nil {
+					claimSeconds := int(math.Ceil(time.Until(*issue.JSON200.Claim.ExpiresAt).Seconds()))
+					if claimSeconds < remaining {
+						remaining = claimSeconds
+					}
+				}
+
+				for remaining > 0 && question.Answer == nil {
+					seconds := remaining
+					if seconds > maximumServerWait {
+						seconds = maximumServerWait
+					}
+					value := int32(seconds)
+					read, err := c.ReadQuestionWithResponse(cmd.Context(), question.Id, &api.ReadQuestionParams{Wait: &value})
+					if err != nil {
+						return client.Transport(err)
+					}
+					if err := client.Check(read.HTTPResponse, read.Body); err != nil {
+						return err
+					}
+					question = read.JSON200
+					remaining -= seconds
+				}
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "asked on %s: %s\nanswer with: pa question answer %s \"…\"\n", strings.ToUpper(args[0]), resp.JSON201.Question, resp.JSON201.Id)
+			if g.json {
+				if err := renderJSON(cmd, question); err != nil {
+					return err
+				}
+			} else if question.Answer != nil {
+				fmt.Fprintf(cmd.OutOrStdout(), "answered on %s: %s\n", strings.ToUpper(args[0]), *question.Answer)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "asked on %s: %s\nanswer with: pa question answer %s \"…\"\n", strings.ToUpper(args[0]), question.Question, question.Id)
+			}
+			if waiting && question.Answer == nil {
+				return emptyResult{}
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&file, "file", "", "the question as Markdown, from a file or `-` for stdin")
+	cmd.Flags().IntVar(&wait, "wait", 0, "wait this many seconds for the answer, at most until the caller's claim expires")
 	return cmd
 }
 

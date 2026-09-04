@@ -55,7 +55,7 @@ The table of `docs/api.md`, derived from the status and the problem document:
 | 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch` |
 | 6 | stale |
 | 7 | denied: 401, 403 |
-| 8 | empty: `next` found nothing; the reasons are the output |
+| 8 | empty: `next` found nothing, or another waiting command reached its deadline |
 | 9 | version skew |
 | 10 | unreachable |
 
@@ -69,6 +69,7 @@ pa next --claim --ready      # only flagged issues, even where triage is not req
 pa next --claim --epic PLAN-E3 --label cut-1 --repo none
 pa next --json               # the page, with reasons
 pa needs-you                 # questions, review, unready under triage, then stuck blocker chains
+pa needs-you --wait 3600     # wait until the list gains an entry; exit 8 at the deadline
 pa needs-you --limit 20 --json
 
 pa issue create "Title" --description-file - --priority 3 --ready --label feature --epic PLAN-E2 --blocked-by PLAN-40
@@ -107,6 +108,7 @@ pa issue reopen PLAN-42 --comment "…"      # back to todo; from review, a miss
 pa issue park PLAN-42 · pa issue unpark PLAN-42
 pa issue comment PLAN-42 "…" | --file -    # whoever can go on comments
 pa issue ask PLAN-42 "…" | --file -        # whoever cannot go on asks; the claim stays
+pa issue ask PLAN-42 "…" --wait 600        # wait for the answer, at most for the rest of that claim
 pa question list [--answered | --all] [--issue PLAN-42]
 pa question answer <id> "…" | --file -
 ```
@@ -143,10 +145,11 @@ pa token create · pa token list · pa token revoke <id>
 Descriptions, results, comments, questions and answers come from an argument, a
 file or stdin (`-`), never an editor. The whole agent cycle of VISION 6.1 is
 `pa next --claim`, work, `pa issue comment`, `pa issue ask`, and `pa issue close
---done --result-file -`; a human answers with `pa question answer`. `pa next
---claim --wait S` accepts any positive number of seconds, splits waits longer
-than the server's one-hour limit into rounds, and returns the same issue or
-empty answer as the command without `--wait`.
+--done --result-file -`; a human answers with `pa question answer`. The three
+waiting commands accept any positive number of seconds and split waits longer
+than the server's one-hour limit into rounds. `pa issue ask --wait` stops no
+later than the expiry of the caller's claim; `pa needs-you --wait` first reads
+the current page and then uses its ETag for the long poll. A deadline is exit 8.
 
 ## Working on it
 

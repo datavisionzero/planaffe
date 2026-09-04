@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.OpenApi;
+using Microsoft.OpenApi;
 using Planaffe.Application.Acts;
 
 namespace Planaffe.Api.Http;
@@ -82,13 +84,49 @@ public static class ProjectEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
-        door.MapGet("/{key}/needs-you", (string key, string? cursor, int? limit, NeedsYou needsYou, CancellationToken cancellationToken) =>
-                needsYou.ExecuteAsync(key, cursor, limit, cancellationToken))
+        door.MapGet("/{key}/needs-you", async (string key, string? cursor, int? limit, int? wait, HttpRequest request, HttpResponse response, NeedsYou needsYou, CancellationToken cancellationToken) =>
+            {
+                var answer = await needsYou.WaitAsync(key, cursor, limit, wait, request.Headers.IfNoneMatch, cancellationToken);
+                response.Headers.ETag = answer.ETag;
+                return answer.Page is null ? Results.StatusCode(StatusCodes.Status304NotModified) : Results.Ok(answer.Page);
+            })
             .WithName("ListNeedsYou")
             .WithSummary("What only a human can resolve: questions, review, unready under triage, then stuck blocker chains.")
+            .AddOpenApiOperationTransformer(NeedsYouValidator)
+            .Produces<NeedsYouPage>()
+            .Produces(StatusCodes.Status304NotModified)
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         return endpoints;
+    }
+
+    private static Task NeedsYouValidator(
+        OpenApiOperation operation,
+        OpenApiOperationTransformerContext context,
+        CancellationToken cancellationToken)
+    {
+        operation.Parameters ??= [];
+        operation.Parameters.Add(new OpenApiParameter
+        {
+            Name = "If-None-Match",
+            In = ParameterLocation.Header,
+            Description = "The ETag of the last page; with wait, return when that page changes.",
+            Schema = new OpenApiSchema { Type = JsonSchemaType.String },
+        });
+
+        foreach (var status in new[] { "200", "304" })
+        {
+            var response = (OpenApiResponse)operation.Responses![status];
+            response.Headers ??= new Dictionary<string, IOpenApiHeader>();
+            response.Headers["ETag"] = new OpenApiHeader
+            {
+                Description = "Validator for this needs-you page.",
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String },
+            };
+        }
+
+        return Task.CompletedTask;
     }
 }

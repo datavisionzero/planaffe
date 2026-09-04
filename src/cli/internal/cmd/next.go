@@ -12,11 +12,11 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/render"
 )
 
-// emptyNext is the one exit code that is not an error of the API: `next` found
-// nothing, and a loop branches on it (docs/api.md).
-type emptyNext struct{}
+// emptyResult is the one exit code that is not an API error: `next` found
+// nothing, or a waiting command reached its deadline (docs/api.md).
+type emptyResult struct{}
 
-func (emptyNext) Error() string { return "nothing workable" }
+func (emptyResult) Error() string { return "nothing arrived before the deadline" }
 
 const maximumServerWait = 3600
 
@@ -110,7 +110,7 @@ cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 				render.Summaries(out, resp.JSON200.Items)
 				if len(resp.JSON200.Items) == 0 {
 					render.Reasons(out, resp.JSON200.Reasons)
-					return emptyNext{}
+					return emptyResult{}
 				}
 				return nil
 			}
@@ -147,7 +147,7 @@ cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 					}
 
 					if resp.JSON200.Issue == nil {
-						return emptyNext{}
+						return emptyResult{}
 					}
 					return nil
 				}

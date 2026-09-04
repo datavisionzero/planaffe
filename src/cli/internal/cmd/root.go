@@ -47,7 +47,7 @@ func Run(ctx context.Context, args []string, env Env) int {
 func report(stderr io.Writer, err error) int {
 	var failure *client.Failure
 	var usage *config.UsageError
-	var empty emptyNext
+	var empty emptyResult
 	switch {
 	case errors.As(err, &empty):
 		// Not an error: the reasons went to stdout, and the code says it.

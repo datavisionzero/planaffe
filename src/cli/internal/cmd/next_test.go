@@ -22,6 +22,7 @@ type fake struct {
 	requests []*http.Request
 	bodies   []string
 	answer   func(r *http.Request) (int, string)
+	headers  func(r *http.Request) map[string]string
 }
 
 func (f *fake) handler() http.Handler {
@@ -31,6 +32,11 @@ func (f *fake) handler() http.Handler {
 		f.bodies = append(f.bodies, body)
 		status, reply := f.answer(r)
 		w.Header().Set("Planaffe-Version", f.version)
+		if f.headers != nil {
+			for name, value := range f.headers(r) {
+				w.Header().Set(name, value)
+			}
+		}
 		if status >= 400 {
 			w.Header().Set("Content-Type", "application/problem+json")
 		} else {

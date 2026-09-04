@@ -12,12 +12,16 @@ public sealed record NeedsYouItem(IssueSummaryShape Issue, NeedsYouBecause Becau
 /// <summary>A cursor page of what only a human can resolve (VISION 10).</summary>
 public sealed record NeedsYouPage(IReadOnlyList<NeedsYouItem> Items, int Total, bool HasMore, string? NextCursor);
 
+/// <summary>The page and its validator, or an unchanged long-poll answer.</summary>
+public sealed record NeedsYouAnswer(NeedsYouPage? Page, string ETag);
+
 /// <summary>The four groups that provide more work to agents, in human-action order.</summary>
 public sealed class NeedsYou(
     IProjects projects,
     IIssues issues,
     IssueAssembler assembler,
-    InstanceSettings settings)
+    InstanceSettings settings,
+    IChanges changes)
 {
     public async Task<NeedsYouPage> ExecuteAsync(
         string projectKey, string? cursor, int? requestedLimit, CancellationToken cancellationToken)
@@ -28,7 +32,7 @@ public sealed class NeedsYou(
             throw Refusal.Validation("limit", $"limit is 1 to {ListIssues.MaximumLimit}; larger pages are refused, not truncated (ADR 0012).");
         }
 
-        var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        var project = await projects.LiveForReadAsync(projectKey, settings, cancellationToken);
         var after = cursor is null ? null : NeedsYouCursor.Decode(cursor, project.Id);
         var page = await issues.NeedsYouAsync(project.Id, project.TriageRequired, after, limit, cancellationToken);
         var rows = (await issues.FindLiveManyAsync(page.Items.Select(item => item.Id), cancellationToken)).ToDictionary(row => row.Id);
@@ -42,6 +46,75 @@ public sealed class NeedsYou(
             page.HasMore,
             page.HasMore ? NeedsYouCursor.Encode(project.Id, page.Items[^1], orderedRows[^1]) : null);
     }
+
+    public async Task<NeedsYouAnswer> WaitAsync(
+        string projectKey,
+        string? cursor,
+        int? requestedLimit,
+        int? wait,
+        string? ifNoneMatch,
+        CancellationToken cancellationToken)
+    {
+        Waits.Validate(wait);
+        if (wait is null)
+        {
+            var immediate = await ExecuteAsync(projectKey, cursor, requestedLimit, cancellationToken);
+            return new NeedsYouAnswer(immediate, ETag(immediate));
+        }
+
+        var project = await projects.LiveForReadAsync(projectKey, settings, cancellationToken);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(wait.Value));
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+        string? baseline = ifNoneMatch;
+
+        while (true)
+        {
+            try
+            {
+                await changes.EnsureListeningAsync(project.Id, waiting.Token);
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                return await AtDeadlineAsync(projectKey, cursor, requestedLimit, baseline, cancellationToken);
+            }
+
+            var changed = changes.WaitAsync(project.Id, waiting.Token);
+            var page = await ExecuteAsync(projectKey, cursor, requestedLimit, cancellationToken);
+            var tag = ETag(page);
+
+            if (baseline is null && page.Items.Count > 0 || baseline is not null && !Matches(baseline, tag))
+            {
+                await waiting.CancelAsync();
+                return new NeedsYouAnswer(page, tag);
+            }
+
+            baseline ??= tag;
+            try
+            {
+                await changed;
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                return await AtDeadlineAsync(projectKey, cursor, requestedLimit, baseline, cancellationToken);
+            }
+        }
+    }
+
+    private async Task<NeedsYouAnswer> AtDeadlineAsync(
+        string projectKey, string? cursor, int? limit, string? baseline, CancellationToken cancellationToken)
+    {
+        var page = await ExecuteAsync(projectKey, cursor, limit, cancellationToken);
+        var tag = ETag(page);
+        return baseline is not null && Matches(baseline, tag)
+            ? new NeedsYouAnswer(null, tag)
+            : new NeedsYouAnswer(page, tag);
+    }
+
+    private static string ETag(NeedsYouPage page) =>
+        $"\"{Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(page)))}\"";
+
+    private static bool Matches(string candidates, string tag) =>
+        candidates.Split(',').Select(candidate => candidate.Trim()).Any(candidate => candidate == tag || candidate == "*");
 }
 
 /// <summary>An opaque, project-bound keyset cursor for the needs-you order.</summary>

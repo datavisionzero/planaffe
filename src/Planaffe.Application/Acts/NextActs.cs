@@ -33,7 +33,7 @@ public sealed class Next(
     TimeProvider clock)
 {
     public const int DefaultLimit = 50;
-    public const int MaximumWaitSeconds = 3600;
+    public const int MaximumWaitSeconds = Waits.MaximumSeconds;
 
     public async Task<NextPage> PreviewAsync(string projectKey, NextRequest request, CancellationToken cancellationToken)
     {
@@ -60,17 +60,7 @@ public sealed class Next(
 
     public async Task<NextAnswer> TakeAsync(string projectKey, NextRequest request, CancellationToken cancellationToken)
     {
-        if (request.Wait is <= 0)
-        {
-            throw Refusal.Validation("wait", "wait is a positive number of seconds.");
-        }
-        if (request.Wait is > MaximumWaitSeconds)
-        {
-            throw new Refusal(
-                RefusalCode.WaitTooLong,
-                $"wait is at most {MaximumWaitSeconds} seconds.",
-                new Dictionary<string, object?> { ["maximum"] = MaximumWaitSeconds });
-        }
+        Waits.Validate(request.Wait);
 
         var query = await QueryAsync(projectKey, request, cancellationToken);
         if (request.Wait is null)

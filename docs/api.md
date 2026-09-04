@@ -463,11 +463,10 @@ already where an agent's close lands and a human accepts it from here (ADR
 | method | path | who | does |
 |---|---|---|---|
 | `GET` | `/questions` | any | a page of questions with their issue's key and title: `project`, `open` (`true` default), `issue` (key), `cursor`, `limit`; oldest first |
+| `GET` | `/questions/{id}` | any | one question; `wait` optionally holds the request until it is answered or the deadline passes |
 
 This is the "are there open questions?" of VISION 7 as a list. The full "needs
-you" list, with the blocker-chain rule, is `GET /projects/{key}/needs-you`
-(cut two, below); until it exists it is this list plus
-`GET /issues?status=review`.
+you" list, with the blocker-chain rule, is `GET /projects/{key}/needs-you`.
 
 ### Epics
 
@@ -531,7 +530,8 @@ view, not by the instance.
 | `GET` | `/projects/{key}/needs-you` | any | what only a human can resolve, in this order: open questions, issues in `review`, then — only where triage is required — issues without `ready`, then stuck issues. A page of `{ issue: IssueSummary, because }` with `because` one of `question`, `review`, `unready`, `stuck` |
 
 Within each group, higher priority comes first and age breaks a tie. The page
-uses the ordinary `cursor` and `limit` query parameters.
+uses the ordinary `cursor` and `limit` query parameters and always carries an
+ETag, including when it is empty.
 
 **Stuck** is the blocker-chain rule of VISION 10: a blocked issue is on the
 list only when a chain of open blockers from it ends in a dead end — an issue
@@ -553,16 +553,18 @@ headings.
 | `GET /questions/{id}` | `wait` in the query | the question was answered, or the deadline passed — then the question as it is |
 | `GET /projects/{key}/needs-you` | `wait` in the query, with `If-None-Match` carrying the `ETag` of the last answer | the list differs from the one the caller has, or the deadline passed — then `304` |
 
-The query is run first, and only when it finds nothing to return does the
-request wait: on the project's notification channel (`docs/storage.md`,
-Wake-ups), re-running the query on every notification, until it finds
-something or the deadline passes. `wait` is at most `3600`; a larger value is
-`wait-too-long`, and the CLI's `--wait` takes any number of seconds and asks
-in rounds. Nothing about the answer depends on whether it waited, which is
-what lets `pa next --claim --wait 60` be a loop without a `sleep`. What an
-operator's proxy has to allow is in `docs/operations.md`.
+The query is run first. `next` waits only while it finds nothing, a question
+only while it is open, and `needs-you` while its ETag still matches
+`If-None-Match` (an absent validator establishes the empty page as its
+baseline). Waiting happens on the project's notification channel
+(`docs/storage.md`, Wake-ups); every notification re-runs the original query.
+At the deadline, `next` returns its empty answer, a question returns still
+open, and an unchanged `needs-you` returns `304`. `wait` is at most `3600`; a
+larger value is `wait-too-long`, and the CLI's `--wait` takes any number of
+seconds and asks in rounds. What an operator's proxy has to allow is in
+`docs/operations.md`.
 
-The CLI: `pa next --wait S`, `pa issue ask KEY "…" --wait S` — which holds
+The CLI: `pa next --claim --wait S`, `pa issue ask KEY "…" --wait S` — which holds
 the claim and waits for the answer, for at most the rest of the claim (VISION
 10) — and `pa needs-you --wait S`.
 

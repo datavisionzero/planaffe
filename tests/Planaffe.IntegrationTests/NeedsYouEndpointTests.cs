@@ -103,6 +103,45 @@ public sealed class NeedsYouEndpointTests(PostgresFixture postgres)
         Assert.Equal([("PLAN-2", "stuck")], Entries(withoutAgent));
     }
 
+    [Fact]
+    public async Task Wait_uses_the_page_etag_and_wakes_when_the_list_changes()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+        await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "A" } } }, Ct);
+
+        using var initial = await admin.GetAsync("/projects/PLAN/needs-you", Ct);
+        Assert.Equal(HttpStatusCode.OK, initial.StatusCode);
+        var etag = initial.Headers.ETag?.ToString();
+        Assert.NotNull(etag);
+        Assert.Empty(Entries(await initial.Content.ReadFromJsonAsync<JsonElement>(Ct)));
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/projects/PLAN/needs-you?wait=5");
+        request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        var waiting = admin.SendAsync(request, Ct);
+        await Task.Delay(100, Ct);
+        using var asked = await admin.PostAsJsonAsync("/issues/PLAN-1/questions", new { question = "Which way?" }, Ct);
+
+        using var changed = await waiting.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        Assert.Equal([("PLAN-1", "question")], Entries(await changed.Content.ReadFromJsonAsync<JsonElement>(Ct)));
+        var changedTag = changed.Headers.ETag?.ToString();
+        Assert.NotNull(changedTag);
+        Assert.NotEqual(etag, changedTag);
+
+        using var unchangedRequest = new HttpRequestMessage(HttpMethod.Get, "/projects/PLAN/needs-you?wait=1");
+        unchangedRequest.Headers.TryAddWithoutValidation("If-None-Match", changedTag);
+        var started = DateTimeOffset.UtcNow;
+        using var unchanged = await admin.SendAsync(unchangedRequest, Ct);
+        Assert.Equal(HttpStatusCode.NotModified, unchanged.StatusCode);
+        Assert.True(DateTimeOffset.UtcNow - started >= TimeSpan.FromMilliseconds(750));
+        Assert.Equal(changedTag, unchanged.Headers.ETag?.ToString());
+
+        await ProjectEndpointTests.Problem(await admin.GetAsync("/projects/PLAN/needs-you?wait=0", Ct), HttpStatusCode.BadRequest, "validation");
+        await ProjectEndpointTests.Problem(await admin.GetAsync("/projects/PLAN/needs-you?wait=3601", Ct), HttpStatusCode.UnprocessableEntity, "wait-too-long");
+    }
+
     private static (string Key, string Because)[] Entries(JsonElement page) =>
         [.. page.GetProperty("items").EnumerateArray().Select(item => (
             item.GetProperty("issue").GetProperty("key").GetString()!,

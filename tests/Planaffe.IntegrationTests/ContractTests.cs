@@ -48,7 +48,7 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/me",
                 "/projects", "/projects/{key}", "/projects/{key}/labels", "/projects/{key}/labels/{name}",
                 "/projects/{key}/labels/{name}/restore", "/projects/{key}/needs-you", "/projects/{key}/next", "/projects/{key}/restore",
-                "/questions", "/questions/{id}/answer",
+                "/questions", "/questions/{id}", "/questions/{id}/answer",
                 "/tokens", "/tokens/{id}", "/users", "/version",
             ],
             paths);

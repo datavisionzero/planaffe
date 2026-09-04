@@ -139,6 +139,35 @@ public sealed class ConversationEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Reading_a_question_waits_for_its_answer_and_returns_open_at_the_deadline()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await Issues(admin, new { title = "A" });
+        using var agent = await Agent(instance, admin, "one");
+        using var asked = await agent.PostAsJsonAsync("/issues/PLAN-1/questions", new { question = "Which way?" }, Ct);
+        var id = (await asked.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+
+        var waiting = agent.GetAsync($"/questions/{id}?wait=5", Ct);
+        await Task.Delay(100, Ct);
+        using var answered = await admin.PostAsJsonAsync($"/questions/{id}/answer", new { answer = "This way." }, Ct);
+        using var response = await waiting.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        var question = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal("This way.", question.GetProperty("answer").GetString());
+
+        using var secondAsked = await agent.PostAsJsonAsync("/issues/PLAN-1/questions", new { question = "And then?" }, Ct);
+        var secondId = (await secondAsked.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+        var started = DateTimeOffset.UtcNow;
+        var stillOpen = await agent.GetFromJsonAsync<JsonElement>($"/questions/{secondId}?wait=1", Ct);
+        Assert.Equal(JsonValueKind.Null, stillOpen.GetProperty("answer").ValueKind);
+        Assert.True(DateTimeOffset.UtcNow - started >= TimeSpan.FromMilliseconds(750));
+
+        await ProjectEndpointTests.Problem(await agent.GetAsync($"/questions/{id}?wait=0", Ct), HttpStatusCode.BadRequest, "validation");
+        await ProjectEndpointTests.Problem(await agent.GetAsync($"/questions/{id}?wait=3601", Ct), HttpStatusCode.UnprocessableEntity, "wait-too-long");
+        await ProjectEndpointTests.Problem(await agent.GetAsync($"/questions/{Guid.NewGuid()}?wait=1", Ct), HttpStatusCode.NotFound, "not-found");
+    }
+
+    [Fact]
     public async Task The_history_reads_as_the_sequence_it_was()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 
 	"github.com/datavisionzero/planaffe/src/cli/internal/api"
 	"github.com/datavisionzero/planaffe/src/cli/internal/client"
+	"github.com/datavisionzero/planaffe/src/cli/internal/config"
 	"github.com/datavisionzero/planaffe/src/cli/internal/render"
 )
 
@@ -14,13 +16,22 @@ func newNeedsYou(g *globals) *cobra.Command {
 	var (
 		cursor string
 		limit  int
+		wait   int
 	)
 	cmd := &cobra.Command{
 		Use:   "needs-you",
 		Short: "What only a human can resolve: questions, review, unready work and stuck blocker chains.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, c, err := g.load()
+			waiting := cmd.Flags().Changed("wait")
+			if waiting && wait <= 0 {
+				return &config.UsageError{Message: "--wait must be a positive number of seconds"}
+			}
+			round := wait
+			if round > maximumServerWait {
+				round = maximumServerWait
+			}
+			cfg, c, err := g.loadForWait(round)
 			if err != nil {
 				return err
 			}
@@ -41,17 +52,51 @@ func newNeedsYou(g *globals) *cobra.Command {
 			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
-			if g.json {
-				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			page := resp.JSON200
+			if waiting && len(page.Items) == 0 {
+				etag := resp.HTTPResponse.Header.Get("ETag")
+				remaining := wait
+				for {
+					seconds := remaining
+					if seconds > maximumServerWait {
+						seconds = maximumServerWait
+					}
+					value := int32(seconds)
+					params.Wait = &value
+					params.IfNoneMatch = optional(etag)
+					resp, err = c.ListNeedsYouWithResponse(cmd.Context(), project, params)
+					if err != nil {
+						return client.Transport(err)
+					}
+					if resp.HTTPResponse.StatusCode != http.StatusNotModified {
+						if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+							return err
+						}
+						page = resp.JSON200
+						break
+					}
+					etag = resp.HTTPResponse.Header.Get("ETag")
+					if remaining <= seconds {
+						if g.json {
+							_ = render.JSON(cmd.OutOrStdout(), page)
+						}
+						return emptyResult{}
+					}
+					remaining -= seconds
+				}
 			}
-			render.NeedsYou(cmd.OutOrStdout(), resp.JSON200.Items)
-			if resp.JSON200.HasMore && resp.JSON200.NextCursor != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "%d of %d; next page: --cursor %s\n", len(resp.JSON200.Items), resp.JSON200.Total, *resp.JSON200.NextCursor)
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), page)
+			}
+			render.NeedsYou(cmd.OutOrStdout(), page.Items)
+			if page.HasMore && page.NextCursor != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "%d of %d; next page: --cursor %s\n", len(page.Items), page.Total, *page.NextCursor)
 			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&cursor, "cursor", "", "the next page, as the previous one said")
 	cmd.Flags().IntVar(&limit, "limit", 50, "1 to 200")
+	cmd.Flags().IntVar(&wait, "wait", 0, "wait this many seconds until something needs a human")
 	return cmd
 }

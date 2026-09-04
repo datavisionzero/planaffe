@@ -128,3 +128,57 @@ func TestQuestionListDefaultsToOpenAndTheProject(t *testing.T) {
 		t.Errorf("--all sends no open: %v", f.requests[2].URL.Query())
 	}
 }
+
+func TestIssueAskWaitsForTheAnswerAndObservesItsClaimDeadline(t *testing.T) {
+	futureIssue := strings.Replace(issue, "2026-09-02T18:03:07.123456Z", "2099-09-02T18:03:07.123456Z", 1)
+	answered := strings.Replace(question, `"answer":null`, `"answer":"Use 18."`, 1)
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/issues/PLAN-42/questions":
+			return 201, question
+		case r.Method == http.MethodGet && r.URL.Path == "/issues/PLAN-42":
+			return 200, futureIssue
+		case r.Method == http.MethodGet && r.URL.Path == "/questions/0198e0c0-0000-7000-8000-00000000000a":
+			return 200, answered
+		default:
+			return 404, `{"type":"/problems/not-found","status":404}`
+		}
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, errOut := run(t, server, t.TempDir(), "issue", "ask", "PLAN-42", "Which Postgres?", "--wait", "60")
+	if code != exit.OK || errOut != "" || !strings.Contains(out, "answered on PLAN-42: Use 18.") {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if len(f.requests) != 3 || f.requests[2].URL.Query().Get("wait") != "60" {
+		t.Fatalf("requests = %d, final query %v", len(f.requests), f.requests[2].URL.Query())
+	}
+	if f.requests[1].Header.Get("Idempotency-Key") != "" || f.requests[2].Header.Get("Idempotency-Key") != "" {
+		t.Fatal("the reads after asking must not carry idempotency keys")
+	}
+
+	code, _, errOut = run(t, server, t.TempDir(), "issue", "ask", "PLAN-42", "x", "--wait", "0")
+	if code != exit.Usage || !strings.Contains(errOut, "positive") {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+}
+
+func TestIssueAskDoesNotWaitPastAnExpiredOwnClaim(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
+		if r.Method == http.MethodPost {
+			return 201, question
+		}
+		return 200, issue
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, errOut := run(t, server, t.TempDir(), "issue", "ask", "PLAN-42", "Which Postgres?", "--wait", "60")
+	if code != exit.Empty || errOut != "" || !strings.Contains(out, "asked on PLAN-42") {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if len(f.requests) != 2 {
+		t.Fatalf("requests = %d; no question read should start past claim expiry", len(f.requests))
+	}
+}

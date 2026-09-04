@@ -231,6 +231,9 @@ public interface IIssues
 
     Task<Question?> FindQuestionAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>A fresh question snapshot for a waiting read; never served from the change tracker.</summary>
+    Task<Question?> FindQuestionForReadAsync(Guid id, CancellationToken cancellationToken);
+
     /// <summary>Questions across the project, oldest first, on live issues only.</summary>
     Task<QuestionPageRows> ListQuestionsAsync(QuestionQuery query, QuestionPosition? after, int limit, CancellationToken cancellationToken);
 

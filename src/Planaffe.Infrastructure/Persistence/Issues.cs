@@ -378,6 +378,9 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     public Task<Question?> FindQuestionAsync(Guid id, CancellationToken cancellationToken) =>
         context.Questions.SingleOrDefaultAsync(q => q.Id == id, cancellationToken);
 
+    public Task<Question?> FindQuestionForReadAsync(Guid id, CancellationToken cancellationToken) =>
+        context.Questions.AsNoTracking().SingleOrDefaultAsync(q => q.Id == id, cancellationToken);
+
     public async Task<QuestionPageRows> ListQuestionsAsync(
         QuestionQuery query, QuestionPosition? after, int limit, CancellationToken cancellationToken)
     {

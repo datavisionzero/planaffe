@@ -12,6 +12,9 @@ public sealed class Projects(PlanaffeDbContext context) : IProjects
     public Task<Project?> FindByKeyAsync(string key, CancellationToken cancellationToken) =>
         context.Projects.SingleOrDefaultAsync(p => p.Key == key, cancellationToken);
 
+    public Task<Project?> FindByKeyForReadAsync(string key, CancellationToken cancellationToken) =>
+        context.Projects.AsNoTracking().SingleOrDefaultAsync(p => p.Key == key, cancellationToken);
+
     public Task<Project?> FindByIdAsync(Guid id, CancellationToken cancellationToken) =>
         context.Projects.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
 

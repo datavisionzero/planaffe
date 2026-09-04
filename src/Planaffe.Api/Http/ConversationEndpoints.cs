@@ -51,6 +51,15 @@ public static class ConversationEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        questions.MapGet("/{id:guid}", (Guid id, int? wait, ReadQuestion read, CancellationToken cancellationToken) =>
+                read.ExecuteAsync(id, new ReadQuestionRequest(wait), cancellationToken))
+            .WithName("ReadQuestion")
+            .WithSummary("One question; with wait, return when it is answered or the deadline passes.")
+            .Produces<QuestionShape>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+
         questions.MapPost("/{id:guid}/answer", (Guid id, AnswerRequest? request, AnswerQuestion answer, CancellationToken cancellationToken) =>
                 answer.ExecuteAsync(id, request?.Answer, cancellationToken))
             .WithName("AnswerQuestion")

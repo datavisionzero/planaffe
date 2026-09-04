@@ -15,6 +15,8 @@ public sealed record AskRequest(string? Question);
 
 public sealed record AnswerRequest(string? Answer);
 
+public sealed record ReadQuestionRequest(int? Wait);
+
 /// <summary>The issue a question hangs on, as far as a list of questions needs it.</summary>
 public sealed record IssueRefShape(string Key, string Title);
 
@@ -171,6 +173,92 @@ public sealed class AnswerQuestion(
         }, cancellationToken);
 
         return await Questions.ShapeAsync(question, identities, cancellationToken);
+    }
+}
+
+/// <summary>
+/// Read one question, optionally holding the request until it is answered.
+/// The notification is only a pulse: every wake-up reads the question again.
+/// </summary>
+public sealed class ReadQuestion(
+    IIdentities identities,
+    IIssues issues,
+    IChanges changes)
+{
+    public async Task<QuestionShape> ExecuteAsync(
+        Guid id, ReadQuestionRequest request, CancellationToken cancellationToken)
+    {
+        Waits.Validate(request.Wait);
+        var found = await LiveAsync(id, cancellationToken);
+        if (request.Wait is null || !found.Open)
+        {
+            return await Questions.ShapeAsync(found, identities, cancellationToken);
+        }
+
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(request.Wait.Value));
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+
+        while (true)
+        {
+            try
+            {
+                await changes.EnsureListeningAsync(found.ProjectId, waiting.Token);
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                return await Questions.ShapeAsync(await LiveAsync(id, cancellationToken), identities, cancellationToken);
+            }
+
+            var changed = changes.WaitAsync(found.ProjectId, waiting.Token);
+            found = await LiveAsync(id, cancellationToken);
+            if (!found.Open)
+            {
+                await waiting.CancelAsync();
+                return await Questions.ShapeAsync(found, identities, cancellationToken);
+            }
+
+            try
+            {
+                await changed;
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                return await Questions.ShapeAsync(await LiveAsync(id, cancellationToken), identities, cancellationToken);
+            }
+        }
+    }
+
+    private async Task<Question> LiveAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var question = await issues.FindQuestionForReadAsync(id, cancellationToken)
+            ?? throw new Refusal(RefusalCode.NotFound, $"No question {id}.");
+        var issue = (await issues.FindLiveManyAsync([question.IssueId], cancellationToken)).SingleOrDefault();
+        if (issue is null)
+        {
+            throw new Refusal(RefusalCode.NotFound, $"No question {id}.");
+        }
+
+        return question;
+    }
+}
+
+internal static class Waits
+{
+    public const int MaximumSeconds = 3600;
+
+    public static void Validate(int? wait)
+    {
+        if (wait is <= 0)
+        {
+            throw Refusal.Validation("wait", "wait is a positive number of seconds.");
+        }
+        if (wait is > MaximumSeconds)
+        {
+            throw new Refusal(
+                RefusalCode.WaitTooLong,
+                $"wait is at most {MaximumSeconds} seconds.",
+                new Dictionary<string, object?> { ["maximum"] = MaximumSeconds });
+        }
     }
 }
 
