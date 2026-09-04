@@ -23,7 +23,8 @@ public sealed record Caller(
     Guid? OwnerId,
     Guid TokenId,
     string TokenPrefix,
-    DateTimeOffset TokenCreatedAt)
+    DateTimeOffset TokenCreatedAt,
+    Guid? SessionId = null)
 {
     public bool IsUser => Kind is IdentityKind.User;
 
@@ -39,6 +40,10 @@ public sealed record Caller(
             token.Id,
             token.Prefix,
             token.CreatedAt);
+
+    public static Caller Of(User user, BrowserSession session) =>
+        new(user.Id, user.Kind, user.Name, user.Administrator, null,
+            Guid.Empty, string.Empty, default, session.Id);
 }
 
 /// <summary>

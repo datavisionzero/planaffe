@@ -7,7 +7,7 @@ namespace Planaffe.Api.Http;
 
 /// <param name="Name">Unique across users and agents, regardless of case; at most 100 characters.</param>
 /// <param name="Administrator">Whether the new user administers the instance. Off when left out.</param>
-public sealed record CreateUserRequest(string? Name, bool? Administrator);
+public sealed record CreateUserRequest(string? Name, string? Email, bool? Administrator);
 
 /// <param name="Name">Assigned — two words and a number — when left out.</param>
 public sealed record CreateAgentRequest(string? Name);
@@ -67,12 +67,12 @@ public static class IdentityEndpoints
 
         door.MapPost("/users", async (CreateUserRequest? request, CreateUser create, CancellationToken cancellationToken) =>
             {
-                var created = await create.ExecuteAsync(request?.Name, request?.Administrator ?? false, cancellationToken);
+                var created = await create.ExecuteAsync(request?.Name, request?.Email, request?.Administrator ?? false, cancellationToken);
                 return Results.Created($"/users/{created.Id}", created);
             })
             .WithName("CreateUser")
-            .WithSummary("Create a user and hand over their first user token, shown once. Administrators only.")
-            .Produces<CreatedUser>(StatusCodes.Status201Created)
+            .WithSummary("Invite a user by email. Administrators only.")
+            .Produces<UserSummary>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
         door.MapGet("/users", (ListUsers list, CancellationToken cancellationToken) => list.ExecuteAsync(cancellationToken))

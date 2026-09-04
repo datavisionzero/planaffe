@@ -165,31 +165,19 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task Only_an_administrator_creates_users_and_the_new_users_token_works()
+    public async Task Only_an_administrator_invites_users()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
         using var admin = instance.ClientWith(AnInstance.BootstrapToken);
 
-        using var created = await admin.PostAsJsonAsync("/users", new { name = "Second Person" }, Ct);
-        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        var user = await created.Content.ReadFromJsonAsync<JsonElement>(Ct);
-        Assert.False(user.GetProperty("administrator").GetBoolean());
-        var secret = user.GetProperty("token").GetProperty("secret").GetString()!;
-
-        using var asUser = instance.ClientWith(secret);
-        var me = await asUser.GetFromJsonAsync<JsonElement>("/me", Ct);
-        Assert.Equal("Second Person", me.GetProperty("name").GetString());
-        Assert.False(me.GetProperty("administrator").GetBoolean());
+        using var asUser = instance.ClientWith(await instance.AddActiveUserAsync("Second Person"));
 
         // A user who is not an administrator may not invite.
-        using var refused = await asUser.PostAsJsonAsync("/users", new { name = "third" }, Ct);
+        using var refused = await asUser.PostAsJsonAsync("/users", new { name = "third", email = "third@example.test" }, Ct);
         await Problem(refused, HttpStatusCode.Forbidden, "forbidden");
 
-        // But may list.
-        var users = await asUser.GetFromJsonAsync<JsonElement>("/users", Ct);
-        Assert.Equal(
-            [AnInstance.Administrator, "Second Person"],
-            users.EnumerateArray().Select(u => u.GetProperty("name").GetString()));
+        // Listing all users is instance administration too.
+        await Problem(await asUser.GetAsync("/users", Ct), HttpStatusCode.Forbidden, "forbidden");
     }
 
     [Fact]
@@ -212,10 +200,7 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
         using var admin = instance.ClientWith(AnInstance.BootstrapToken);
 
-        using var invited = await admin.PostAsJsonAsync("/users", new { name = "other" }, Ct);
-        var otherSecret = (await invited.Content.ReadFromJsonAsync<JsonElement>(Ct))
-            .GetProperty("token").GetProperty("secret").GetString()!;
-        using var other = instance.ClientWith(otherSecret);
+        using var other = instance.ClientWith(await instance.AddActiveUserAsync("other"));
 
         // `other` owns the agent; the administrator does not.
         using var created = await other.PostAsJsonAsync("/agents", new { name = "quiet-otter-42" }, Ct);
@@ -229,10 +214,7 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
         using var byAdmin = await admin.PatchAsJsonAsync($"/agents/{id}", new { name = "calm-badger-3" }, Ct);
         Assert.Equal(HttpStatusCode.OK, byAdmin.StatusCode);
 
-        using var invitedThird = await admin.PostAsJsonAsync("/users", new { name = "third" }, Ct);
-        var thirdSecret = (await invitedThird.Content.ReadFromJsonAsync<JsonElement>(Ct))
-            .GetProperty("token").GetProperty("secret").GetString()!;
-        using var third = instance.ClientWith(thirdSecret);
+        using var third = instance.ClientWith(await instance.AddActiveUserAsync("third"));
         using var refused = await third.PatchAsJsonAsync($"/agents/{id}", new { name = "stolen" }, Ct);
         await Problem(refused, HttpStatusCode.Forbidden, "forbidden");
         using var revokeRefused = await third.DeleteAsync($"/agents/{id}", Ct);
@@ -262,10 +244,7 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
         Assert.All(tokens.EnumerateArray(), t => Assert.False(t.TryGetProperty("secret", out _)));
 
         // Another user cannot see, and so cannot revoke, this token.
-        using var invited = await admin.PostAsJsonAsync("/users", new { name = "other" }, Ct);
-        var otherSecret = (await invited.Content.ReadFromJsonAsync<JsonElement>(Ct))
-            .GetProperty("token").GetProperty("secret").GetString()!;
-        using var other = instance.ClientWith(otherSecret);
+        using var other = instance.ClientWith(await instance.AddActiveUserAsync("other"));
         using var notTheirs = await other.DeleteAsync($"/tokens/{id}", Ct);
         await Problem(notTheirs, HttpStatusCode.NotFound, "not-found");
 

@@ -139,8 +139,7 @@ public sealed class ClaimEndpointTests(PostgresFixture postgres)
         var protectedClaim = await ProjectEndpointTests.Problem(await one.PostAsJsonAsync("/issues/PLAN-2/claim", new { force = true }, Ct), HttpStatusCode.Forbidden, "claim-protected");
         Assert.Equal("maintainer", protectedClaim.GetProperty("holder").GetProperty("name").GetString());
 
-        using var invited = await admin.PostAsJsonAsync("/users", new { name = "other" }, Ct);
-        using var other = instance.ClientWith((await invited.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
+        using var other = instance.ClientWith(await instance.AddActiveUserAsync("other"));
         Assert.Equal(HttpStatusCode.OK, (await other.PostAsJsonAsync("/issues/PLAN-2/claim", new { force = true }, Ct)).StatusCode);
 
         await using var reader = Migrated.ContextFor(instance.ConnectionString);

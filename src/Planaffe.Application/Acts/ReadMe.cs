@@ -25,7 +25,7 @@ public sealed record Me(
     string Name,
     bool Administrator,
     IdentityRef? Owner,
-    TokenRef Token,
+    TokenRef? Token,
     AgentMetadata? Metadata,
     DateTimeOffset? MetadataReportedAt);
 
@@ -52,7 +52,7 @@ public sealed class ReadMe(ICallerIdentity callerIdentity, IIdentities identitie
             caller.Name,
             caller.Administrator,
             owner is null ? null : IdentityRef.Of(owner),
-            new TokenRef(caller.TokenPrefix, caller.TokenCreatedAt),
+            caller.SessionId is null ? new TokenRef(caller.TokenPrefix, caller.TokenCreatedAt) : null,
             agent?.Metadata,
             agent?.MetadataReportedAt);
     }

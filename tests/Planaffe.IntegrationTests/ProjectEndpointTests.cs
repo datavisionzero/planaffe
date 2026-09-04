@@ -105,8 +105,7 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
         using var admin = instance.ClientWith(AnInstance.BootstrapToken);
         await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
 
-        using var invited = await admin.PostAsJsonAsync("/users", new { name = "other" }, Ct);
-        using var user = instance.ClientWith((await invited.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
+        using var user = instance.ClientWith(await instance.AddActiveUserAsync("other"));
         using var createdAgent = await admin.PostAsJsonAsync("/agents", new { }, Ct);
         using var agent = instance.ClientWith((await createdAgent.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
 

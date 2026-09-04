@@ -67,6 +67,13 @@ builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<RevokeToken>();
 builder.Services.AddScoped<ReadSmtpStatus>();
 builder.Services.AddScoped<SendTestEmail>();
+builder.Services.AddScoped<SignInWithPassword>();
+builder.Services.AddScoped<ExchangeBootstrapToken>();
+builder.Services.AddScoped<AcceptInvitation>();
+builder.Services.AddScoped<RequestPasswordRecovery>();
+builder.Services.AddScoped<CompletePasswordRecovery>();
+builder.Services.AddScoped<ListBrowserSessions>();
+builder.Services.AddScoped<ChangePassword>();
 
 // The two dials of the instance, read once from the environment; a value that
 // is not a positive number stops the start here, where the message names it.
@@ -167,6 +174,7 @@ app.UseExceptionHandler();
 app.UseSerilogRequestLogging();
 app.UsePlanaffeVersion();
 app.UseAuthentication();
+app.UseMiddleware<BrowserCsrfMiddleware>();
 app.UsePlanaffeIdempotency();
 app.UseAuthorization();
 
@@ -176,6 +184,7 @@ app.MapOpenApi();
 
 app.MapInstance();
 app.MapIdentities();
+app.MapBrowserIdentity();
 app.MapProjects();
 app.MapLabels();
 app.MapIssues();

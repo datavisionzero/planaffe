@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import { api, whenSignedOut, type Me } from "@/api/client";
 import { SignIn } from "@/session/SignIn";
 import { SessionProvider } from "@/session/Session";
-import { forgetToken, readToken } from "@/session/token";
+import { Activate } from "@/session/Activate";
+import { Recover } from "@/session/Recover";
 import { Shell } from "@/shell/Shell";
+import { useLocation, useNavigate } from "react-router";
 
 /**
  * Whether this browser is somebody, which decides the first screen.
  *
- * A browser without a token gets the sign-in field. One with a token asks the
- * instance who it is, and shows the shell once that answers — the frame
- * renders before any list does (ADR 0006), and a token the instance no longer
- * accepts sends the user back to the field.
+ * Every load asks whether the browser's opaque session cookie admits a user.
+ * The shell appears once that answers; an absent, expired or revoked session
+ * returns to password sign-in.
  */
 type Standing =
   | { at: "asking" }
@@ -20,9 +21,9 @@ type Standing =
   | { at: "known"; me: Me };
 
 export function App() {
-  const [standing, setStanding] = useState<Standing>(() =>
-    readToken() === null ? { at: "stranger" } : { at: "asking" },
-  );
+  const [standing, setStanding] = useState<Standing>({ at: "asking" });
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (standing.at !== "asking") {
@@ -42,7 +43,6 @@ export function App() {
         if (data !== undefined) {
           setStanding({ at: "known", me: data });
         } else if (response.status === 401) {
-          forgetToken();
           setStanding({ at: "stranger" });
         } else {
           setStanding({ at: "unreachable" });
@@ -62,11 +62,13 @@ export function App() {
   useEffect(
     () =>
       whenSignedOut(() => {
-        forgetToken();
         setStanding({ at: "stranger" });
       }),
     [],
   );
+
+  if (location.pathname === "/activate") return <Activate onActivated={(me) => { setStanding({ at: "known", me }); navigate("/"); }} />;
+  if (location.pathname === "/recover") return <Recover />;
 
   switch (standing.at) {
     case "asking":
@@ -87,7 +89,7 @@ export function App() {
       );
 
     case "stranger":
-      return <SignIn onSignedIn={(me) => setStanding({ at: "known", me })} />;
+      return <SignIn onSignedIn={(me) => { setStanding({ at: "known", me }); navigate("/"); }} />;
 
     case "known":
       return (
@@ -95,8 +97,7 @@ export function App() {
           value={{
             me: standing.me,
             signOut: () => {
-              forgetToken();
-              setStanding({ at: "stranger" });
+              void api.DELETE("/session").finally(() => setStanding({ at: "stranger" }));
             },
           }}
         >

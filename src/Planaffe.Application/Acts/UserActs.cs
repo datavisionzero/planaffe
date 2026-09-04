@@ -9,9 +9,10 @@ namespace Planaffe.Application.Acts;
 /// their first user token (<c>docs/api.md</c>, Users, agents and tokens). Cut
 /// three replaces the secret in the answer with a one-time link (VISION 12).
 /// </summary>
-public sealed class CreateUser(ICallerIdentity callerIdentity, IIdentities identities, TimeProvider clock)
+public sealed class CreateUser(ICallerIdentity callerIdentity, IIdentities identities, IOneTimeSecrets secrets,
+    IEmailSender emailSender, SmtpSettings smtp, TimeProvider clock)
 {
-    public async Task<CreatedUser> ExecuteAsync(string? name, bool administrator, CancellationToken cancellationToken)
+    public async Task<UserSummary> ExecuteAsync(string? name, string? email, bool administrator, CancellationToken cancellationToken)
     {
         callerIdentity.Caller.RequireAdministrator("create a user");
 
@@ -21,16 +22,21 @@ public sealed class CreateUser(ICallerIdentity callerIdentity, IIdentities ident
             throw Refusal.Validation("name", $"The name {normalized} is taken; names are unique across users and agents, whatever the case.");
         }
 
+        if (!smtp.Configured)
+            throw new Refusal(RefusalCode.SmtpNotConfigured, "Transactional email is not configured for this instance.");
+
+        var normalizedEmail = Validated.Field("email", () => User.NormalizeEmail(email!));
+        if (await identities.FindUserByNormalizedEmailAsync(User.NormalizeEmailForComparison(normalizedEmail), cancellationToken) is not null)
+            throw new Refusal(RefusalCode.EmailExists, "That email address already belongs to a user.");
+
         var now = clock.GetUtcNow();
-        var user = User.Create(normalized, administrator, now);
-        var secret = TokenSecret.Generate();
-        var token = Token.Issue(user, secret, now);
-
-        await identities.AddAsync(user, token, cancellationToken);
-
-        return new CreatedUser(
-            user.Id, user.Kind, user.Name, user.Administrator, user.CreatedAt,
-            new IssuedToken(token.Id, token.Prefix, secret, token.CreatedAt));
+        var user = User.Invite(normalized, normalizedEmail, administrator, now);
+        await identities.AddUserAsync(user, cancellationToken);
+        var invitation = OneTimeSecret.Issue(user.Id, OneTimeSecretPurpose.Invitation, now);
+        await secrets.AddReplacingLiveAsync(invitation.Record, now, cancellationToken);
+        var link = new Uri(smtp.PublicUrl!, $"/activate?secret={Uri.EscapeDataString(invitation.Secret)}");
+        await emailSender.SendAsync(TransactionalEmailTemplates.Invitation(user.Email, user.Name, link), cancellationToken);
+        return UserSummary.Of(user);
     }
 }
 
@@ -39,7 +45,7 @@ public sealed class ListUsers(ICallerIdentity callerIdentity, IIdentities identi
 {
     public async Task<IReadOnlyList<UserSummary>> ExecuteAsync(CancellationToken cancellationToken)
     {
-        callerIdentity.Caller.RequireUser("list users");
+        callerIdentity.Caller.RequireAdministrator("list users");
 
         return [.. (await identities.ListUsersAsync(cancellationToken)).Select(UserSummary.Of)];
     }

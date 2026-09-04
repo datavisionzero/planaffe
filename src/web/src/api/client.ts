@@ -1,6 +1,5 @@
 import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";
-import { readToken } from "@/session/token";
 
 /**
  * The one way this application reaches the instance.
@@ -15,6 +14,7 @@ import { readToken } from "@/session/token";
  */
 export const api = createClient<paths>({
   baseUrl: window.location.origin,
+  credentials: "same-origin",
 
   // Reached through `globalThis` when a request is made rather than captured
   // when this module loads, so that a test can stand an instance in front of
@@ -31,25 +31,20 @@ export type EpicSummary = Schemas["EpicSummary"];
 export type Problem = Schemas["ProblemDetails"];
 
 /**
- * Everything but `GET /version` takes `Authorization: Bearer <token>`
- * (docs/api.md). The token is the user's, pasted once and kept in this browser
- * (session/token.ts); the header is added here so that no screen knows it.
+ * Browser requests use the opaque cookie the instance set. Unsafe requests
+ * carry the application-specific CSRF proof; the browser supplies Origin and
+ * the server requires both. Bearer callers remain unaffected.
  */
-api.use({
-  onRequest({ request }) {
-    const token = readToken();
-
-    if (token !== null && !request.headers.has("Authorization")) {
-      request.headers.set("Authorization", `Bearer ${token}`);
-    }
-
-    return request;
-  },
-});
+api.use({ onRequest({ request }) {
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && !request.headers.has("Authorization")) {
+    request.headers.set("X-Planaffe-CSRF", "1");
+  }
+  return request;
+} });
 
 /**
- * The token stopped working somewhere other than the screen the user is on:
- * it was revoked, or the identity was. Every request answers `401` from that
+ * The browser session stopped working somewhere other than the screen the user is on:
+ * it expired, was revoked, or the identity was deactivated. Every request answers `401` from that
  * moment, and the application has one place to notice rather than one per
  * call. The sign-in screen's own probe is the exception — there, `401` is the
  * answer to a question it asked.
@@ -70,7 +65,7 @@ export function whenSignedOut(listener: SignedOutListener): () => void {
 
 api.use({
   onResponse({ response }) {
-    if (response.status === 401 && !response.url.endsWith("/me")) {
+    if (response.status === 401 && !response.url.endsWith("/me") && !response.url.endsWith("/session")) {
       signedOutListener?.();
     }
 

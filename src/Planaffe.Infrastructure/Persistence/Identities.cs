@@ -18,6 +18,12 @@ public sealed class Identities(PlanaffeDbContext context) : IIdentities
     public Task<Agent?> FindAgentAsync(Guid id, CancellationToken cancellationToken) =>
         context.Agents.SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
 
+    public Task<User?> FindUserAsync(Guid id, CancellationToken cancellationToken) =>
+        context.Users.SingleOrDefaultAsync(u => u.Id == id, cancellationToken);
+
+    public Task<User?> FindUserByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken) =>
+        context.Users.SingleOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
+
     public Task<Identity?> FindByNameAsync(string name, CancellationToken cancellationToken)
     {
         var lowered = name.Trim().ToLower();
@@ -64,6 +70,37 @@ public sealed class Identities(PlanaffeDbContext context) : IIdentities
         context.Identities.Add(identity);
         context.Tokens.Add(token);
         await SaveOrRefuseTheNameAsync(identity.Name, cancellationToken);
+    }
+
+    public async Task AddUserAsync(User user, CancellationToken cancellationToken)
+    {
+        context.Users.Add(user);
+        await SaveUserOrRefuseEmailAsync(cancellationToken);
+    }
+
+    public Task RecordUserAsync(User user, CancellationToken cancellationToken) =>
+        SaveUserOrRefuseEmailAsync(cancellationToken);
+
+    public async Task<bool> TryRecordBootstrapExchangeAsync(Guid userId, string passwordHash, DateTimeOffset at,
+        CancellationToken cancellationToken) => await context.Users
+        .Where(user => user.Id == userId && user.BootstrapExchangedAt == null && user.PasswordHash == null)
+        .ExecuteUpdateAsync(set => set
+            .SetProperty(user => user.PasswordHash, passwordHash)
+            .SetProperty(user => user.BootstrapExchangedAt, at), cancellationToken) == 1;
+
+    private async Task SaveUserOrRefuseEmailAsync(CancellationToken cancellationToken)
+    {
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException collision) when (collision.InnerException is PostgresException
+        { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "identity_email" })
+        {
+            throw new Refusal(RefusalCode.EmailExists, "That email address already belongs to a user.");
+        }
+        catch (DbUpdateException collision) when (collision.InnerException is PostgresException
+        { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "identity_name" })
+        {
+            throw Refusal.Validation("name", "That name is taken; names are unique across users and agents, whatever the case.");
+        }
     }
 
     public async Task RecordMetadataAsync(Agent agent, AgentMetadataReport report, CancellationToken cancellationToken)

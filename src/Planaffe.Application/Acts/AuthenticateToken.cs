@@ -40,7 +40,13 @@ public sealed class AuthenticateToken(ITokens tokens)
 
         var presented = await tokens.FindByHashAsync(TokenSecret.HashOf(secret), cancellationToken);
 
-        return presented is null || presented.Token.Revoked
+        var disabled = presented?.Identity switch
+        {
+            User user => user.State != UserState.Active,
+            Agent agent => false,
+            _ => false,
+        };
+        return presented is null || presented.Token.Revoked || disabled
             ? null
             : Caller.Of(presented.Identity, presented.Token);
     }

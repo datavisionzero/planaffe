@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Planaffe.Domain.Identities;
 
 namespace Planaffe.IntegrationTests;
 
@@ -42,6 +43,18 @@ internal sealed class AnInstance(
         new(connectionString, newAdministrator, newToken, instanceConfiguration);
 
     public string ConnectionString => connectionString;
+
+    public async Task<string> AddActiveUserAsync(string name, bool administrator = false)
+    {
+        await using var context = Migrated.ContextFor(connectionString);
+        var now = DateTimeOffset.UtcNow;
+        var user = User.Create(name, $"{name.ToLowerInvariant().Replace(' ', '.')}@example.test", administrator, now);
+        var secret = TokenSecret.Generate();
+        context.Users.Add(user);
+        context.Tokens.Add(Token.Issue(user, secret, now));
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return secret;
+    }
 
     /// <summary>
     /// What the instance logged at error or above — the exception behind a 500,

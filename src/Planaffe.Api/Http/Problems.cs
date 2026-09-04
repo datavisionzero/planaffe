@@ -29,11 +29,13 @@ public static class Problems
     {
         RefusalCode.Validation or RefusalCode.UnknownField or RefusalCode.CursorInvalid => StatusCodes.Status400BadRequest,
         RefusalCode.Unauthenticated => StatusCodes.Status401Unauthorized,
-        RefusalCode.Forbidden or RefusalCode.ReadyRequiresUser or RefusalCode.ClaimProtected =>
+        RefusalCode.Csrf or RefusalCode.Forbidden or RefusalCode.ReadyRequiresUser or RefusalCode.ClaimProtected =>
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.Deleted => StatusCodes.Status404NotFound,
-        RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.ReleaseExists =>
+        RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.ReleaseExists
+            or RefusalCode.EmailExists =>
             StatusCodes.Status409Conflict,
+        RefusalCode.SecretExpired => StatusCodes.Status410Gone,
         RefusalCode.Stale => StatusCodes.Status412PreconditionFailed,
         RefusalCode.Transition or RefusalCode.Cycle or RefusalCode.HasIssues or RefusalCode.OneLevel
             or RefusalCode.OtherProject or RefusalCode.EpicInherited or RefusalCode.HasSubIssues or RefusalCode.UnknownLabel
@@ -53,6 +55,7 @@ public static class Problems
         RefusalCode.WaitTooLong => "The requested wait exceeds one hour",
         RefusalCode.TooMany => "The bulk request contains too many issues",
         RefusalCode.Unauthenticated => "No token, an unknown token, or a revoked one",
+        RefusalCode.Csrf => "The browser request failed its CSRF check",
         RefusalCode.Forbidden => "The identity may not do this",
         RefusalCode.ReadyRequiresUser => "Only a user sets ready where triage is required",
         RefusalCode.ClaimProtected => "Only a user takes over a user's claim",
@@ -73,6 +76,8 @@ public static class Problems
         RefusalCode.InPublishedRelease => "The issue is in a published release",
         RefusalCode.UnknownLabel => "The project has no such label",
         RefusalCode.SmtpNotConfigured => "Transactional email is not configured",
+        RefusalCode.EmailExists => "That email address already belongs to a user",
+        RefusalCode.SecretExpired => "The one-time link is expired or has already been used",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),
     };

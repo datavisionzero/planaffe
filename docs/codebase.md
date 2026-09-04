@@ -110,7 +110,7 @@ fallback (VISION 13). The two log sinks live here as well
 ([ADR 0008](./adr/0008-planaffe-logs-into-logaffe-and-serilog-is-the-way-out.md)).
 
 **`Planaffe.Api` is the adapters and the composition root.** `Http/` holds the
-endpoints, the bearer authentication that answers the caller port, the version
+endpoints, bearer and browser-session authentication that answer the caller port, the version
 header and the one place a refusal becomes a problem document; `Hosting/` the
 services that run before anything is served — the migrations, the bootstrap.
 It also owns browser-session authentication, CSRF and login rate limits, the
@@ -151,8 +151,8 @@ one folder per area — `shell`, `issues`, `epics`, `releases`, `projects`,
 `shell/Shell.tsx` owns the routes. `components/ui/` is what the shadcn CLI
 generated and `index.css` is the token layer; both are the repository's to
 edit. `api/client.ts` is the one way to the instance — `openapi-fetch` over the
-types `npm run generate` writes from the contract — and it adds the bearer
-token every request carries.
+types `npm run generate` writes from the contract — and it adds the CSRF proof
+to cookie-authenticated writes.
 
 The application signs in with email and password and keeps only an opaque
 session cookie (`session/`). The bootstrap user token may be exchanged once to

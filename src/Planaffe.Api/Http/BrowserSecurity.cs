@@ -37,8 +37,8 @@ public static class CsrfProtection
 {
     public const string Header = "X-Planaffe-CSRF";
     public static bool IsSafe(HttpRequest request, string expectedOrigin) =>
-        request.Headers[Header] == "1" && Uri.TryCreate(expectedOrigin, UriKind.Absolute, out var expected)
-        && Uri.TryCreate(request.Headers.Origin, UriKind.Absolute, out var actual)
+        request.Headers[Header].ToString() == "1" && Uri.TryCreate(expectedOrigin, UriKind.Absolute, out var expected)
+        && Uri.TryCreate(request.Headers.Origin.ToString(), UriKind.Absolute, out var actual)
         && Uri.Compare(expected, actual, UriComponents.SchemeAndServer, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase) == 0
         && expected.AbsolutePath.TrimEnd('/') == actual.AbsolutePath.TrimEnd('/');
 }

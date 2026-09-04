@@ -145,7 +145,7 @@ pa me set --kind codex --harness cli --environment container --version 1.2.3
                                            # agents report stable metadata; `none` clears a field
 pa version                                 # pa's version and the instance's; exit 9 when they do not fit
 pa export --json                           # one readable document containing the current project
-pa user create NAME [--administrator]      # administrators only; the first user token, once
+pa user create NAME --email ADDRESS [--administrator] # administrators only; sends an invitation
 pa user list
 pa agent create [--name NAME]              # users only; the agent's one token, once
 pa agent list · pa agent view <id> · pa agent rename <id> --name NAME · pa agent revoke <id>

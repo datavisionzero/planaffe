@@ -70,8 +70,7 @@ public sealed class IdempotencyTests(PostgresFixture postgres)
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
         using var admin = await Project(instance);
-        using var invited = await admin.PostAsJsonAsync("/users", new { name = "other" }, Ct);
-        using var other = instance.ClientWith((await invited.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
+        using var other = instance.ClientWith(await instance.AddActiveUserAsync("other"));
 
         using var mine = await Send(admin, HttpMethod.Post, "/issues", new { project = "PLAN", issues = new[] { new { title = "Mine" } } }, "shared-key");
         using var theirs = await Send(other, HttpMethod.Post, "/issues", new { project = "PLAN", issues = new[] { new { title = "Theirs" } } }, "shared-key");

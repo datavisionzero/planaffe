@@ -1,95 +1,41 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router";
 import { api, describe, type Me } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { keepToken } from "./token";
 
-/**
- * The first screen of a browser that has no token: a field to paste one into.
- *
- * There is no password and no account form here on purpose. Identities are
- * created by an administrator with `pa user create`, and a user's key to the
- * console and to this page is the same user token (ADR 0015). The token is
- * checked by asking the instance who it is, and kept only when that answers.
- */
 export function SignIn({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
-  const [token, setToken] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [refusal, setRefusal] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
 
   async function submit(event: FormEvent) {
-    event.preventDefault();
-
-    const candidate = token.trim();
-
-    if (candidate === "") {
-      return;
-    }
-
-    setAsking(true);
-    setRefusal(null);
-
+    event.preventDefault(); setAsking(true); setRefusal(null);
     try {
-      const { data, error, response } = await api.GET("/me", {
-        headers: { Authorization: `Bearer ${candidate}` },
-      });
-
-      if (data === undefined) {
-        setRefusal(
-          response.status === 401
-            ? "The instance does not know this token."
-            : describe(error, response.status),
-        );
-        return;
-      }
-
-      keepToken(candidate);
-      onSignedIn(data);
-    } catch {
-      setRefusal("The instance did not answer.");
-    } finally {
-      setAsking(false);
-    }
+      const signedIn = await api.POST("/session", { body: { email, password } });
+      if (!signedIn.response.ok) { setRefusal(describe(signedIn.error, signedIn.response.status)); return; }
+      const me = await api.GET("/me");
+      if (me.data) onSignedIn(me.data); else setRefusal(describe(me.error, me.response.status));
+    } catch { setRefusal("The instance did not answer."); }
+    finally { setAsking(false); }
   }
 
-  return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <form onSubmit={submit} className="w-full max-w-sm space-y-5">
-        <div className="flex items-center gap-2 text-base font-semibold">
-          <span aria-hidden className="size-4.5 rounded-sm bg-brand" />
-          planaffe
-        </div>
+  return <AuthFrame><form onSubmit={submit} className="space-y-5">
+    <Field label="Email"><Input id="email" type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+    <Field label="Password"><Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+    {refusal && <p role="alert" className="text-destructive text-sm">{refusal}</p>}
+    <Button type="submit" disabled={asking || !email || !password} className="w-full">Sign in</Button>
+    <Link to="/recover" className="text-brand block text-center text-sm hover:underline">Forgot your password?</Link>
+  </form></AuthFrame>;
+}
 
-        <div className="space-y-2">
-          <label htmlFor="token" className="block text-sm font-medium">
-            Your token
-          </label>
-          <Input
-            id="token"
-            type="password"
-            autoComplete="off"
-            autoFocus
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            placeholder="pa_…"
-            className="font-mono"
-          />
-          <p className="text-muted-foreground text-xs">
-            The user token an administrator created for you with{" "}
-            <code className="font-mono">pa token create</code>. It stays in this browser.
-          </p>
-        </div>
+export function AuthFrame({ children }: { children: ReactNode }) {
+  return <main className="flex min-h-svh items-center justify-center p-6"><div className="w-full max-w-sm space-y-6">
+    <div className="flex items-center gap-2 text-base font-semibold"><span aria-hidden className="size-4.5 rounded-sm bg-brand" />planaffe</div>{children}
+  </div></main>;
+}
 
-        {refusal !== null && (
-          <p role="alert" className="text-destructive text-sm">
-            {refusal}
-          </p>
-        )}
-
-        <Button type="submit" disabled={asking || token.trim() === ""} className="w-full">
-          Sign in
-        </Button>
-      </form>
-    </main>
-  );
+export function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="space-y-2"><label htmlFor={label.toLowerCase()} className="block text-sm font-medium">{label}</label>{children}</div>;
 }

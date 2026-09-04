@@ -134,14 +134,15 @@ func newVersion(g *globals) *cobra.Command {
 func newUser(g *globals) *cobra.Command {
 	cmd := &cobra.Command{Use: "user", Short: "Users: the humans. Administrators only create them."}
 	var administrator bool
+	var email string
 	create := &cobra.Command{
-		Use: "create NAME", Short: "Invite a user: their first user token is printed once — hand it over yourself.", Args: cobra.ExactArgs(1),
+		Use: "create NAME", Short: "Invite a user by email.", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, c, err := g.load()
 			if err != nil {
 				return err
 			}
-			body := api.CreateUserRequest{Name: &args[0]}
+			body := api.CreateUserRequest{Name: &args[0], Email: &email}
 			if administrator {
 				body.Administrator = &administrator
 			}
@@ -155,12 +156,13 @@ func newUser(g *globals) *cobra.Command {
 			if g.json {
 				return render.JSON(cmd.OutOrStdout(), resp.JSON201)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s created%s\ntoken: %s\n", resp.JSON201.Name, adminSuffix(resp.JSON201.Administrator), resp.JSON201.Token.Secret)
-			fmt.Fprintln(cmd.ErrOrStderr(), "pa: the token is shown once; the instance keeps a hash and the prefix.")
+			fmt.Fprintf(cmd.OutOrStdout(), "%s invited at %s%s\n", resp.JSON201.Name, resp.JSON201.Email, adminSuffix(resp.JSON201.Administrator))
 			return nil
 		},
 	}
 	create.Flags().BoolVar(&administrator, "administrator", false, "administers the instance: users, projects, and everything outside one project")
+	create.Flags().StringVar(&email, "email", "", "email address to receive the invitation (required)")
+	_ = create.MarkFlagRequired("email")
 	list := &cobra.Command{
 		Use: "list", Short: "Every user.", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {

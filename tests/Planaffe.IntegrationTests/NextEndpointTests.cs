@@ -84,7 +84,8 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
             var keys = new List<string>();
             foreach (var answer in answers)
             {
-                Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+                Assert.True(answer.StatusCode == HttpStatusCode.OK,
+                    $"Expected OK, got {answer.StatusCode}: {await answer.Content.ReadAsStringAsync(Ct)}");
                 var body = await answer.Content.ReadFromJsonAsync<JsonElement>(Ct);
                 keys.Add(body.GetProperty("issue").GetProperty("key").GetString()!);
                 Assert.Equal("in_progress", body.GetProperty("issue").GetProperty("status").GetString());

@@ -3,9 +3,11 @@ using Planaffe.Domain.Identities;
 namespace Planaffe.Application.Acts;
 
 /// <summary>A user as <c>GET /users</c> lists them: an <see cref="IdentityRef"/> plus the role and the date.</summary>
-public sealed record UserSummary(Guid Id, IdentityKind Kind, string Name, bool Administrator, DateTimeOffset CreatedAt)
+public sealed record UserSummary(Guid Id, IdentityKind Kind, string Name, string Email, UserState State,
+    bool Administrator, DateTimeOffset CreatedAt)
 {
-    public static UserSummary Of(User user) => new(user.Id, user.Kind, user.Name, user.Administrator, user.CreatedAt);
+    public static UserSummary Of(User user) => new(user.Id, user.Kind, user.Name, user.Email, user.State,
+        user.Administrator, user.CreatedAt);
 }
 
 /// <summary>A token as a list shows it: enough to tell it apart and to revoke it, nothing that admits.</summary>

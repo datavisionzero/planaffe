@@ -20,6 +20,12 @@ public interface IIdentities
 
     Task<Agent?> FindAgentAsync(Guid id, CancellationToken cancellationToken);
 
+    Task<User?> FindUserAsync(Guid id, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task<User?> FindUserByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     /// <summary>By name, regardless of case — how the API and the CLI address identities.</summary>
     Task<Identity?> FindByNameAsync(string name, CancellationToken cancellationToken);
 
@@ -49,6 +55,15 @@ public interface IIdentities
     /// race between the check above and the insert.
     /// </exception>
     Task AddAsync(Identity identity, Token token, CancellationToken cancellationToken);
+
+    Task AddUserAsync(User user, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task RecordUserAsync(User user, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task<bool> TryRecordBootstrapExchangeAsync(Guid userId, string passwordHash, DateTimeOffset at,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
 
     /// <summary>Writes back the name just given to <paramref name="agent"/>.</summary>
     /// <exception cref="Domain.Refusal">As <see cref="AddAsync"/>.</exception>

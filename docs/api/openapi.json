@@ -58,12 +58,148 @@
         }
       }
     },
+    "/session": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "SignIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordSignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "SignOut",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/session/bootstrap": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "ExchangeBootstrapToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BootstrapExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/invitations/accept": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "AcceptInvitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecretPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/password-recovery": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "RequestPasswordRecovery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          }
+        }
+      }
+    },
+    "/password-recovery/complete": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "CompletePasswordRecovery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecretPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/users": {
       "post": {
         "tags": [
           "planaffe"
         ],
-        "summary": "Create a user and hand over their first user token, shown once. Administrators only.",
+        "summary": "Invite a user by email. Administrators only.",
         "operationId": "CreateUser",
         "requestBody": {
           "content": {
@@ -101,7 +237,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatedUser"
+                  "$ref": "#/components/schemas/UserSummary"
                 }
               }
             }
@@ -594,6 +730,87 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/sessions": {
+      "get": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "ListBrowserSessions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BrowserSessionSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "RevokeOtherBrowserSessions",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/sessions/{id}": {
+      "delete": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "RevokeBrowserSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/me/password": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "operationId": "ChangePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
           }
         }
       }
@@ -4401,6 +4618,58 @@
           }
         }
       },
+      "BootstrapExchangeRequest": {
+        "required": [
+          "token",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BrowserSessionSummary": {
+        "required": [
+          "id",
+          "created_at",
+          "last_used_at",
+          "expires_at",
+          "current"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "current": {
+            "type": "boolean"
+          }
+        }
+      },
       "ChangeEpicRequest": {
         "required": [
           "title",
@@ -4542,6 +4811,27 @@
         }
       },
       "ChangeLabelRequest": {},
+      "ChangePasswordRequest": {
+        "required": [
+          "current_password",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "current_password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ChangeProjectRequest": {
         "required": [
           "name",
@@ -4842,11 +5132,18 @@
       "CreateUserRequest": {
         "required": [
           "name",
+          "email",
           "administrator"
         ],
         "type": "object",
         "properties": {
           "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
             "type": [
               "null",
               "string"
@@ -4904,39 +5201,6 @@
             "items": {
               "$ref": "#/components/schemas/Issue"
             }
-          }
-        }
-      },
-      "CreatedUser": {
-        "required": [
-          "id",
-          "kind",
-          "name",
-          "administrator",
-          "created_at",
-          "token"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/IdentityKind"
-          },
-          "name": {
-            "type": "string"
-          },
-          "administrator": {
-            "type": "boolean"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "token": {
-            "$ref": "#/components/schemas/IssuedToken"
           }
         }
       },
@@ -5651,7 +5915,14 @@
             ]
           },
           "token": {
-            "$ref": "#/components/schemas/TokenRef"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TokenRef"
+              }
+            ]
           },
           "metadata": {
             "oneOf": [
@@ -5934,6 +6205,27 @@
               "integer"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "PasswordSignInRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -6272,6 +6564,20 @@
           }
         }
       },
+      "RecoveryRequest": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "Release": {
         "required": [
           "name",
@@ -6409,6 +6715,27 @@
           }
         }
       },
+      "SecretPasswordRequest": {
+        "required": [
+          "secret",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "secret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "SendTestEmailRequest": {
         "required": [
           "email"
@@ -6508,11 +6835,21 @@
           }
         }
       },
+      "UserState": {
+        "enum": [
+          "invited",
+          "active",
+          "deactivated"
+        ],
+        "type": "string"
+      },
       "UserSummary": {
         "required": [
           "id",
           "kind",
           "name",
+          "email",
+          "state",
           "administrator",
           "created_at"
         ],
@@ -6527,6 +6864,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/UserState"
           },
           "administrator": {
             "type": "boolean"

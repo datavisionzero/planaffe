@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
+using System.Text.RegularExpressions;
 
 namespace Planaffe.IntegrationTests;
 
@@ -65,6 +66,49 @@ public sealed class SmtpEndpointTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.UnprocessableEntity, sent.StatusCode);
         var problem = await sent.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
         Assert.Equal("/problems/smtp-not-configured", problem.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task An_invited_user_activates_and_recovers_their_password_from_emailed_links()
+    {
+        await using var instance = await AnInstance.ConfiguredAsync(postgres, ConfiguredMailpit());
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        using var invited = await admin.PostAsJsonAsync("/users",
+            new { name = "other", email = "other@example.test" }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
+
+        var invitationSecret = await SecretFromLatestMessage("activate");
+        using var browser = instance.ClientWith(null);
+        using var accepted = await browser.PostAsJsonAsync("/invitations/accept",
+            new { secret = invitationSecret, password = "the first long password" }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, accepted.StatusCode);
+
+        using var login = await browser.PostAsJsonAsync("/session",
+            new { email = "OTHER@example.test", password = "the first long password" }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+
+        using var requested = await browser.PostAsJsonAsync("/password-recovery",
+            new { email = "other@example.test" }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Accepted, requested.StatusCode);
+        var recoverySecret = await SecretFromLatestMessage("recover");
+        using var completed = await browser.PostAsJsonAsync("/password-recovery/complete",
+            new { secret = recoverySecret, password = "the replacement password" }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, completed.StatusCode);
+
+        using var replacement = await browser.PostAsJsonAsync("/session",
+            new { email = "other@example.test", password = "the replacement password" }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, replacement.StatusCode);
+    }
+
+    private async Task<string> SecretFromLatestMessage(string path)
+    {
+        using var mailpit = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{_mailpit.GetMappedPublicPort(8025)}") };
+        var messages = await mailpit.GetFromJsonAsync<JsonElement>("/api/v1/messages", TestContext.Current.CancellationToken);
+        var id = messages.GetProperty("messages")[0].GetProperty("ID").GetString();
+        var message = await mailpit.GetFromJsonAsync<JsonElement>($"/api/v1/message/{id}", TestContext.Current.CancellationToken);
+        var match = Regex.Match(message.GetProperty("Text").GetString()!, $@"/{path}\?secret=([^\s]+)");
+        Assert.True(match.Success, message.GetProperty("Text").GetString());
+        return Uri.UnescapeDataString(match.Groups[1].Value);
     }
 
     private Dictionary<string, string?> ConfiguredMailpit() => new()

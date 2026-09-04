@@ -23,7 +23,7 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		case r.URL.Path == "/version":
 			return 200, `{"version":"0.0.0-dev"}`
 		case r.Method == http.MethodPost && r.URL.Path == "/users":
-			return 201, `{"id":"0198e0c0-0000-7000-8000-000000000003","kind":"user","name":"other","administrator":false,"created_at":"2026-09-02T14:00:00.000000Z","token":` + issued + `}`
+			return 201, `{"id":"0198e0c0-0000-7000-8000-000000000003","kind":"user","name":"other","email":"other@example.test","state":"invited","administrator":false,"created_at":"2026-09-02T14:00:00.000000Z"}`
 		case r.URL.Path == "/users":
 			return 200, `[{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer","administrator":true,"created_at":"2026-09-02T14:00:00.000000Z"}]`
 		case r.Method == http.MethodPost && r.URL.Path == "/agents":
@@ -56,7 +56,7 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		{[]string{"me"}, "GET", "/me", nil, "maintainer (user)  administrator", ""},
 		{[]string{"me", "set", "--kind", "codex", "--harness", "none", "--environment", "container", "--version", "1.2.3"}, "PATCH", "/me/metadata", map[string]any{"kind": "codex", "harness": nil, "environment": "container", "version": "1.2.3"}, "metadata:", ""},
 		{[]string{"version"}, "GET", "/version", nil, "pa 0.0.0-dev\nplanaffe 0.0.0-dev", ""},
-		{[]string{"user", "create", "other"}, "POST", "/users", map[string]any{"name": "other"}, "token: pa_secret-shown-once", "shown once"},
+		{[]string{"user", "create", "other", "--email", "other@example.test"}, "POST", "/users", map[string]any{"name": "other", "email": "other@example.test"}, "other invited", ""},
 		{[]string{"user", "list"}, "GET", "/users", nil, "maintainer", ""},
 		{[]string{"agent", "create", "--name", "quiet-otter-42"}, "POST", "/agents", map[string]any{"name": "quiet-otter-42"}, "token: pa_secret-shown-once", "shown once"},
 		{[]string{"agent", "list"}, "GET", "/agents", nil, "quiet-otter-42", ""},

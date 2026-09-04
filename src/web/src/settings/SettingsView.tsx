@@ -18,9 +18,9 @@ export function SettingsView() {
           <dd>{me.name}</dd>
           <dt className="text-muted-foreground">Kind</dt>
           <dd>{me.kind}{me.administrator ? " · administrator" : ""}</dd>
-          <dt className="text-muted-foreground">Token</dt>
-          <dd className="font-mono text-xs">
-            {me.token.prefix}… <span className="font-sans text-muted-foreground">since {new Date(me.token.created_at).toLocaleDateString()}</span>
+          <dt className="text-muted-foreground">Access</dt>
+          <dd className="text-xs">
+            {me.token ? <span className="font-mono">{me.token.prefix}… <span className="font-sans text-muted-foreground">since {new Date(me.token.created_at).toLocaleDateString()}</span></span> : "Browser session"}
           </dd>
         </dl>
         <p className="text-xs text-muted-foreground">

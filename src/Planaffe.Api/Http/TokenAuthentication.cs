@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Planaffe.Application.Acts;
 using Planaffe.Application.Ports;
 using Planaffe.Domain;
+using Planaffe.Domain.Identities;
 
 namespace Planaffe.Api.Http;
 
@@ -42,21 +43,31 @@ public static class TokenAuthentication
 public sealed class TokenAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
-    UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    UrlEncoder encoder,
+    BrowserCookie cookie,
+    IBrowserSessions sessions,
+    TimeProvider clock) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var presented = Request.Headers.Authorization.ToString();
-        if (string.IsNullOrEmpty(presented))
+        Caller? caller;
+        if (!string.IsNullOrEmpty(presented))
         {
-            // Not a failure: a client that has not been configured with a token
-            // yet sends nothing, and the challenge below is what tells it so.
-            return AuthenticateResult.NoResult();
+            caller = await Context.RequestServices
+                .GetRequiredService<AuthenticateToken>()
+                .ExecuteAsync(presented, Context.RequestAborted);
         }
-
-        var caller = await Context.RequestServices
-            .GetRequiredService<AuthenticateToken>()
-            .ExecuteAsync(presented, Context.RequestAborted);
+        else if (Request.Cookies.TryGetValue(cookie.Name, out var sessionSecret))
+        {
+            try
+            {
+                var admitted = await sessions.AuthenticateAsync(BrowserSession.Hash(sessionSecret), clock.GetUtcNow(), Context.RequestAborted);
+                caller = admitted is null ? null : Caller.Of(admitted.User, admitted.Session);
+            }
+            catch (Exception exception) when (exception is ArgumentException or FormatException) { caller = null; }
+        }
+        else return AuthenticateResult.NoResult();
 
         if (caller is null)
         {
@@ -79,7 +90,7 @@ public sealed class TokenAuthenticationHandler(
         Problems.WriteAsync(
             Context,
             RefusalCode.Unauthenticated,
-            "Send a user token or an agent token as `Authorization: Bearer <token>`.");
+            "Sign in with a browser session or send a user token or agent token as `Authorization: Bearer <token>`.");
 
     protected override Task HandleForbiddenAsync(AuthenticationProperties properties) =>
         Problems.WriteAsync(Context, RefusalCode.Forbidden, detail: null);

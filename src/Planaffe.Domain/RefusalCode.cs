@@ -34,6 +34,9 @@ public enum RefusalCode
     /// <summary>No token, an unknown token, or a revoked one.</summary>
     Unauthenticated,
 
+    /// <summary>A cookie-authenticated write is missing the browser CSRF proof.</summary>
+    Csrf,
+
     /// <summary>The identity may not do this.</summary>
     Forbidden,
 
@@ -93,6 +96,12 @@ public enum RefusalCode
 
     /// <summary>An act that necessarily sends mail was used without SMTP configuration.</summary>
     SmtpNotConfigured,
+
+    /// <summary>An invitation or confirmed email duplicates a normalized address.</summary>
+    EmailExists,
+
+    /// <summary>A one-time identity secret is unknown, replaced, used or expired.</summary>
+    SecretExpired,
 
     /// <summary>A bug; the response carries nothing else.</summary>
     Internal,

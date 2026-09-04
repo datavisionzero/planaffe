@@ -4,38 +4,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { aUser, installInstance, renderAt } from "@/shared/testing";
 import { SignIn } from "./SignIn";
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-  window.localStorage.clear();
-});
+afterEach(() => vi.unstubAllGlobals());
 
-describe("signing in with a token", () => {
-  it("keeps a token the instance recognises", async () => {
-    const { calls } = installInstance({
-      "GET /me": (request) =>
-        request.headers.get("Authorization") === "Bearer pa_right" ? aUser : { status: 401, body: {} },
-    });
-    const signedIn = vi.fn();
-    renderAt("/", <SignIn onSignedIn={signedIn} />);
-    const user = userEvent.setup();
-
-    await user.type(screen.getByLabelText("Your token"), "pa_right");
+describe("password sign in", () => {
+  it("creates a session and asks who it belongs to", async () => {
+    const { calls } = installInstance({ "POST /session": { status: 204 }, "GET /me": aUser });
+    const signedIn = vi.fn(); renderAt("/login", <SignIn onSignedIn={signedIn} />); const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Email"), "maintainer@example.test");
+    await user.type(screen.getByLabelText("Password"), "a long password");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-
     expect(await vi.waitFor(() => signedIn.mock.calls[0]?.[0])).toEqual(aUser);
-    expect(window.localStorage.getItem("planaffe.token")).toBe("pa_right");
-    expect(calls).toHaveLength(1);
+    expect(await calls[0].json()).toEqual({ email: "maintainer@example.test", password: "a long password" });
+    expect(calls[0].headers.get("X-Planaffe-CSRF")).toBe("1");
   });
 
-  it("refuses a token the instance does not know, and keeps nothing", async () => {
-    installInstance({ "GET /me": { status: 401, body: {} } });
-    renderAt("/", <SignIn onSignedIn={vi.fn()} />);
-    const user = userEvent.setup();
-
-    await user.type(screen.getByLabelText("Your token"), "pa_wrong");
+  it("shows the indistinguishable refusal", async () => {
+    installInstance({ "POST /session": { status: 401, body: { detail: "The email or password is not correct." } } });
+    renderAt("/login", <SignIn onSignedIn={vi.fn()} />); const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Email"), "nobody@example.test"); await user.type(screen.getByLabelText("Password"), "wrong");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("does not know this token");
-    expect(window.localStorage.getItem("planaffe.token")).toBeNull();
+    expect(await screen.findByRole("alert")).toHaveTextContent("email or password");
   });
 });
