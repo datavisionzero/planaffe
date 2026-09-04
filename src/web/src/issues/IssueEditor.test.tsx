@@ -53,3 +53,37 @@ it("does not send an unchanged parking status while editing fields", async () =>
   expect(sent).toMatchObject({ title: "After", priority: 3 });
   expect(sent).not.toHaveProperty("status");
 });
+
+// Parking is `todo` to `backlog` and back on an unclaimed issue (ADR 0016).
+// The editor collapsed every other status to "Todo", so it showed the wrong
+// one and offered a move the instance refuses — and the refusal took the
+// title and the description edited beside it with it.
+it("shows a status it cannot park and sends no status with the fields", async () => {
+  const person = { id: "0199a000-0000-7000-8000-000000000001", kind: "user" as const, name: "maintainer" };
+  const issue: Issue = {
+    key: "PLAN-10", project: "PLAN", title: "Before", description: "Context", result: null,
+    status: "in_progress", ready: true, priority: 1, labels: [],
+    epic: null, parent: null, release: null, sub_issues: [], assignee: null,
+    claim: { holder: person, since: "2026-09-02T10:00:00Z", expires_at: "2026-09-02T14:00:00Z" }, author: person,
+    blocked_by: [], blocks: [], open_questions: 0, open_blockers: 0, open_sub_issues: 0, comments: [], questions: [],
+    project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: false, labels: [] },
+    created_at: "2026-09-02T10:00:00Z", updated_at: "2026-09-02T10:00:00Z", closed_at: null,
+  };
+  const instance = installInstance({ "PATCH /issues/PLAN-10": { body: { ...issue, title: "After" } } });
+  renderAt("/", <EditIssueForm issue={issue} onSaved={vi.fn()} onCancel={vi.fn()} />);
+  const user = userEvent.setup();
+
+  const status = screen.getByLabelText("Status", { exact: false });
+  expect(status).toBeDisabled();
+  expect(status).toHaveValue("in_progress");
+  expect(status).toHaveTextContent("in progress");
+
+  await user.clear(screen.getByLabelText("Title"));
+  await user.type(screen.getByLabelText("Title"), "After");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await vi.waitFor(() => expect(instance.calls.some((call) => call.method === "PATCH")).toBe(true));
+  const sent = await instance.calls.find((call) => call.method === "PATCH")!.json();
+  expect(sent).toMatchObject({ title: "After" });
+  expect(sent).not.toHaveProperty("status");
+});

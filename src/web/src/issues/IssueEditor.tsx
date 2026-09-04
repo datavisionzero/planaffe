@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
 import { priorityLabel } from "./priority";
+import { statusLabel } from "./statusLabel";
 
 type NewIssue = Schemas["NewIssue"];
 
@@ -33,8 +34,7 @@ export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSa
   const [error, setError] = useState<string>();
   async function save(draft: IssueDraft) {
     setSaving(true); setError(undefined);
-    const currentParking = issue.status === "backlog" ? "backlog" : "todo";
-    const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: words(draft.labels), epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), ...(draft.status === currentParking ? {} : { status: draft.status }) };
+    const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: words(draft.labels), epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), ...(parkable(issue) && draft.status !== issue.status ? { status: draft.status } : {}) };
     try {
       const { data, error: problem, response } = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: body as never });
       if (!data) { setError(describe(problem, response.status)); return; }
@@ -42,6 +42,17 @@ export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSa
     } catch { setError("The instance did not answer."); } finally { setSaving(false); }
   }
   return <IssueForm initial={issue} submit="Save changes" saving={saving} error={error} onSubmit={save} onCancel={onCancel} />;
+}
+
+/**
+ * Whether the editor may move the status at all. Parking is the one status
+ * move that is a field write, `todo` to `backlog` and back on an open,
+ * unclaimed issue (ADR 0016); every other move is an act of its own. Offering
+ * the choice anywhere else sent a change the instance refuses, and the refusal
+ * took the title and the description edited beside it with it.
+ */
+function parkable(issue: Issue | undefined): boolean {
+  return issue === undefined || ((issue.status === "todo" || issue.status === "backlog") && issue.claim === null);
 }
 
 type IssueDraft = { title: string; description: string; priority: number; ready: boolean; labels: string; epic: string; parent: string; assignee: string; blockedBy: string; status: "backlog" | "todo" };
@@ -52,7 +63,7 @@ function IssueForm({ initial, submit, saving, error, onSubmit, onCancel }: { ini
   return <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => { event.preventDefault(); void onSubmit(draft); }}>
     <label className="grid gap-1 text-sm font-medium">Title<Input required autoFocus value={draft.title} onChange={(e) => set("title", e.target.value)} /></label>
     <MarkdownField label="Description" value={draft.description} onChange={(value) => set("description", value)} />
-    <div className="grid gap-3 sm:grid-cols-3"><Select label="Priority" value={draft.priority} onChange={(value) => set("priority", Number(value))}>{[0,1,2,3,4].map((x) => <option key={x} value={x}>{priorityLabel(x)}</option>)}</Select><Select label="Status" value={draft.status} onChange={(value) => set("status", value as "backlog" | "todo")}><option value="todo">Todo</option><option value="backlog">Backlog</option></Select><label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={draft.ready} onChange={(e) => set("ready", e.target.checked)} /> Ready</label></div>
+    <div className="grid gap-3 sm:grid-cols-3"><Select label="Priority" value={draft.priority} onChange={(value) => set("priority", Number(value))}>{[0,1,2,3,4].map((x) => <option key={x} value={x}>{priorityLabel(x)}</option>)}</Select>{parkable(initial) ? <Select label="Status" value={draft.status} onChange={(value) => set("status", value as "backlog" | "todo")}><option value="todo">Todo</option><option value="backlog">Backlog</option></Select> : <Select label="Status" hint="Changed through the issue's own actions" value={initial!.status} disabled onChange={() => undefined}><option value={initial!.status}>{statusLabel(initial!.status)}</option></Select>}<label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={draft.ready} onChange={(e) => set("ready", e.target.checked)} /> Ready</label></div>
     <div className="grid gap-3 sm:grid-cols-2"><Text label="Labels" hint="Comma separated" value={draft.labels} change={(v) => set("labels", v)} /><Text label="Epic" value={draft.epic} change={(v) => set("epic", v)} /><Text label="Parent issue" value={draft.parent} change={(v) => set("parent", v)} /><Text label="Assignee" value={draft.assignee} change={(v) => set("assignee", v)} />{!initial && <Text label="Blocked by" hint="Comma separated issue keys" value={draft.blockedBy} change={(v) => set("blockedBy", v)} />}</div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <div className="flex justify-end gap-2">{onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}<Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button></div>
@@ -66,6 +77,6 @@ export function MarkdownField({ label, value, onChange, required }: { label: str
 }
 
 function Text({ label, hint, value, change }: { label: string; hint?: string; value: string; change: (value: string) => void }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<Input value={value} onChange={(e) => change(e.target.value)} /></label>; }
-function Select({ label, value, onChange, children }: { label: string; value: string | number; onChange: (value: string) => void; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-medium">{label}<select className="h-8 rounded-lg border bg-background px-2" value={value} onChange={(e) => onChange(e.target.value)}>{children}</select></label>; }
+function Select({ label, hint, value, disabled, onChange, children }: { label: string; hint?: string; value: string | number; disabled?: boolean; onChange: (value: string) => void; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<select className="h-8 rounded-lg border bg-background px-2 disabled:text-muted-foreground" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>{children}</select></label>; }
 function blank(value: string) { return value.trim() || null; }
 function words(value: string) { return value.split(",").map((x) => x.trim()).filter(Boolean); }
