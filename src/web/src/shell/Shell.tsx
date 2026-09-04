@@ -9,9 +9,12 @@ import { EpicsView } from "@/epics/EpicsView";
 import { IssueListView } from "@/issues/IssueListView";
 import { LabelsView } from "@/projects/LabelsView";
 import { ProjectSwitcher } from "@/projects/ProjectSwitcher";
+import { NewProjectView } from "@/projects/NewProjectView";
 import { lastProject, rememberProject, useProjects } from "@/projects/useProjects";
 import { ReleasesView } from "@/releases/ReleasesView";
 import { SettingsView } from "@/settings/SettingsView";
+import { AdminView } from "@/settings/AdminView";
+import { ProjectSettingsView } from "@/settings/ProjectSettingsView";
 import { AccountMenu } from "./AccountMenu";
 import { AppSidebar } from "./AppSidebar";
 import { Palette } from "./Palette";
@@ -95,6 +98,8 @@ export function Shell() {
         <Routes>
           <Route path="/" element={<Landing projects={projects} />} />
           <Route path="/settings/*" element={<SettingsView />} />
+          <Route path="/admin" element={<AdminView />} />
+          <Route path="/projects/new" element={<NewProjectView />} />
           <Route path="/:project">
             <Route index element={<Navigate to="ready" replace />} />
             {views
@@ -107,6 +112,7 @@ export function Shell() {
             <Route path="epics/:key" element={<EpicsView />} />
             <Route path="releases" element={<ReleasesView />} />
             <Route path="labels" element={<LabelsView />} />
+            <Route path="settings" element={<ProjectSettingsView />} />
           </Route>
         </Routes>
       </SidebarInset>

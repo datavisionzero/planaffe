@@ -11,6 +11,21 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task Administration_lists_live_and_deleted_projects()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "LIVE", name = "live" }, Ct);
+        await admin.PostAsJsonAsync("/projects", new { key = "GONE", name = "gone" }, Ct);
+        await admin.DeleteAsync("/projects/GONE", Ct);
+
+        var all = await admin.GetFromJsonAsync<JsonElement>("/admin/projects?deleted=all", Ct);
+        Assert.Equal(2, all.GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, all.EnumerateArray().Single(x => x.GetProperty("key").GetString() == "LIVE").GetProperty("deleted_at").ValueKind);
+        Assert.NotEqual(JsonValueKind.Null, all.EnumerateArray().Single(x => x.GetProperty("key").GetString() == "GONE").GetProperty("deleted_at").ValueKind);
+    }
+
+    [Fact]
     public async Task A_project_round_trips_with_its_switches_and_its_kind_labels()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

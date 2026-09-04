@@ -15,6 +15,12 @@ public static class ProjectEndpoints
 {
     public static IEndpointRouteBuilder MapProjects(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGet("/admin/projects", (string? deleted, ListAdminProjects list, CancellationToken ct) =>
+                list.ExecuteAsync(deleted, ct))
+            .RequireAuthorization().WithName("ListAdminProjects")
+            .WithSummary("Every project, optionally including deleted projects. Administrators only.")
+            .ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status403Forbidden);
+
         var door = endpoints.MapGroup("/projects")
             .RequireAuthorization()
             .ProducesProblem(StatusCodes.Status401Unauthorized);

@@ -24,6 +24,7 @@ public sealed record Me(
     IdentityKind Kind,
     string Name,
     bool Administrator,
+    string? Email,
     IdentityRef? Owner,
     TokenRef? Token,
     AgentMetadata? Metadata,
@@ -45,12 +46,16 @@ public sealed class ReadMe(ICallerIdentity callerIdentity, IIdentities identitie
         var agent = caller.IsAgent
             ? await identities.FindAgentAsync(caller.Id, cancellationToken)
             : null;
+        var user = caller.IsAgent
+            ? null
+            : await identities.FindUserAsync(caller.Id, cancellationToken);
 
         return new Me(
             caller.Id,
             caller.Kind,
             caller.Name,
             caller.Administrator,
+            user?.Email,
             owner is null ? null : IdentityRef.Of(owner),
             caller.SessionId is null ? new TokenRef(caller.TokenPrefix, caller.TokenCreatedAt) : null,
             agent?.Metadata,

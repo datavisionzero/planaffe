@@ -1,4 +1,5 @@
 import { NavLink } from "react-router";
+import { SettingsIcon } from "lucide-react";
 import type { Project } from "@/api/client";
 import {
   Sidebar,
@@ -71,6 +72,7 @@ export function AppSidebar({ project }: { project: Project | undefined }) {
                       )}
                     </SidebarMenuItem>
                   ))}
+                {group.id === "structure" && project !== undefined && <SidebarMenuItem><NavLink to={`/${project.key}/settings`} onClick={() => setOpenMobile(false)} className="contents">{({ isActive }) => <SidebarMenuButton isActive={isActive} render={<span />}><SettingsIcon /><span>Project settings</span></SidebarMenuButton>}</NavLink></SidebarMenuItem>}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

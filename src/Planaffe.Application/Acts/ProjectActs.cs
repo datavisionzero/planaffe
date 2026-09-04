@@ -18,6 +18,22 @@ public sealed record ProjectShape(
         new(project.Key, project.Name, project.TriageRequired, project.ReviewRequired, project.CreatedAt, project.UpdatedAt);
 }
 
+public sealed record AdminProjectShape(string Key, string Name, DateTimeOffset CreatedAt, DateTimeOffset? DeletedAt);
+
+public sealed class ListAdminProjects(ICallerIdentity callerIdentity, IProjects projects)
+{
+    public async Task<IReadOnlyList<AdminProjectShape>> ExecuteAsync(string? deleted, CancellationToken cancellationToken)
+    {
+        callerIdentity.Caller.RequireAdministrator("list all projects");
+        var filter = deleted?.Trim().ToLowerInvariant() ?? "false";
+        if (filter is not ("true" or "false" or "all"))
+            throw Refusal.Validation("deleted", "Deleted must be true, false, or all.");
+        return [.. (await projects.ListAllAsync(cancellationToken))
+            .Where(project => filter == "all" || project.Deleted == (filter == "true"))
+            .Select(project => new AdminProjectShape(project.Key, project.Name, project.CreatedAt, project.DeletedAt))];
+    }
+}
+
 /// <summary>
 /// The lookups every project act starts with: the live project by key, or the
 /// refusal that says what is there instead.

@@ -1,4 +1,4 @@
-import { CheckIcon, LogOutIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { CheckIcon, LogOutIcon, MonitorIcon, MoonIcon, SettingsIcon, ShieldIcon, SunIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,10 @@ export function AccountMenu() {
           <SettingsIcon />
           Settings
         </DropdownMenuItem>
+        {me.administrator && <DropdownMenuItem onClick={() => void navigate("/admin")}>
+          <ShieldIcon />
+          Instance administration
+        </DropdownMenuItem>}
         <DropdownMenuItem onClick={signOut}>
           <LogOutIcon />
           Sign out

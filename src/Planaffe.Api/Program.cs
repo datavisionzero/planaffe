@@ -58,6 +58,7 @@ builder.Services.AddScoped<ReportAgentMetadata>();
 // agents and tokens are a user's acts, users an administrator's.
 builder.Services.AddScoped<CreateUser>();
 builder.Services.AddScoped<ListUsers>();
+builder.Services.AddScoped<RenameUser>();
 builder.Services.AddScoped<ResendInvitation>();
 builder.Services.AddScoped<ChangeUserLifecycle>();
 builder.Services.AddScoped<RequestEmailChange>();
@@ -89,6 +90,7 @@ builder.Services.AddSingleton(InstanceSettings.FromVariables(
 // extensibility the product offers.
 builder.Services.AddScoped<CreateProject>();
 builder.Services.AddScoped<ListProjects>();
+builder.Services.AddScoped<ListAdminProjects>();
 builder.Services.AddScoped<ReadProject>();
 builder.Services.AddScoped<ChangeProject>();
 builder.Services.AddScoped<DeleteProject>();

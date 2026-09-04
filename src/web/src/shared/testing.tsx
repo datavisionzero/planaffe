@@ -68,6 +68,7 @@ export const aUser = {
   kind: "user" as const,
   name: "maintainer",
   administrator: true,
+  email: "maintainer@example.test",
   owner: null,
   token: { prefix: "pa_abcd", created_at: "2026-09-02T10:00:00Z" },
   metadata: null,

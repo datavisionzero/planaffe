@@ -10,6 +10,7 @@ namespace Planaffe.Api.Http;
 /// <param name="Administrator">Whether the new user administers the instance. Off when left out.</param>
 public sealed record CreateUserRequest(string? Name, string? Email, bool? Administrator);
 public sealed record ChangeAdministratorRequest(bool? Administrator);
+public sealed record RenameUserRequest(string? Name);
 public sealed record EmailChangeRequest(string? Email);
 public sealed record SecretRequest(string? Secret);
 
@@ -110,6 +111,11 @@ public static class IdentityEndpoints
             { await change.ExecuteAsync(request?.Email, ct); return Results.Accepted(); })
             .WithName("RequestEmailChange").WithSummary("Send confirmation to a user's new email address.")
             .Produces(StatusCodes.Status202Accepted);
+
+        door.MapPatch("/me", (RenameUserRequest? request, RenameUser rename, CancellationToken ct) =>
+                rename.ExecuteAsync(request?.Name, ct))
+            .WithName("RenameUser").WithSummary("Change the caller user's name.")
+            .Produces<UserSummary>().ProducesProblem(StatusCodes.Status400BadRequest);
 
         endpoints.MapPost("/email-changes/confirm", async (SecretRequest? request, ConfirmEmailChange confirm, CancellationToken ct) =>
             { await confirm.ExecuteAsync(request?.Secret, ct); return Results.NoContent(); })

@@ -56,6 +56,65 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Change the caller user's name.",
+        "operationId": "RenameUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/email-changes/confirm": {
@@ -224,6 +283,59 @@
         "responses": {
           "204": {
             "description": "No Content"
+          }
+        }
+      }
+    },
+    "/admin/projects": {
+      "get": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Every project, optionally including deleted projects. Administrators only.",
+        "operationId": "ListAdminProjects",
+        "parameters": [
+          {
+            "name": "deleted",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminProject"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -4918,6 +5030,34 @@
   },
   "components": {
     "schemas": {
+      "AdminProject": {
+        "required": [
+          "key",
+          "name",
+          "created_at",
+          "deleted_at"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "AgentMetadata": {
         "required": [
           "kind",
@@ -6419,6 +6559,7 @@
           "kind",
           "name",
           "administrator",
+          "email",
           "owner",
           "token",
           "metadata",
@@ -6438,6 +6579,12 @@
           },
           "administrator": {
             "type": "boolean"
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "owner": {
             "oneOf": [
@@ -7209,6 +7356,20 @@
         }
       },
       "RenameAgentRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RenameUserRequest": {
         "required": [
           "name"
         ],

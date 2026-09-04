@@ -16,6 +16,19 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task A_user_reads_their_email_and_changes_their_name()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        var before = await admin.GetFromJsonAsync<JsonElement>("/me", Ct);
+        Assert.Equal("maintainer@example.test", before.GetProperty("email").GetString());
+
+        using var changed = await admin.PatchAsJsonAsync("/me", new { name = "new maintainer" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        Assert.Equal("new maintainer", (await changed.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("name").GetString());
+    }
+
+    [Fact]
     public async Task Deactivation_suspends_a_user_and_their_agents_and_reactivation_restores_unrevoked_tokens()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

@@ -21,6 +21,7 @@ public interface IProjects
 
     /// <summary>Every live project, by key.</summary>
     Task<IReadOnlyList<Project>> ListAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<Project>> ListAllAsync(CancellationToken cancellationToken);
 
     /// <summary>The project and its first labels in one transaction.</summary>
     /// <exception cref="Domain.Refusal"><c>validation</c> on <c>key</c> when the unique index refuses it.</exception>

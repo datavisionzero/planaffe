@@ -25,6 +25,9 @@ public sealed class Projects(PlanaffeDbContext context) : IProjects
     public async Task<IReadOnlyList<Project>> ListAsync(CancellationToken cancellationToken) =>
         await context.Projects.Where(p => p.DeletedAt == null).OrderBy(p => p.Key).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Project>> ListAllAsync(CancellationToken cancellationToken) =>
+        await context.Projects.OrderBy(p => p.Key).ToListAsync(cancellationToken);
+
     public async Task AddAsync(Project project, IEnumerable<Label> labels, Release release, ProjectAccess creatorAccess,
         CancellationToken cancellationToken)
     {

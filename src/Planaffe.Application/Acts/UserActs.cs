@@ -50,6 +50,20 @@ public sealed class ListUsers(ICallerIdentity callerIdentity, IIdentities identi
     }
 }
 
+/// <summary>A user changes the name shown on future history entries.</summary>
+public sealed class RenameUser(ICallerIdentity callerIdentity, IIdentities identities)
+{
+    public async Task<UserSummary> ExecuteAsync(string? name, CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller.RequireUser("change their name");
+        var user = await identities.FindUserAsync(caller.Id, cancellationToken)
+            ?? throw new Refusal(RefusalCode.NotFound, "No user has that id.");
+        Validated.Field("name", () => { user.Rename(name!); return true; });
+        await identities.RecordUserAsync(user, cancellationToken);
+        return UserSummary.Of(user);
+    }
+}
+
 public sealed class ResendInvitation(ICallerIdentity callerIdentity, IIdentities identities, IOneTimeSecrets secrets,
     IEmailSender emailSender, SmtpSettings smtp, TimeProvider clock)
 {

@@ -320,7 +320,7 @@ Where a rule differs between a user and an agent, the endpoint below says so.
 | method | path | who | does |
 |---|---|---|---|
 | `GET` | `/version` | anyone | `{ "version": "0.3.0" }`, no authentication |
-| `GET` | `/me` | any | the caller: `IdentityRef` plus `administrator`, `owner` (for an agent) and the presented `token` reference for Bearer authentication; `token` is null for a browser session |
+| `GET` | `/me` | any | the caller: `IdentityRef` plus `administrator`, `email` (for a user), `owner` (for an agent) and the presented `token` reference for Bearer authentication; `token` is null for a browser session |
 
 ### Users, agents and tokens
 

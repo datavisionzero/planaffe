@@ -40,7 +40,7 @@ public sealed class ContractTests(PostgresFixture postgres)
         var paths = document["paths"]!.AsObject().Select(path => path.Key).Order(StringComparer.Ordinal);
         Assert.Equal(
             [
-                "/admin/smtp", "/admin/smtp/test",
+                "/admin/projects", "/admin/smtp", "/admin/smtp/test",
                 "/agents", "/agents/{id}",
                 "/email-changes/confirm",
                 "/epics", "/epics/{key}", "/epics/{key}/close", "/epics/{key}/reopen", "/epics/{key}/restore",
