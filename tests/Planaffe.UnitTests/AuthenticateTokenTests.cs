@@ -29,7 +29,7 @@ public sealed class AuthenticateTokenTests
     {
         var store = new Store(null);
 
-        Assert.Null(await new AuthenticateToken(store).ExecuteAsync(authorization, CancellationToken.None));
+        Assert.Null(await new AuthenticateToken(store, new IdentityStore()).ExecuteAsync(authorization, CancellationToken.None));
         Assert.Equal(0, store.Lookups);
     }
 
@@ -39,7 +39,7 @@ public sealed class AuthenticateTokenTests
         var token = Token.Issue(Maintainer, Secret, Now);
         var store = new Store(new PresentedToken(token, Maintainer));
 
-        var caller = await new AuthenticateToken(store).ExecuteAsync($"Bearer {Secret}", CancellationToken.None);
+        var caller = await new AuthenticateToken(store, new IdentityStore()).ExecuteAsync($"Bearer {Secret}", CancellationToken.None);
 
         Assert.NotNull(caller);
         Assert.Equal(Maintainer.Id, caller.Id);
@@ -56,7 +56,7 @@ public sealed class AuthenticateTokenTests
     {
         var store = new Store(new PresentedToken(Token.Issue(Maintainer, Secret, Now), Maintainer));
 
-        Assert.NotNull(await new AuthenticateToken(store).ExecuteAsync($"bearer {Secret}", CancellationToken.None));
+        Assert.NotNull(await new AuthenticateToken(store, new IdentityStore()).ExecuteAsync($"bearer {Secret}", CancellationToken.None));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class AuthenticateTokenTests
         token.Revoke(Now.AddMinutes(1));
         var store = new Store(new PresentedToken(token, Maintainer));
 
-        Assert.Null(await new AuthenticateToken(store).ExecuteAsync($"Bearer {Secret}", CancellationToken.None));
+        Assert.Null(await new AuthenticateToken(store, new IdentityStore()).ExecuteAsync($"Bearer {Secret}", CancellationToken.None));
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class AuthenticateTokenTests
         var agent = Agent.Create("quiet-otter-42", Maintainer.Id, Now);
         var store = new Store(new PresentedToken(Token.Issue(agent, Secret, Now), agent));
 
-        var caller = await new AuthenticateToken(store).ExecuteAsync($"Bearer {Secret}", CancellationToken.None);
+        var caller = await new AuthenticateToken(store, new IdentityStore(Maintainer)).ExecuteAsync($"Bearer {Secret}", CancellationToken.None);
 
         Assert.NotNull(caller);
         Assert.Equal(IdentityKind.Agent, caller.Kind);
@@ -106,5 +106,21 @@ public sealed class AuthenticateTokenTests
         public Task AddAsync(Token token, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task RecordRevocationAsync(Token token, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class IdentityStore(User? owner = null) : IIdentities
+    {
+        public Task<User?> FindUserAsync(Guid id, CancellationToken ct) => Task.FromResult(owner?.Id == id ? owner : null);
+        public Task<bool> AnyAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<Identity?> FindAsync(Guid id, CancellationToken ct) => throw new NotSupportedException();
+        public Task<Agent?> FindAgentAsync(Guid id, CancellationToken ct) => throw new NotSupportedException();
+        public Task<Identity?> FindByNameAsync(string name, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, Identity>> FindManyAsync(IEnumerable<Guid> ids, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> NameTakenAsync(string name, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<User>> ListUsersAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<AgentRow>> ListAgentsAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task AddAsync(Identity identity, Token token, CancellationToken ct) => throw new NotSupportedException();
+        public Task RecordRenameAsync(Agent agent, CancellationToken ct) => throw new NotSupportedException();
+        public Task RecordMetadataAsync(Agent agent, AgentMetadataReport report, CancellationToken ct) => throw new NotSupportedException();
     }
 }

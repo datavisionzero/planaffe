@@ -23,7 +23,7 @@ namespace Planaffe.Application.Acts;
 /// hit cost one index lookup each.
 /// </para>
 /// </remarks>
-public sealed class AuthenticateToken(ITokens tokens)
+public sealed class AuthenticateToken(ITokens tokens, IIdentities identities)
 {
     private const string Scheme = "Bearer";
 
@@ -40,12 +40,12 @@ public sealed class AuthenticateToken(ITokens tokens)
 
         var presented = await tokens.FindByHashAsync(TokenSecret.HashOf(secret), cancellationToken);
 
-        var disabled = presented?.Identity switch
+        var disabled = presented?.Identity is User user && user.State != UserState.Active;
+        if (presented?.Identity is Agent agent)
         {
-            User user => user.State != UserState.Active,
-            Agent agent => false,
-            _ => false,
-        };
+            var owner = await identities.FindUserAsync(agent.OwnerId, cancellationToken);
+            disabled = owner?.State != UserState.Active;
+        }
         return presented is null || presented.Token.Revoked || disabled
             ? null
             : Caller.Of(presented.Identity, presented.Token);

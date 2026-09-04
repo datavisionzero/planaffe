@@ -5,9 +5,8 @@ using Planaffe.Domain.Identities;
 namespace Planaffe.Application.Acts;
 
 /// <summary>
-/// The invitation of cut one: an administrator creates a user and hands over
-/// their first user token (<c>docs/api.md</c>, Users, agents and tokens). Cut
-/// three replaces the secret in the answer with a one-time link (VISION 12).
+/// An administrator creates an invited user and sends the one-time activation
+/// link (<c>docs/api.md</c>, Users, agents and tokens).
 /// </summary>
 public sealed class CreateUser(ICallerIdentity callerIdentity, IIdentities identities, IOneTimeSecrets secrets,
     IEmailSender emailSender, SmtpSettings smtp, TimeProvider clock)
@@ -48,5 +47,72 @@ public sealed class ListUsers(ICallerIdentity callerIdentity, IIdentities identi
         callerIdentity.Caller.RequireAdministrator("list users");
 
         return [.. (await identities.ListUsersAsync(cancellationToken)).Select(UserSummary.Of)];
+    }
+}
+
+public sealed class ResendInvitation(ICallerIdentity callerIdentity, IIdentities identities, IOneTimeSecrets secrets,
+    IEmailSender emailSender, SmtpSettings smtp, TimeProvider clock)
+{
+    public async Task ExecuteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        callerIdentity.Caller.RequireAdministrator("resend an invitation");
+        if (!smtp.Configured) throw new Refusal(RefusalCode.SmtpNotConfigured, "Transactional email is not configured for this instance.");
+        var user = await identities.FindUserAsync(id, cancellationToken)
+            ?? throw new Refusal(RefusalCode.NotFound, "No user has that id.");
+        if (user.State != UserState.Invited) throw new Refusal(RefusalCode.Transition, "Only an invited user has an invitation to resend.");
+        var issued = OneTimeSecret.Issue(user.Id, OneTimeSecretPurpose.Invitation, clock.GetUtcNow());
+        await secrets.AddReplacingLiveAsync(issued.Record, clock.GetUtcNow(), cancellationToken);
+        var link = new Uri(smtp.PublicUrl!, $"/activate?secret={Uri.EscapeDataString(issued.Secret)}");
+        await emailSender.SendAsync(TransactionalEmailTemplates.Invitation(user.Email, user.Name, link), cancellationToken);
+    }
+}
+
+public sealed class ChangeUserLifecycle(ICallerIdentity callerIdentity, IIdentities identities, TimeProvider clock)
+{
+    public async Task<UserSummary> ExecuteAsync(Guid id, UserLifecycleChange change, CancellationToken cancellationToken)
+    {
+        callerIdentity.Caller.RequireAdministrator("change a user's lifecycle");
+        var outcome = await identities.ChangeLifecycleAsync(id, change, clock.GetUtcNow(), cancellationToken);
+        if (outcome == UserLifecycleOutcome.NotFound) throw new Refusal(RefusalCode.NotFound, "No user has that id.");
+        if (outcome == UserLifecycleOutcome.LastAdministrator)
+            throw new Refusal(RefusalCode.LastAdministrator, "Deactivation or demotion would leave no active administrator.");
+        if (outcome == UserLifecycleOutcome.InvalidState)
+            throw new Refusal(RefusalCode.Transition, "The user is already in the requested state.");
+        return UserSummary.Of((await identities.FindUserAsync(id, cancellationToken))!);
+    }
+}
+
+public sealed class RequestEmailChange(ICallerIdentity callerIdentity, IIdentities identities, IOneTimeSecrets secrets,
+    IEmailSender emailSender, SmtpSettings smtp, TimeProvider clock)
+{
+    public async Task ExecuteAsync(string? email, CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller.RequireUser("change an email address");
+        if (!smtp.Configured) throw new Refusal(RefusalCode.SmtpNotConfigured, "Transactional email is not configured for this instance.");
+        var normalized = Validated.Field("email", () => User.NormalizeEmail(email!));
+        if (await identities.FindUserByNormalizedEmailAsync(User.NormalizeEmailForComparison(normalized), cancellationToken) is not null)
+            throw new Refusal(RefusalCode.EmailExists, "That email address already belongs to a user.");
+        var user = await identities.FindUserAsync(caller.Id, cancellationToken) ?? throw new Refusal(RefusalCode.NotFound, "No user has that id.");
+        var issued = OneTimeSecret.Issue(user.Id, OneTimeSecretPurpose.EmailChange, clock.GetUtcNow(), normalized);
+        await secrets.AddReplacingLiveAsync(issued.Record, clock.GetUtcNow(), cancellationToken);
+        var link = new Uri(smtp.PublicUrl!, $"/confirm-email?secret={Uri.EscapeDataString(issued.Secret)}");
+        await emailSender.SendAsync(TransactionalEmailTemplates.EmailConfirmation(normalized, user.Name, link), cancellationToken);
+    }
+}
+
+public sealed class ConfirmEmailChange(IOneTimeSecrets secrets, IIdentities identities, TimeProvider clock)
+{
+    public async Task ExecuteAsync(string? secret, CancellationToken cancellationToken)
+    {
+        byte[] hash;
+        try { hash = OneTimeSecret.Hash(secret!); }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        { throw Refusal.Validation("secret", "A valid email-change secret is required."); }
+        var record = await secrets.ConsumeAsync(hash, OneTimeSecretPurpose.EmailChange, clock.GetUtcNow(), cancellationToken)
+            ?? throw new Refusal(RefusalCode.SecretExpired, "The email-change link is expired, replaced, or has already been used.");
+        var user = await identities.FindUserAsync(record.UserId, cancellationToken)
+            ?? throw new Refusal(RefusalCode.SecretExpired, "The email-change link is no longer usable.");
+        user.ChangeEmail(record.PendingEmail!);
+        await identities.RecordUserAsync(user, cancellationToken);
     }
 }

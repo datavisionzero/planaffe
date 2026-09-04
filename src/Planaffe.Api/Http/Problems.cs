@@ -33,7 +33,7 @@ public static class Problems
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.Deleted => StatusCodes.Status404NotFound,
         RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.ReleaseExists
-            or RefusalCode.EmailExists =>
+            or RefusalCode.EmailExists or RefusalCode.LastAdministrator =>
             StatusCodes.Status409Conflict,
         RefusalCode.SecretExpired => StatusCodes.Status410Gone,
         RefusalCode.Stale => StatusCodes.Status412PreconditionFailed,
@@ -78,6 +78,7 @@ public static class Problems
         RefusalCode.SmtpNotConfigured => "Transactional email is not configured",
         RefusalCode.EmailExists => "That email address already belongs to a user",
         RefusalCode.SecretExpired => "The one-time link is expired or has already been used",
+        RefusalCode.LastAdministrator => "The instance must keep one active administrator",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),
     };

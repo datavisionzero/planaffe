@@ -58,6 +58,10 @@ builder.Services.AddScoped<ReportAgentMetadata>();
 // agents and tokens are a user's acts, users an administrator's.
 builder.Services.AddScoped<CreateUser>();
 builder.Services.AddScoped<ListUsers>();
+builder.Services.AddScoped<ResendInvitation>();
+builder.Services.AddScoped<ChangeUserLifecycle>();
+builder.Services.AddScoped<RequestEmailChange>();
+builder.Services.AddScoped<ConfirmEmailChange>();
 builder.Services.AddScoped<CreateAgent>();
 builder.Services.AddScoped<ListAgents>();
 builder.Services.AddScoped<RenameAgent>();

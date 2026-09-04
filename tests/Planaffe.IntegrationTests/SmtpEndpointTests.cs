@@ -100,6 +100,31 @@ public sealed class SmtpEndpointTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NoContent, replacement.StatusCode);
     }
 
+    [Fact]
+    public async Task A_new_email_only_takes_effect_after_its_one_time_confirmation()
+    {
+        await using var instance = await AnInstance.ConfiguredAsync(postgres, ConfiguredMailpit());
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        using var requested = await admin.PostAsJsonAsync("/me/email",
+            new { email = "new-address@example.test" }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Accepted, requested.StatusCode);
+
+        var before = await admin.GetFromJsonAsync<JsonElement>("/users", TestContext.Current.CancellationToken);
+        Assert.Equal("maintainer@example.test", Assert.Single(before.EnumerateArray()).GetProperty("email").GetString());
+
+        var secret = await SecretFromLatestMessage("confirm-email");
+        using var anonymous = instance.ClientWith(null);
+        using var confirmed = await anonymous.PostAsJsonAsync("/email-changes/confirm",
+            new { secret }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, confirmed.StatusCode);
+        var after = await admin.GetFromJsonAsync<JsonElement>("/users", TestContext.Current.CancellationToken);
+        Assert.Equal("new-address@example.test", Assert.Single(after.EnumerateArray()).GetProperty("email").GetString());
+
+        using var reused = await anonymous.PostAsJsonAsync("/email-changes/confirm",
+            new { secret }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Gone, reused.StatusCode);
+    }
+
     private async Task<string> SecretFromLatestMessage(string path)
     {
         using var mailpit = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{_mailpit.GetMappedPublicPort(8025)}") };

@@ -71,4 +71,10 @@ public interface IIdentities
 
     /// <summary>Writes the latest report and its immutable history row atomically.</summary>
     Task RecordMetadataAsync(Agent agent, AgentMetadataReport report, CancellationToken cancellationToken);
+
+    Task<UserLifecycleOutcome> ChangeLifecycleAsync(Guid userId, UserLifecycleChange change,
+        DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
 }
+
+public enum UserLifecycleChange { Deactivate, Reactivate, GrantAdministrator, RevokeAdministrator }
+public enum UserLifecycleOutcome { Changed, NotFound, InvalidState, LastAdministrator }

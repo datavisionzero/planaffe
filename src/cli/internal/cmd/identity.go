@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -45,8 +46,26 @@ func newMe(g *globals) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(newMeSet(g))
+	cmd.AddCommand(newMeSet(g), newMeEmail(g))
 	return cmd
+}
+
+func newMeEmail(g *globals) *cobra.Command {
+	return &cobra.Command{Use: "email ADDRESS", Short: "Send a confirmation link to a new email address.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		_, c, err := g.load()
+		if err != nil {
+			return err
+		}
+		resp, err := c.RequestEmailChangeWithResponse(cmd.Context(), api.EmailChangeRequest{Email: &args[0]})
+		if err != nil {
+			return client.Transport(err)
+		}
+		if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+			return err
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "confirmation sent")
+		return nil
+	}}
 }
 
 func newMeSet(g *globals) *cobra.Command {
@@ -181,13 +200,88 @@ func newUser(g *globals) *cobra.Command {
 				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
 			}
 			for _, u := range *resp.JSON200 {
-				fmt.Fprintf(cmd.OutOrStdout(), "%-24s %s%s\n", u.Name, u.CreatedAt.Format("2006-01-02"), adminSuffix(u.Administrator))
+				fmt.Fprintf(cmd.OutOrStdout(), "%-36s %-24s %-12s %s%s\n", u.Id, u.Name, u.State, u.Email, adminSuffix(u.Administrator))
 			}
 			return nil
 		},
 	}
-	cmd.AddCommand(create, list)
+	resend := userLifecycleCommand(g, "resend ID", "Replace and resend an invited user's invitation.", func(c *client.Client, cmd *cobra.Command, id uuid.UUID) (*http.Response, []byte, error) {
+		resp, err := c.ResendInvitationWithResponse(cmd.Context(), id)
+		if err != nil {
+			return nil, nil, err
+		}
+		return resp.HTTPResponse, resp.Body, nil
+	}, "invitation resent")
+	deactivate := userLifecycleCommand(g, "deactivate ID", "Deactivate a user and suspend every way they authenticate.", func(c *client.Client, cmd *cobra.Command, id uuid.UUID) (*http.Response, []byte, error) {
+		resp, err := c.DeactivateUserWithResponse(cmd.Context(), id)
+		if err != nil {
+			return nil, nil, err
+		}
+		return resp.HTTPResponse, resp.Body, nil
+	}, "deactivated")
+	reactivate := userLifecycleCommand(g, "reactivate ID", "Reactivate a deactivated user.", func(c *client.Client, cmd *cobra.Command, id uuid.UUID) (*http.Response, []byte, error) {
+		resp, err := c.ReactivateUserWithResponse(cmd.Context(), id)
+		if err != nil {
+			return nil, nil, err
+		}
+		return resp.HTTPResponse, resp.Body, nil
+	}, "reactivated")
+	var role bool
+	roleCommand := &cobra.Command{Use: "administrator ID", Short: "Grant or revoke the administrator role.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := userID(args[0])
+		if err != nil {
+			return err
+		}
+		_, c, err := g.load()
+		if err != nil {
+			return err
+		}
+		resp, err := c.ChangeUserAdministratorWithResponse(cmd.Context(), id, api.ChangeAdministratorRequest{Administrator: &role})
+		if err != nil {
+			return client.Transport(err)
+		}
+		if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+			return err
+		}
+		if g.json {
+			return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%s administrator=%t\n", args[0], role)
+		return nil
+	}}
+	roleCommand.Flags().BoolVar(&role, "enabled", true, "whether the user administers the instance")
+	cmd.AddCommand(create, list, resend, deactivate, reactivate, roleCommand)
 	return cmd
+}
+
+func userID(value string) (uuid.UUID, error) {
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return uuid.Nil, &config.UsageError{Message: fmt.Sprintf("%q is not a user id; `pa user list --json` prints them.", value)}
+	}
+	return id, nil
+}
+
+func userLifecycleCommand(g *globals, use, short string, call func(*client.Client, *cobra.Command, uuid.UUID) (*http.Response, []byte, error), result string) *cobra.Command {
+	return &cobra.Command{Use: use, Short: short, Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := userID(args[0])
+		if err != nil {
+			return err
+		}
+		_, c, err := g.load()
+		if err != nil {
+			return err
+		}
+		response, body, err := call(c, cmd, id)
+		if err != nil {
+			return client.Transport(err)
+		}
+		if err := client.Check(response, body); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", args[0], result)
+		return nil
+	}}
 }
 
 func adminSuffix(administrator bool) string {

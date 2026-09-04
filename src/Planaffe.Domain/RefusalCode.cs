@@ -103,6 +103,9 @@ public enum RefusalCode
     /// <summary>A one-time identity secret is unknown, replaced, used or expired.</summary>
     SecretExpired,
 
+    /// <summary>Deactivation or demotion would leave no active administrator.</summary>
+    LastAdministrator,
+
     /// <summary>A bug; the response carries nothing else.</summary>
     Internal,
 }

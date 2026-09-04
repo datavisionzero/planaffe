@@ -45,6 +45,13 @@ public sealed class User : Identity
 
     public void Activate() => State = UserState.Active;
     public void Deactivate() => State = UserState.Deactivated;
+    public void Reactivate() => State = UserState.Active;
+    public void ChangeAdministratorRole(bool administrator) => Administrator = administrator;
+    public void ChangeEmail(string email)
+    {
+        Email = NormalizeEmail(email);
+        NormalizedEmail = NormalizeEmailForComparison(email);
+    }
     public void RecordBootstrapExchange(DateTimeOffset at) => BootstrapExchangedAt ??= at;
 
     public static string NormalizeEmail(string email)

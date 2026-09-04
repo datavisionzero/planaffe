@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Planaffe.Application.Acts;
+using Planaffe.Application.Ports;
 using Planaffe.Domain;
 
 namespace Planaffe.Api.Http;
@@ -8,6 +9,9 @@ namespace Planaffe.Api.Http;
 /// <param name="Name">Unique across users and agents, regardless of case; at most 100 characters.</param>
 /// <param name="Administrator">Whether the new user administers the instance. Off when left out.</param>
 public sealed record CreateUserRequest(string? Name, string? Email, bool? Administrator);
+public sealed record ChangeAdministratorRequest(bool? Administrator);
+public sealed record EmailChangeRequest(string? Email);
+public sealed record SecretRequest(string? Secret);
 
 /// <param name="Name">Assigned — two words and a number — when left out.</param>
 public sealed record CreateAgentRequest(string? Name);
@@ -78,6 +82,39 @@ public static class IdentityEndpoints
         door.MapGet("/users", (ListUsers list, CancellationToken cancellationToken) => list.ExecuteAsync(cancellationToken))
             .WithName("ListUsers")
             .WithSummary("Every user. Not paginated: the list is people.");
+
+        door.MapPost("/users/{id:guid}/invitation", async (Guid id, ResendInvitation resend, CancellationToken ct) =>
+            { await resend.ExecuteAsync(id, ct); return Results.Accepted(); })
+            .WithName("ResendInvitation").WithSummary("Replace and resend an invited user's invitation. Administrators only.")
+            .Produces(StatusCodes.Status202Accepted).ProducesProblem(StatusCodes.Status404NotFound);
+
+        door.MapPost("/users/{id:guid}/deactivate", (Guid id, ChangeUserLifecycle change, CancellationToken ct) =>
+                change.ExecuteAsync(id, UserLifecycleChange.Deactivate, ct))
+            .WithName("DeactivateUser").WithSummary("Deactivate a user and suspend every way they authenticate. Administrators only.")
+            .Produces<UserSummary>().ProducesProblem(StatusCodes.Status409Conflict);
+        door.MapPost("/users/{id:guid}/reactivate", (Guid id, ChangeUserLifecycle change, CancellationToken ct) =>
+                change.ExecuteAsync(id, UserLifecycleChange.Reactivate, ct))
+            .WithName("ReactivateUser").WithSummary("Reactivate a deactivated user. Administrators only.")
+            .Produces<UserSummary>();
+        door.MapPatch("/users/{id:guid}", (Guid id, ChangeAdministratorRequest? request,
+                ChangeUserLifecycle change, CancellationToken ct) =>
+            {
+                if (request?.Administrator is null) throw Refusal.Validation("administrator", "Administrator is required.");
+                return change.ExecuteAsync(id, request.Administrator.Value
+                    ? UserLifecycleChange.GrantAdministrator : UserLifecycleChange.RevokeAdministrator, ct);
+            })
+            .WithName("ChangeUserAdministrator").WithSummary("Grant or revoke the administrator role. Administrators only.")
+            .Produces<UserSummary>().ProducesProblem(StatusCodes.Status409Conflict);
+
+        door.MapPost("/me/email", async (EmailChangeRequest? request, RequestEmailChange change, CancellationToken ct) =>
+            { await change.ExecuteAsync(request?.Email, ct); return Results.Accepted(); })
+            .WithName("RequestEmailChange").WithSummary("Send confirmation to a user's new email address.")
+            .Produces(StatusCodes.Status202Accepted);
+
+        endpoints.MapPost("/email-changes/confirm", async (SecretRequest? request, ConfirmEmailChange confirm, CancellationToken ct) =>
+            { await confirm.ExecuteAsync(request?.Secret, ct); return Results.NoContent(); })
+            .AllowAnonymous().WithName("ConfirmEmailChange").WithSummary("Confirm and apply a pending email change.")
+            .Produces(StatusCodes.Status204NoContent).ProducesProblem(StatusCodes.Status410Gone);
 
         door.MapPost("/agents", async (CreateAgentRequest? request, CreateAgent create, CancellationToken cancellationToken) =>
             {

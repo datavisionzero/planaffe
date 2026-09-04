@@ -16,6 +16,43 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task Deactivation_suspends_a_user_and_their_agents_and_reactivation_restores_unrevoked_tokens()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        var userSecret = await instance.AddActiveUserAsync("second");
+        using var user = instance.ClientWith(userSecret);
+        using var createdAgent = await user.PostAsJsonAsync("/agents", new { name = "owned-agent-1" }, Ct);
+        var agentSecret = (await createdAgent.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString()!;
+        using var agent = instance.ClientWith(agentSecret);
+        var users = await admin.GetFromJsonAsync<JsonElement>("/users", Ct);
+        var id = users.EnumerateArray().Single(x => x.GetProperty("name").GetString() == "second").GetProperty("id").GetGuid();
+
+        using var deactivated = await admin.PostAsync($"/users/{id}/deactivate", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, deactivated.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await user.GetAsync("/me", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await agent.GetAsync("/me", Ct)).StatusCode);
+
+        using var reactivated = await admin.PostAsync($"/users/{id}/reactivate", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, reactivated.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await user.GetAsync("/me", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await agent.GetAsync("/me", Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_last_active_administrator_cannot_be_deactivated_or_demoted()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        var users = await admin.GetFromJsonAsync<JsonElement>("/users", Ct);
+        var id = Assert.Single(users.EnumerateArray()).GetProperty("id").GetGuid();
+
+        await Problem(await admin.PostAsync($"/users/{id}/deactivate", null, Ct), HttpStatusCode.Conflict, "last-administrator");
+        await Problem(await admin.PatchAsJsonAsync($"/users/{id}", new { administrator = false }, Ct),
+            HttpStatusCode.Conflict, "last-administrator");
+    }
+
+    [Fact]
     public async Task An_agent_reports_partial_metadata_and_every_report_is_kept()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

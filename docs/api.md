@@ -328,6 +328,12 @@ Where a rule differs between a user and an agent, the endpoint below says so.
 |---|---|---|---|
 | `POST` | `/users` | administrator | `{ name, email, administrator? }` → 201 `User`; creates an invited user and sends the activation link. No user token is created |
 | `GET` | `/users` | administrator | every user, including invited and deactivated; no pagination, the list is people |
+| `POST` | `/users/{id}/invitation` | administrator | replace the live invitation and send a new link; invited users only → 202 |
+| `POST` | `/users/{id}/deactivate` | administrator | suspend the user, revoke every browser session, and prevent their user and agent tokens from authenticating |
+| `POST` | `/users/{id}/reactivate` | administrator | reactivate a deactivated user; separately revoked tokens stay revoked |
+| `PATCH` | `/users/{id}` | administrator | `{ administrator }` — grant or revoke the instance role; demoting the last active administrator is refused |
+| `POST` | `/me/email` | user | `{ email }` — send a one-hour confirmation link to the new, still-unused address → 202 |
+| `POST` | `/email-changes/confirm` | anyone | `{ secret }` — consume the link and make its address effective → 204 |
 | `POST` | `/agents` | user | `{ name? }` → 201 with the agent (`IdentityRef` plus `owner`, `created_at`) and, once, `token: { prefix, secret }`. An omitted name is assigned |
 | `GET` | `/agents` | user | every agent with its owner, prefix, `created_at` and `revoked_at`; no pagination |
 | `PATCH` | `/agents/{id}` | owner or administrator | `{ name }` — rename; the history keeps the id, so old entries show the new name |

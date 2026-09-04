@@ -112,6 +112,46 @@ public sealed class Identities(PlanaffeDbContext context) : IIdentities
     public Task RecordRenameAsync(Agent agent, CancellationToken cancellationToken) =>
         SaveOrRefuseTheNameAsync(agent.Name, cancellationToken);
 
+    public async Task<UserLifecycleOutcome> ChangeLifecycleAsync(Guid userId, UserLifecycleChange change,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        // Serializes the instance-wide invariant without inventing a row whose
+        // only purpose is to be locked.
+        await context.Database.ExecuteSqlRawAsync("select pg_advisory_xact_lock(70652026)", cancellationToken);
+        var user = await context.Users.SingleOrDefaultAsync(x => x.Id == userId, cancellationToken);
+        if (user is null) return UserLifecycleOutcome.NotFound;
+
+        if (change is UserLifecycleChange.Deactivate or UserLifecycleChange.RevokeAdministrator
+            && user.Administrator && user.State == UserState.Active
+            && await context.Users.CountAsync(x => x.Administrator && x.State == UserState.Active, cancellationToken) == 1)
+            return UserLifecycleOutcome.LastAdministrator;
+
+        switch (change)
+        {
+            case UserLifecycleChange.Deactivate when user.State != UserState.Deactivated:
+                user.Deactivate();
+                await context.BrowserSessions.Where(x => x.UserId == userId && x.RevokedAt == null)
+                    .ExecuteUpdateAsync(set => set.SetProperty(x => x.RevokedAt, now), cancellationToken);
+                break;
+            case UserLifecycleChange.Reactivate when user.State == UserState.Deactivated:
+                user.Reactivate();
+                break;
+            case UserLifecycleChange.GrantAdministrator when !user.Administrator:
+                user.ChangeAdministratorRole(true);
+                break;
+            case UserLifecycleChange.RevokeAdministrator when user.Administrator:
+                user.ChangeAdministratorRole(false);
+                break;
+            default:
+                return UserLifecycleOutcome.InvalidState;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return UserLifecycleOutcome.Changed;
+    }
+
     // The race between NameTakenAsync and the write lands on the unique index,
     // and the answer is the same one the check would have given.
     private async Task SaveOrRefuseTheNameAsync(string name, CancellationToken cancellationToken)

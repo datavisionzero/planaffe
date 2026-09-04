@@ -42,19 +42,21 @@ public sealed class ContractTests(PostgresFixture postgres)
             [
                 "/admin/smtp", "/admin/smtp/test",
                 "/agents", "/agents/{id}",
+                "/email-changes/confirm",
                 "/epics", "/epics/{key}", "/epics/{key}/close", "/epics/{key}/reopen", "/epics/{key}/restore",
                 "/invitations/accept",
                 "/issues", "/issues/{key}", "/issues/{key}/blocked-by/{blockerKey}", "/issues/{key}/claim", "/issues/{key}/close",
                 "/issues/{key}/comments", "/issues/{key}/history", "/issues/{key}/labels/{name}", "/issues/{key}/questions",
                 "/issues/{key}/release", "/issues/{key}/reopen", "/issues/{key}/restore", "/issues/{key}/review",
-                "/me", "/me/metadata", "/me/password", "/password-recovery", "/password-recovery/complete",
+                "/me", "/me/email", "/me/metadata", "/me/password", "/password-recovery", "/password-recovery/complete",
                 "/projects", "/projects/{key}", "/projects/{key}/labels", "/projects/{key}/labels/{name}",
                 "/projects/{key}/labels/{name}/restore", "/projects/{key}/needs-you", "/projects/{key}/next",
                 "/projects/{key}/releases", "/projects/{key}/releases/publish", "/projects/{key}/releases/{name}", "/projects/{key}/restore",
                 "/projects/{key}/users", "/projects/{key}/users/{id}",
                 "/questions", "/questions/{id}", "/questions/{id}/answer",
                 "/session", "/session/bootstrap", "/sessions", "/sessions/{id}",
-                "/tokens", "/tokens/{id}", "/users", "/version",
+                "/tokens", "/tokens/{id}", "/users", "/users/{id}", "/users/{id}/deactivate",
+                "/users/{id}/invitation", "/users/{id}/reactivate", "/version",
             ],
             paths);
 
