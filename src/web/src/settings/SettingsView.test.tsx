@@ -52,3 +52,34 @@ it("reports a created agent as saved, shows its secret once and clears the name"
   expect(screen.getByLabelText("Agent name")).toHaveValue("");
   expect(screen.getAllByRole("status").map((x) => x.textContent)).toContain("Saved.");
 });
+
+const aToken = { id: "0199a000-0000-7000-8000-00000000000a", prefix: "pa_abcd", created_at: "2026-09-02T10:00:00Z", revoked_at: null };
+const refusal = (status: number, detail: string) => ({ status, body: { type: "about:blank", title: "refused", status, detail } });
+
+// The revokes were `.then(load)`: the list reloaded unchanged, and a token
+// that could not be revoked looked exactly like one that was.
+it("says why a token could not be revoked", async () => {
+  settings({
+    "GET /tokens": [aToken],
+    [`DELETE /tokens/${aToken.id}`]: refusal(409, "The token was already revoked."),
+  });
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Revoke" }));
+
+  expect(await screen.findByRole("status")).toHaveTextContent("The token was already revoked.");
+});
+
+it("reports a revoked token and reloads the list", async () => {
+  let revoked = false;
+  settings({
+    "GET /tokens": () => (revoked ? [{ ...aToken, revoked_at: "2026-09-04T10:00:00Z" }] : [aToken]),
+    [`DELETE /tokens/${aToken.id}`]: () => { revoked = true; return { status: 204 }; },
+  });
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Revoke" }));
+
+  expect(await screen.findByRole("status")).toHaveTextContent("Token revoked.");
+  expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+});

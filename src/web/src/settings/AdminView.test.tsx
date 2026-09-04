@@ -57,3 +57,50 @@ it("offers no access to grant when everybody already has it", async () => {
   await user.click(grant);
   expect(instance.calls.some((call) => call.method === "PUT")).toBe(false);
 });
+
+// A refusal is a sentence the screen owes the reader. Both of these used to
+// be `.then(load)`: the list reloaded unchanged and nothing said why.
+const refusal = (status: number, detail: string) => ({ status, body: { type: "about:blank", title: "refused", status, detail } });
+
+it("says why the last administrator cannot be demoted", async () => {
+  admin({
+    "GET /users": [maintainer],
+    "GET /projects/PLAN/users": [maintainer],
+    [`PATCH /users/${maintainer.id}`]: refusal(422, "Deactivation or demotion would leave no active administrator."),
+  });
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Demote" }));
+
+  expect(await screen.findByRole("status")).toHaveTextContent("Deactivation or demotion would leave no active administrator.");
+});
+
+it("says why the last administrator cannot be deactivated", async () => {
+  admin({
+    "GET /users": [maintainer],
+    "GET /projects/PLAN/users": [maintainer],
+    [`POST /users/${maintainer.id}/deactivate`]: refusal(422, "Deactivation or demotion would leave no active administrator."),
+  });
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Deactivate" }));
+
+  expect(await screen.findByRole("status")).toHaveTextContent("Deactivation or demotion would leave no active administrator.");
+});
+
+// "Invitation resent." was set from a `.then()` that never looked, so a resend
+// that failed reported the opposite of what happened.
+it("does not report a resent invitation that did not go out", async () => {
+  admin({
+    "GET /users": [maintainer, invited],
+    "GET /projects/PLAN/users": [maintainer],
+    [`POST /users/${invited.id}/invitation`]: refusal(503, "Transactional email is not configured."),
+  });
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Resend" }));
+
+  const notice = await screen.findByRole("status");
+  expect(notice).toHaveTextContent("Transactional email is not configured.");
+  expect(notice).not.toHaveTextContent("Invitation resent.");
+});
