@@ -27,6 +27,7 @@ export type Me = Schemas["Me"];
 export type Project = Schemas["Project"];
 export type IssueSummary = Schemas["IssueSummary"];
 export type Issue = Schemas["Issue"];
+export type HistoryEntry = Schemas["HistoryEntry"];
 export type EpicSummary = Schemas["EpicSummary"];
 export type Problem = Schemas["ProblemDetails"];
 
