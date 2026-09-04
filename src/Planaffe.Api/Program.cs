@@ -32,6 +32,18 @@ builder.Host.UseSerilog((_, configuration) => LogSinks.Configure(configuration, 
 
 builder.Services.AddPlanaffeInfrastructure(builder.Configuration);
 
+var smtpSettings = SmtpSettings.FromVariables(
+    builder.Configuration[SmtpSettings.HostVariable],
+    builder.Configuration[SmtpSettings.PortVariable],
+    builder.Configuration[SmtpSettings.UsernameVariable],
+    builder.Configuration[SmtpSettings.PasswordVariable],
+    builder.Configuration[SmtpSettings.SecurityVariable],
+    builder.Configuration[SmtpSettings.FromAddressVariable],
+    builder.Configuration[SmtpSettings.FromNameVariable],
+    builder.Configuration[SmtpSettings.PublicUrlVariable],
+    builder.Environment.IsDevelopment());
+builder.Services.AddSingleton(smtpSettings);
+
 // The acts are registered here; the layers below know nothing about the
 // container they are resolved from. The clock is the base class library's.
 builder.Services.AddSingleton(TimeProvider.System);
@@ -51,6 +63,8 @@ builder.Services.AddScoped<RevokeAgent>();
 builder.Services.AddScoped<ListTokens>();
 builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<RevokeToken>();
+builder.Services.AddScoped<ReadSmtpStatus>();
+builder.Services.AddScoped<SendTestEmail>();
 
 // The two dials of the instance, read once from the environment; a value that
 // is not a positive number stops the start here, where the message names it.
@@ -166,6 +180,7 @@ app.MapIssues();
 app.MapConversation();
 app.MapEpics();
 app.MapReleases();
+app.MapSmtp();
 
 // The web application: built by its own toolchain into wwwroot at image build
 // time (deploy/Dockerfile) or by a local `npm run build`; in development the

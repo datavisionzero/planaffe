@@ -30,7 +30,16 @@ services:
       # after that (VISION 12). The token is what `PLANAFFE_TOKEN` in the CLI
       # holds; at least 32 characters.
       PLANAFFE_BOOTSTRAP_ADMIN: "${PLANAFFE_BOOTSTRAP_ADMIN:?set PLANAFFE_BOOTSTRAP_ADMIN in deploy/.env}"
+      PLANAFFE_BOOTSTRAP_EMAIL: "${PLANAFFE_BOOTSTRAP_EMAIL:?set PLANAFFE_BOOTSTRAP_EMAIL in deploy/.env}"
       PLANAFFE_BOOTSTRAP_TOKEN: "${PLANAFFE_BOOTSTRAP_TOKEN:?set PLANAFFE_BOOTSTRAP_TOKEN in deploy/.env}"
+      PLANAFFE_PUBLIC_URL: "${PLANAFFE_PUBLIC_URL:-}"
+      PLANAFFE_SMTP_HOST: "${PLANAFFE_SMTP_HOST:-}"
+      PLANAFFE_SMTP_PORT: "${PLANAFFE_SMTP_PORT:-}"
+      PLANAFFE_SMTP_USERNAME: "${PLANAFFE_SMTP_USERNAME:-}"
+      PLANAFFE_SMTP_PASSWORD: "${PLANAFFE_SMTP_PASSWORD:-}"
+      PLANAFFE_SMTP_SECURITY: "${PLANAFFE_SMTP_SECURITY:-}"
+      PLANAFFE_SMTP_FROM_ADDRESS: "${PLANAFFE_SMTP_FROM_ADDRESS:-}"
+      PLANAFFE_SMTP_FROM_NAME: "${PLANAFFE_SMTP_FROM_NAME:-}"
       # How long an agent's claim lives without a write of the holder's (VISION
       # 11), and how long a deleted row can be restored before the purge may
       # take it (ADR 0013). Per instance, never per project.

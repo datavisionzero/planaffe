@@ -31,6 +31,7 @@ planaffe/
 │  ├─ research/
 │  ├─ storage.md              the data model: tables, constraints, what is derived on read
 │  ├─ api.md                  the HTTP surface: endpoints, shapes, errors, exit codes
+│  ├─ human-interface.md      the screens, browser actions and permission matrix
 │  ├─ operations.md           running, upgrading, the variables, backups
 │  ├─ cli.md                  pa: configuration, exit codes, verbs
 │  └─ api/openapi.json        the HTTP contract, checked in
@@ -112,9 +113,10 @@ fallback (VISION 13). The two log sinks live here as well
 endpoints, the bearer authentication that answers the caller port, the version
 header and the one place a refusal becomes a problem document; `Hosting/` the
 services that run before anything is served — the migrations, the bootstrap.
-Later: authentication of a browser session, the rate limits, the static files
-of the built SPA, and the MCP server, which will be a second adapter over the
-same acts and not a second way into the data.
+It also owns browser-session authentication, CSRF and login rate limits, the
+static files of the built SPA and SMTP composition around the application's
+email port. The later MCP server will be a second adapter over the same acts and
+not a second way into the data.
 
 ## The CLI is a client, not a layer
 
@@ -152,9 +154,10 @@ edit. `api/client.ts` is the one way to the instance — `openapi-fetch` over th
 types `npm run generate` writes from the contract — and it adds the bearer
 token every request carries.
 
-The application signs in the way `pa` does: a user token, pasted once and kept
-in the browser (`session/`). There is no session on the instance to keep, and
-the API has one door (ADR 0015). A local `npm run build` lands in
+The application signs in with email and password and keeps only an opaque
+session cookie (`session/`). The bootstrap user token may be exchanged once to
+set the first administrator's password, but is never kept in browser storage.
+Bearer tokens remain the CLI and direct API door (ADR 0015). A local `npm run build` lands in
 `src/Planaffe.Api/wwwroot/`, which the API serves with every path no endpoint
 took falling back to `index.html`, so that `/PLAN/ready` is a link that works.
 

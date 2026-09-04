@@ -8,6 +8,7 @@
        brings its packages with the code that uses them. -->
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="MailKit" />
     <!-- Design-time only: this project is its own startup project for
          `dotnet ef`, through the factory in Persistence. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">

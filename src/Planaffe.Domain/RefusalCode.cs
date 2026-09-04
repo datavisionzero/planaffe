@@ -91,6 +91,9 @@ public enum RefusalCode
     /// <summary><c>repo</c> or a label filter names a label the project does not have.</summary>
     UnknownLabel,
 
+    /// <summary>An act that necessarily sends mail was used without SMTP configuration.</summary>
+    SmtpNotConfigured,
+
     /// <summary>A bug; the response carries nothing else.</summary>
     Internal,
 }

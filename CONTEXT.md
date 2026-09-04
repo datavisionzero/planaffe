@@ -30,8 +30,21 @@ _Avoid_: actor, principal, account, subject
 **User**:
 A human identity, authenticated by a session in the browser or by a **User
 Token** at the console, holding access to a set of projects and possibly the
-administrator role.
+administrator role. A user is invited, active or deactivated; deactivation is a
+reversible loss of every way to authenticate, not deletion.
 _Avoid_: person, member, account, human
+
+**Browser Session**:
+A user's short-lived, server-side and individually revocable browser access,
+represented to the browser by an opaque cookie secret whose hash is stored by
+the instance. It expires after inactivity and at an absolute deadline.
+_Avoid_: token, login, authentication cookie, remember-me token
+
+**Invitation**:
+The once-usable, expiring act by which an administrator creates a user and lets
+that user set their first password. Its secret is sent by transactional email
+and stored only as a hash; resending replaces it.
+_Avoid_: invite token, temporary password, registration, sign-up
 
 **Agent**:
 An AI identity that reaches the instance through the API under exactly one
@@ -58,6 +71,12 @@ The role that administers the instance itself — users, projects, and everythin
 outside a single project's content. Held by users only; an agent token never
 carries it, whoever owns it.
 _Avoid_: owner, superuser, root, maintainer
+
+**Project Access**:
+The assignment of a project to a user. It grants that user and every agent they
+own the same access to the project's content; it is managed only by an
+administrator and is independent of the administrator role.
+_Avoid_: membership, project role, ACL, permission, grant
 
 ## The work
 

@@ -1,6 +1,6 @@
 # Storage
 
-This is the data model of cut one ([ADR 0009](./adr/0009-the-mvp-is-built-in-three-cuts.md)):
+This is the data model through cut three ([ADR 0009](./adr/0009-the-mvp-is-built-in-three-cuts.md)):
 every table, what each column is for, which constraints the database holds and
 which the write path holds, how keys are allocated without a race, and the two
 rules that are derived on read rather than written. [`api.md`](./api.md) is the
@@ -16,17 +16,11 @@ whose size decides anything; what decides the shape is the acts of VISION 10 and
 11 — `next` and the claim — which have to be single conditional updates, and the
 two derived rules that every read has to apply.
 
-## The doors left open
+## The cuts
 
-Cut two adds to this schema — the section [What cut two adds](#what-cut-two-adds)
-at the end says exactly what — and nothing here is rewritten for it. Two doors
-stay open for cut three, named so that nobody walls them shut by accident:
-
-- **Browser sessions** add a `session` table, and a login adds `password_hash`
-  to the user. Until then the web application authenticates by token, like the
-  CLI.
-- **Project access** adds a `project_access (project_id, identity_id)` table.
-  Until then every user sees every project, and a blocker is never hidden.
+The base schema is followed by sections for what cut two and cut three add.
+They are written together here because the migrations only move forward: a
+fresh instance and an upgraded one must arrive at the same constraints.
 
 ## Identities and tokens
 
@@ -61,7 +55,7 @@ words and a number, `quiet-otter-42` — and renamed at will (VISION 12).
 by the write path ([ADR 0015](./adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)).
 
 **Identities are never deleted** (ADR 0013). There is no `deleted_at` here and
-never will be; deactivating a user is a cut-three column.
+never will be; a user is deactivated by changing their state.
 
 ```sql
 create table token (
@@ -668,20 +662,133 @@ Neither adds to the schema. A bulk `PATCH` or `DELETE` is the single act
 repeated inside one transaction, and the export is the CLI reading the lists
 that exist (`docs/api.md`).
 
+## What cut three adds
+
+### Users, passwords and one-time secrets
+
+```sql
+alter table identity add column email text;
+alter table identity add column normalized_email text;
+alter table identity add column user_state text;
+alter table identity add column password_hash text;
+alter table identity add column bootstrap_exchanged_at timestamptz;
+
+create unique index identity_email on identity (normalized_email)
+    where kind = 'user';
+
+create table one_time_secret (
+    id                uuid        not null primary key,
+    user_id           uuid        not null references identity (id),
+    purpose           text        not null check (purpose in
+                                      ('invitation', 'password_recovery', 'email_change')),
+    secret_hash       bytea       not null unique,
+    pending_email     text,
+    pending_normalized_email text,
+    created_at        timestamptz not null,
+    expires_at        timestamptz not null,
+    used_at           timestamptz,
+    check ((purpose = 'email_change') = (pending_email is not null))
+);
+
+create unique index one_live_secret_per_purpose
+    on one_time_secret (user_id, purpose) where used_at is null;
+```
+
+For a user, `email`, `normalized_email` and `user_state` are required;
+`user_state` is `invited`, `active` or `deactivated`. They remain null for an
+agent. Email is trimmed and normalized to Unicode-normalized lower case before
+the transaction; the original spelling is kept for display. The unique index is
+the final guard. A password hash exists after invitation acceptance or the
+bootstrap exchange and contains the Argon2id algorithm, version, salt and cost
+parameters in its encoded value so parameters can rise without a schema change.
+
+The secret table contains SHA-256 hashes of 256-bit random secrets, never the
+links sent by email. An invitation expires after seven days; recovery and email
+change after one hour. Issuing another secret marks the previous live row used
+in the same transaction. Consuming one locks the row and changes `used_at`, so
+two requests cannot both win. An email-change row reserves the new normalized
+address against users and other live changes in the application transaction;
+only consuming it moves the address onto the user.
+
+### Browser sessions
+
+```sql
+create table browser_session (
+    id             uuid        not null primary key,
+    user_id        uuid        not null references identity (id),
+    secret_hash    bytea       not null unique,
+    created_at     timestamptz not null,
+    last_used_at   timestamptz not null,
+    expires_at     timestamptz not null,
+    revoked_at     timestamptz
+);
+
+create index browser_session_user on browser_session (user_id, created_at desc);
+```
+
+The browser receives a random opaque secret and the table keeps only its hash.
+`expires_at` is the absolute 30-day boundary. A session is valid only when it is
+not revoked, its user is active, `expires_at` is in the future and
+`last_used_at` is less than seven days old. Activity advances `last_used_at`, at
+most once every five minutes to avoid turning every read into a write, and never
+advances `expires_at`. Password change revokes every other session;
+deactivation revokes all. Revocation is a timestamp so the settings screen can
+distinguish a session from one that vanished.
+
+### Project access
+
+```sql
+create table project_access (
+    project_id  uuid        not null references project (id),
+    user_id     uuid        not null references identity (id),
+    granted_by  uuid        not null references identity (id),
+    granted_at  timestamptz not null,
+    primary key (project_id, user_id)
+);
+```
+
+Both referenced identities are users, and `granted_by` is an administrator;
+those cross-row facts are held by the application transaction. Project creation
+adds the creator in the same transaction. The migration inserts the Cartesian
+product of existing users and projects before authorization starts, preserving
+all existing access. Agents have no rows: every query resolves an agent to its
+owner first, and user tokens already resolve to the user.
+
+A central project scope filters every content query, including direct keys,
+search, export, `next` and `needs-you`. The blocker query deliberately crosses
+that scope to calculate workability, then projects a foreign inaccessible
+blocker as an anonymous open reference.
+
+### Login throttling
+
+Failed sign-ins are limited in a rolling 15-minute window: five attempts per
+normalized email and 20 per source address. A successful login clears the
+account window, not the address window. Counters live in a small bounded
+in-memory store. They are deliberately not durable product data: a restart
+forgiving attempts is safer than making authentication depend on a cleanup table
+or another service. Deployments with several application replicas are outside
+the MVP topology.
+
 ## Bootstrap
 
 On startup, after the migrations, the instance looks at `identity`. If the table
-is empty and `PLANAFFE_BOOTSTRAP_ADMIN` and `PLANAFFE_BOOTSTRAP_TOKEN` are both
-set, it creates one user with that name, `administrator` true, and one user
-token from that secret — the first administrator and their key to the CLI
-(VISION 12, ADR 0015). If the table is empty and either variable is missing, it
+is empty and `PLANAFFE_BOOTSTRAP_ADMIN`, `PLANAFFE_BOOTSTRAP_EMAIL` and
+`PLANAFFE_BOOTSTRAP_TOKEN` are all set, it creates one active user with that
+name, the configured bootstrap email,
+`administrator` true, and one user token from that secret — the first
+administrator and their key to the CLI
+(VISION 12, ADR 0015). If the table is empty and any variable is missing, it
 starts anyway and logs that no identity exists and how to create one; nothing
 can authenticate until it does.
 
 **On the second start the variables are ignored**, whatever they say: the table
-is not empty. Changing the token in the environment changes nothing, and losing
-it is recovered through the server binary, which has the connection string
-(`codebase.md`), not through the environment. That verb is not in cut one.
+is not empty. Changing the token in the environment changes nothing. An active
+user who loses a user token signs in through the browser and creates another;
+password recovery uses email.
 
-A secret shorter than 32 characters is refused at startup, with a message,
-before anything is written.
+A secret shorter than 32 characters or a missing or invalid bootstrap email is
+refused at startup, with a message, before anything is written. The bootstrap
+token may be exchanged once through the browser activation endpoint: the user
+sets a password, a browser session is created, and the exchange is permanently
+recorded so the token cannot perform it again. The user token itself remains a
+valid CLI key until explicitly revoked.

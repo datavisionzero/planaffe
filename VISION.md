@@ -45,7 +45,7 @@ These three do not meet the criticism above: `gh` is free, mature and already in
 ## 4. Guiding Principles
 
 1. **Agent-first.** The AI agent is a first-class user, not a second-class API consumer. Every function a human has in the UI has to be reachable from the CLI.
-2. **Easy to host.** Postgres plus the app. Two to three containers, one `docker-compose.yml`, no external dependencies. No object storage, no queue, no separate search index in the MVP.
+2. **Easy to host.** Postgres plus the app. Two production containers, one `docker-compose.yml`; SMTP is an optional operator-provided capability, not another planaffe service. No object storage, queue or separate search index in the MVP.
 3. **Opinionated instead of configurable.** One field set, one workflow core. We deliberately refuse custom fields and workflow designers. Flexibility comes from labels, not from schema configuration.
 4. **Frictionless transitions.** A status change is one command or one click. Never an intermediate dialog with mandatory fields.
 5. **Structure only where it works.** Whatever the system itself has to evaluate — filter, count, react to — gets a field of its own. Whatever is only read stays Markdown. A field nobody needs stays in the schema forever; a heading nobody needs is deleted from the template.
@@ -119,6 +119,14 @@ Commitments that matter to agents:
 - Works well on a phone (read, triage, change status, comment).
 - Inspiration for the interaction model: Linear (speed, keyboard-first, density) — without copying its feature surface.
 
+Ready, In progress and All issues are presets over one virtualized,
+cursor-paginated list. Its search, status, priority, label, epic, assignee,
+claim, author, blocker, `ready`, sort and order filters live in the URL. Needs
+you uses the same row through its own endpoint and names the reason. `j`/`k`,
+`Enter`, `c`, `/` and `Escape` cover the frequent path; returning from a detail
+restores the list. Desktop is dense, the phone uses two-line rows without
+horizontal scrolling.
+
 **The detail view answers one question first: what does this ticket want from me right now?**
 
 Tickets written by AI get long. Whoever opens the interface usually does not do it to read all of it, but because something is stuck — and then what is stuck belongs at the top, not the beginning of a three-page text.
@@ -132,6 +140,14 @@ Concretely, as far as the data allows:
 - **Long descriptions** are collapsed after the first paragraphs, opened fully with one click.
 
 Deliberately **no** summarisation logic, no heuristic guessing what is important. Only the re-ordering of what is already structured: labels, blockers, claims, comments. If the information lives in prose alone, we show the prose.
+
+Every ordinary human action on one issue belongs here: create and edit, preview
+Markdown, answer, review, comment, change status, set `ready`, claim and release,
+change relationships, delete and restore. Bulk changes, export and waits remain
+in the CLI. Epics and releases have their own list and detail screens; personal,
+project and instance settings are separate areas. The complete screen, action
+and permission matrices are fixed in
+[`docs/human-interface.md`](docs/human-interface.md).
 
 ### 6.3 HTTP API
 
@@ -416,7 +432,7 @@ The question belongs in a fixed place for humans as well:
 - **"In progress"** — who is working on what, since when, in which epic.
 - **"Needs you"** — what only a human can resolve, and nothing else: open questions first, then tickets in `review`, then — only where triage is required — tickets without `ready`, and blocked tickets only when the chain of blockers ends in something no agent can pull: a parked ticket, one with an open question, one in a project without agents. A ticket blocked by a ticket an agent will do needs nobody and is noise here; it waits, visibly, in "in progress" — "waiting for PLAN-40". This is the human's work list: provide supply so the agents do not run dry.
 
-"Needs you" is not only a screen. It is a list of the API like every other (ADR 0012), and `pa needs-you --wait` holds the connection until something new lands in it — the held outgoing connection of 15.9, pointed at the human. With that, a notification is a one-liner the user writes around `pa`, not a feature the product ships: no mail, no webhook, no reachable address, and none of the delivery state 15.9 declines. Notifications stay on the roadmap (15.1); this is the piece of them that costs nothing.
+"Needs you" is not only a screen. It is a list of the API like every other (ADR 0012), and `pa needs-you --wait` holds the connection until something new lands in it — the held outgoing connection of 15.9, pointed at the human. With that, an event notification is a one-liner the user writes around `pa`, not a feature the product ships: no event mail, no webhook, no reachable address, and none of the delivery state 15.9 declines. General notifications stay on the roadmap (15.1); transactional identity email is a separate capability (ADR 0018).
 
 ## 11. Claiming — the Core Feature for Agent Operation
 
@@ -447,6 +463,14 @@ Multi-user is built in from the start — even if the first user works alone, th
 
 - User accounts for humans, agent tokens for agents — and a user token as the human's key to the CLI. Everything is bound to an identity, so that it stays traceable **who** claimed and changed what.
 - The permission model is deliberately coarse: an assignment of **which user may see and edit which projects**. Plus an admin role for instance administration. The role belongs to users only: an agent's token never carries it, whoever owns it. Users, projects and project access are a human's acts, like creating a token — an agent that could invite users would have escaped its identity by a wider door than the one closed below ([ADR 0015](docs/adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)).
+- Project access belongs to a user and every agent they own inherits exactly that
+  set. Creating a project grants its creator access. A new user starts with
+  none. An administrator manages assignments but does not see project content by
+  virtue of the role; they need project access like everyone else. Existing
+  users receive access to every existing project when the rule is introduced.
+- A hidden cross-project blocker still blocks, but reveals no key, title or
+  status. Lists, search, export, `next`, `needs-you` and direct key reads all use
+  the same central access check.
 - No fine-grained permission system, no field- or status-level rights, no role matrix.
 
 **Two kinds of token, and the agent token is the agent.** A **user token** is a human's key to the CLI: it authenticates as the user, is no identity of its own, and has no name, no metadata and no back channel. The console-minded human of 6.1 works under it as themselves — with a claim that does not expire (11.) and a close that goes to `done` (9.). An **agent token** is not a human's second key but the identity an agent works under; everything below is about agent tokens. That holds from the MVP on, because none of it can be retrofitted later without devaluing the history:
@@ -464,17 +488,42 @@ Multi-user is built in from the start — even if the first user works alone, th
 - **Revoking takes effect immediately, and the identity survives it.** A revoked token still names the agent in every claim and every history entry it wrote; it simply cannot authenticate any more. Tokens and users are never deleted for that reason ([ADR 0013](docs/adr/0013-deleting-is-a-soft-delete-with-a-floor-and-identities-are-never-deleted.md)).
 - **No expiry date in the MVP.** A token that expires on a date wakes nobody — it fails in the middle of an agent run, and the same argument that keeps the due date out (8., 17.) keeps this out. Revocation is the answer, and it is deliberate rather than scheduled.
 - **A token is valid across projects**, like the human identity it belongs to. Restricting a token to a single project is a plausible later addition and not in the MVP.
+- **Deactivation suspends the owner.** It immediately ends browser sessions and
+  prevents user tokens and every owned agent token from authenticating.
+  Reactivation restores every access that was not separately revoked.
+
+### The life of a user and a browser session
+
+- A user is `invited`, `active` or `deactivated`. Name and normalized email are
+  independently unique. Identities are never deleted.
+- An administrator invites by email. The one-time invitation lasts seven days;
+  resending replaces the old link, and setting the first password activates the
+  user. New users begin without project access.
+- Password recovery uses a one-time link lasting one hour and never reveals
+  whether an email address exists. Changing a password ends every other browser
+  session but leaves user and agent tokens intact.
+- A browser session expires after seven days without activity and absolutely
+  after 30 days. It is server-side and individually revocable; the browser holds
+  only an opaque cookie secret and the database only its hash.
+- A new email address becomes effective only after the user confirms a link sent
+  to it. Until then the old address remains the sign-in address.
+- There is always one active administrator. The last one can neither be
+  deactivated nor stripped of the role.
 
 ### Commissioning
 
 The first five minutes are a success criterion (16.), so the path to the first issue is part of the product and not left to the reader:
 
 1. `docker compose up`. Migrations apply themselves.
-2. **The first administrator and their user token come from environment variables** on the first start. There is no setup wizard and no first-run screen — a product whose first principle is that everything works without the UI must not require the UI to become usable. The first agent gets its own token from that administrator, one command later.
+2. **The first administrator and their user token come from environment variables** on the first start. There is no setup wizard and no first-run screen — a product whose first principle is that everything works without the UI must not require the UI to become usable. The first agent gets its own token from that administrator, one command later. The administrator may exchange that bootstrap token once in the browser to set a password and create a browser session; the token is never stored there.
 3. `pa project create` with the key that will prefix every issue in it.
 4. `pa issue create`. That is the fifth minute.
 
-Every further human is invited by an administrator — with a one-time link the administrator hands over themselves, since nothing sends mail, behind which the invited person sets their password — and every further token is created by a human through the CLI, and later through the interface.
+Every further human is invited by an administrator. planaffe sends the one-time
+link through configured SMTP; behind it the invited user sets their password.
+SMTP is optional for a solo instance, but invitation and password recovery say
+clearly when it is absent. Every further token is created by a human through the
+CLI or the interface.
 
 ## 13. Technical Guard Rails
 
@@ -482,7 +531,11 @@ Every further human is invited by an administrator — with a one-time link the 
 - **Product language:** English throughout — interface, CLI output, error messages and documentation. No localisation and no machinery held ready for one ([ADR 0010](docs/adr/0010-the-product-speaks-english-and-only-english.md)).
 - **Storage:** PostgreSQL. All content, Markdown included, lives in the database. Backup = `pg_dump`.
 - **Frontend:** React.
-- **Deployment:** `docker compose up`. The target is two containers (app plus Postgres), three at most. No queue, no Redis, no S3, no Elasticsearch in the MVP.
+- **Deployment:** `docker compose up`. Production is two containers (app plus Postgres). SMTP, when used, is supplied by the operator; there is no mail queue, Redis, S3 or Elasticsearch in the MVP.
+- **Transactional email:** invitation, password recovery and email confirmation
+  go through configured SMTP. The application owns text and HTML templates and a
+  narrow email port; it has no durable delivery queue or automatic retry engine
+  ([ADR 0018](docs/adr/0018-transactional-email-is-an-optional-instance-capability.md)).
 - **Search:** Postgres's own means (full-text search), no separate index — over everything that is Markdown: title, description, result, comments, questions and answers.
 - **Configuration:** few environment variables, sensible defaults, migrations run on startup.
 - **CLI distribution:** a single, easily installed binary or package that talks to any instance. It is cut from the same tag as the server, names its version to the installation and is told the installation's in return, so a mismatch is a message rather than a missing endpoint. The API itself carries no version in its paths, and migrations only ever run forward ([ADR 0011](docs/adr/0011-the-api-carries-no-version-and-migrations-only-run-forward.md)).
@@ -511,6 +564,7 @@ This is the scope of version 1.0, not the order it is built in. It is built in t
 - History on the issue: who changed which field when
 - Filtering, sorting, full-text search
 - User administration, project assignment, user tokens for the console, named agent tokens per agent with the metadata back channel (see 12.)
+- Password sign-in, revocable browser sessions, email invitation and password recovery
 - A complete CLI with machine-readable output
 - A responsive web interface
 - A Docker Compose setup and documentation
@@ -519,7 +573,7 @@ This is the scope of version 1.0, not the order it is built in. It is built in t
 
 - File and image attachments (requires external storage → after the MVP)
 - Sprints, boards with persistence, capacity planning
-- Notifications (e-mail, webhooks)
+- General event notifications (email, webhooks); transactional identity email is included
 - Git integrations
 - Custom fields, workflow designer, automations
 - Due dates, estimations, issue types, milestones (see 7. and 8.)
@@ -659,7 +713,7 @@ Unsorted, not yet decided:
 
 ## 17. Open Points
 
-The substantive questions are settled: hierarchy, epics, sub-issues, the field set, the priority scale, the status set, labels and label groups, `ready` as a field, claim semantics (11.), history and the CLI (6.1). Evidence for the field and hierarchy decisions: [`docs/research/hierarchy-and-fields.md`](docs/research/hierarchy-and-fields.md).
+The substantive questions are settled: hierarchy, epics, sub-issues, the field set, the priority scale, the status set, labels and label groups, `ready` as a field, claim semantics (11.), history, the CLI (6.1), browser identity, project access and the human interface. Evidence for the field and hierarchy decisions: [`docs/research/hierarchy-and-fields.md`](docs/research/hierarchy-and-fields.md).
 
 The wake-up mechanism is settled as well: a held outgoing connection instead of a webhook, `pa next --wait` as the smallest building block, the expiry deadline before the trigger (15.9). Evidence in [`docs/research/waking-agents-and-triggers.md`](docs/research/waking-agents-and-triggers.md).
 
@@ -671,6 +725,7 @@ Two things remain open, and neither blocks the start:
 
 - **Due date:** deliberately left out, because a date without a notification wakes nobody. The research on waking changed nothing about that; it only sharpened the coupling: a date needs a **time-triggered** event, and therefore a scheduler on the server — exactly what 11. avoids with good reason for claims. The waiting mechanism from 15.9 does not help here, because it waits for events somebody triggers anyway. Defer further, and do not design for it while building `pa next --wait`.
 
-- **The question does not close its own loop.** An agent asks, releases the ticket, and the ticket waits — for a human who has to look into "needs you" of their own accord, because there are no notifications in the MVP. It is the only loop in the system that does not close by itself, and it sits precisely between two agent runs. Two things narrow it without closing it: `pa issue ask --wait` keeps the loop inside one run while a human is at the keyboard, and `pa needs-you --wait` lets the human be woken by a one-liner of their own (10.). What remains is the unattended case, and there is a second half to it: the human answers by talking to *one* agent, while the ticket is later picked up by *another*, which sees the question and the answer but not the conversation around them. Neither is a blocker — both are the reason notifications sit as high on the roadmap as they do (15.1), and they are the measure of whether the question was worth being a state of its own.
+- **The question does not close its own loop.** An agent asks, releases the ticket, and the ticket waits — for a human who has to look into "needs you" of their own accord, because transactional identity email does not imply event notifications. It is the only loop in the system that does not close by itself, and it sits precisely between two agent runs. Two things narrow it without closing it: `pa issue ask --wait` keeps the loop inside one run while a human is at the keyboard, and `pa needs-you --wait` lets the human be woken by a one-liner of their own (10.). What remains is the unattended case, and there is a second half to it: the human answers by talking to *one* agent, while the ticket is later picked up by *another*, which sees the question and the answer but not the conversation around them. Neither is a blocker — both are the reason general notifications sit as high on the roadmap as they do (15.1), and they are the measure of whether the question was worth being a state of its own.
 
-With that, the vision is decided, and the order of building is settled ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)). The next step is the concrete data model and the API of the first cut.
+With that, the vision and all three cuts are decided, and the order of building
+is settled ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)).

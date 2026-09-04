@@ -9,18 +9,21 @@ command.
 ```sh
 git clone https://github.com/datavisionzero/planaffe
 cd planaffe
-cp deploy/.env.example deploy/.env      # set POSTGRES_PASSWORD and the two bootstrap values
+cp deploy/.env.example deploy/.env      # set POSTGRES_PASSWORD and the bootstrap values
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
 Two services come up: the instance and its Postgres. The instance applies its
-migrations, creates the first administrator and their token from the two
-bootstrap variables, and listens on port 8080. `GET /version` answers without a
-token; everything else takes `Authorization: Bearer <token>`.
+migrations, creates the first administrator and their token from the three
+bootstrap variables, and listens on port 8080. `GET /version` answers without
+authentication. The CLI and direct API use `Authorization: Bearer <token>`; the
+browser uses a server-side session cookie.
 
-The same port serves the web application: open it in a browser and paste a
-user token — the bootstrap token, or one from `pa token create`. It stays in
-that browser until signed out or revoked; the instance keeps no session.
+The same port serves the web application. On first use, exchange the bootstrap
+user token once to set the administrator's password. The browser receives an
+opaque cookie and never stores the user token. Later visits sign in with email
+and password; sessions expire after seven idle days and absolutely after 30
+days and can be revoked individually.
 
 The bootstrap token is the first administrator's user token — what the CLI
 carries as `PLANAFFE_TOKEN`. The first agent gets its own token from that
@@ -55,7 +58,16 @@ Set in `deploy/.env`; read once, at start.
 |---|---|---|---|
 | `POSTGRES_PASSWORD` | yes | | the database password, shared by both services |
 | `PLANAFFE_BOOTSTRAP_ADMIN` | first start | | the name of the first administrator |
+| `PLANAFFE_BOOTSTRAP_EMAIL` | first start | | the first administrator's sign-in email |
 | `PLANAFFE_BOOTSTRAP_TOKEN` | first start | | their user token, at least 32 characters; shorter refuses the start |
+| `PLANAFFE_PUBLIC_URL` | for browser or email | | canonical external origin, for Origin checks and links; for example `https://plan.example.com`, without a trailing slash |
+| `PLANAFFE_SMTP_HOST` | no | | SMTP host; when absent, transactional email is disabled |
+| `PLANAFFE_SMTP_PORT` | with SMTP | `587` | SMTP port |
+| `PLANAFFE_SMTP_USERNAME` | no | | SMTP authentication user; set with the password |
+| `PLANAFFE_SMTP_PASSWORD` | no | | SMTP authentication password; set with the username |
+| `PLANAFFE_SMTP_SECURITY` | with SMTP | `starttls` | `starttls`, `tls` or `none`; `none` is allowed only in Development |
+| `PLANAFFE_SMTP_FROM_ADDRESS` | with SMTP | | sender email address |
+| `PLANAFFE_SMTP_FROM_NAME` | no | `planaffe` | sender display name |
 | `PLANAFFE_CLAIM_EXPIRY_HOURS` | no | `4` | how long an agent's claim lives without a write of the holder's (VISION 11); a user's never expires |
 | `PLANAFFE_DELETION_GRACE_DAYS` | no | `7` | how long a deleted issue, epic, label or project can be restored before the purge may take it (ADR 0013); a floor, not a deadline |
 | `PLANAFFE_LOG_ENDPOINT` | no | | a logaffe instance to log into, scheme and host; set together with the token (ADR 0008) |
@@ -64,14 +76,27 @@ Set in `deploy/.env`; read once, at start.
 | `PLANAFFE_PORT` | no | `8080` | the host port the instance is published on |
 | `PLANAFFE_IMAGE` | no | `ghcr.io/datavisionzero/planaffe:main` | the image; name a `sha-<commit>` tag to pin an installation |
 
-The two bootstrap variables are ignored on every start after the first — the
+The three bootstrap variables are ignored on every start after the first — the
 instance already has identities, and a bootstrap happens once. Changing the
-token in the environment changes nothing; a lost token is recovered through the
-server binary, which is not in cut one.
+token in the environment changes nothing. An active user who loses a user token
+signs in through the browser and creates another; password recovery uses email.
 
 Inside the container the connection string is `ConnectionStrings__Postgres`,
 which the Compose file assembles from the password; a deployment that is not
 this Compose file sets it directly.
+
+SMTP is optional. Without it, bootstrap, existing sign-ins, the CLI and the API
+work normally; invitation, password recovery, email change and the admin test
+mail report that SMTP is not configured. Credentials are never returned by the
+API or written to logs. Setting `PLANAFFE_SMTP_HOST` enables SMTP and requires
+the sender and public URL; username and password must be supplied together. A
+partial or invalid configuration refuses startup. The public URL is never
+inferred from request headers.
+
+Production must expose the public URL over HTTPS: the session cookie is
+`Secure`, `HttpOnly`, `SameSite=Lax`, has no `Domain` and uses the `__Host-`
+prefix. Only the explicit Development environment uses a non-Secure cookie with
+a different name. A reverse proxy must preserve the original `Origin` header.
 
 ## Logging
 
@@ -117,4 +142,7 @@ dotnet run --project src/Planaffe.Api
 ```
 
 `appsettings.Development.json` carries the matching connection string and a
-bootstrap administrator with a token of no consequence.
+bootstrap administrator with an email and token of no consequence. The
+development Compose file also starts Mailpit for transactional-email integration
+tests and local inspection; Mailpit is never part of the production Compose
+file.

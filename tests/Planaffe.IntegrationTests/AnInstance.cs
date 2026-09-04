@@ -19,7 +19,8 @@ namespace Planaffe.IntegrationTests;
 internal sealed class AnInstance(
     string connectionString,
     string? administrator,
-    string? token) : WebApplicationFactory<Program>
+    string? token,
+    IReadOnlyDictionary<string, string?>? instanceConfiguration = null) : WebApplicationFactory<Program>
 {
     public const string Administrator = "maintainer";
 
@@ -32,9 +33,13 @@ internal sealed class AnInstance(
         PostgresFixture postgres, string? administrator, string? token) =>
         new(await postgres.CreateDatabaseAsync(), administrator, token);
 
+    public static async Task<AnInstance> ConfiguredAsync(
+        PostgresFixture postgres, IReadOnlyDictionary<string, string?> configuration) =>
+        new(await postgres.CreateDatabaseAsync(), Administrator, BootstrapToken, configuration);
+
     /// <summary>The same database, started again with what the environment says now.</summary>
     public AnInstance StartedAgain(string? newAdministrator, string? newToken) =>
-        new(connectionString, newAdministrator, newToken);
+        new(connectionString, newAdministrator, newToken, instanceConfiguration);
 
     public string ConnectionString => connectionString;
 
@@ -59,13 +64,23 @@ internal sealed class AnInstance(
 
     protected override IHost CreateHost(IHostBuilder builder)
     {
-        builder.ConfigureHostConfiguration(configuration => configuration.AddInMemoryCollection(
-            new Dictionary<string, string?>
+        builder.ConfigureHostConfiguration(configuration =>
+        {
+            var values = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Postgres"] = connectionString,
                 ["PLANAFFE_BOOTSTRAP_ADMIN"] = administrator ?? string.Empty,
                 ["PLANAFFE_BOOTSTRAP_TOKEN"] = token ?? string.Empty,
-            }));
+            };
+            if (instanceConfiguration is not null)
+            {
+                foreach (var pair in instanceConfiguration)
+                {
+                    values[pair.Key] = pair.Value;
+                }
+            }
+            configuration.AddInMemoryCollection(values);
+        });
 
         builder.ConfigureLogging(logging => logging.AddProvider(new Capture(_errors)));
 

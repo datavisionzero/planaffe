@@ -40,6 +40,7 @@ public static class Problems
             or RefusalCode.InPublishedRelease =>
             StatusCodes.Status422UnprocessableEntity,
         RefusalCode.WaitTooLong or RefusalCode.TooMany => StatusCodes.Status422UnprocessableEntity,
+        RefusalCode.SmtpNotConfigured => StatusCodes.Status422UnprocessableEntity,
         RefusalCode.Internal => StatusCodes.Status500InternalServerError,
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a status."),
     };
@@ -71,6 +72,7 @@ public static class Problems
         RefusalCode.ReleaseExists => "The project already has a release with that name",
         RefusalCode.InPublishedRelease => "The issue is in a published release",
         RefusalCode.UnknownLabel => "The project has no such label",
+        RefusalCode.SmtpNotConfigured => "Transactional email is not configured",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),
     };

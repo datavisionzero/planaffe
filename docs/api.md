@@ -1,6 +1,6 @@
 # The HTTP API
 
-This is the surface of cut one ([ADR 0009](./adr/0009-the-mvp-is-built-in-three-cuts.md)):
+This is the surface through cut three ([ADR 0009](./adr/0009-the-mvp-is-built-in-three-cuts.md)):
 every endpoint, the shapes it takes and returns, the filters each collection
 accepts, pagination, the error model and the exit codes the CLI derives from it,
 idempotency, and the rules each act enforces. [`storage.md`](./storage.md) is
@@ -26,10 +26,11 @@ flags, output — is PLAN-0012's; what it can do is decided here.
   Every response carries `Planaffe-Version: <semver>`, `GET /version` returns
   the same, and the CLI sends `User-Agent: pa/<semver> (<os>/<arch>)`. The
   server rejects nothing on that basis; the CLI compares and reports skew.
-- **Authentication is `Authorization: Bearer <token>`** on everything except
-  `GET /version`. The server tells a user token from an agent token by the row
+- **Authentication is either `Authorization: Bearer <token>` or the browser
+  session cookie.** The server tells a user token from an agent token by the row
   it finds ([ADR 0015](./adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md));
-  the client never says which it holds.
+  a browser session resolves to the same user caller. `GET /version` and the
+  explicit sign-in, activation and recovery endpoints are public.
 - **Writes are `POST`, `PATCH` and `DELETE`.** `PATCH` takes a partial object
   and changes only the fields present; a field set to `null` clears it. Every
   write accepts `Idempotency-Key` (below). Every write to an issue or an epic
@@ -40,7 +41,8 @@ flags, output — is PLAN-0012's; what it can do is decided here.
   `EpicSummary` and `Epic`.
 - **Limits.** `title` at most 200 characters; `description`, `result`, a
   comment, a question and an answer at most 1 MiB each; a project `name` and
-  an identity `name` at most 100. Above that is a validation error.
+  an identity `name` and email address at most 100. A password is at least 12
+  and at most 1,024 characters. Above that is a validation error.
 
 ## Shapes
 
@@ -128,6 +130,32 @@ counts issues that are not deleted; the issues themselves are
   "created_at": "…", "updated_at": "…" }
 ```
 
+`User`, `BrowserSession` and `SmtpStatus`:
+
+```json
+{ "id": "…", "name": "maintainer", "email": "maintainer@example.test",
+  "state": "active", "administrator": true, "created_at": "…" }
+{ "id": "…", "created_at": "…", "last_used_at": "…", "expires_at": "…",
+  "current": true }
+{ "configured": true, "host": "smtp.example.test", "port": 587,
+  "security": "starttls", "sender": "planaffe <no-reply@example.test>" }
+```
+
+SMTP status never carries a username, password or connection string.
+
+## Browser request protection
+
+The production cookie is named `__Host-planaffe_session` and is `HttpOnly`,
+`Secure`, `SameSite=Lax`, `Path=/`, with no `Domain`. Explicit local development
+uses `planaffe_session` without `Secure`; no other mode may weaken it. The cookie
+contains only the opaque session secret.
+
+Every `POST`, `PATCH` or `DELETE` authenticated by that cookie also requires
+`X-Planaffe-CSRF: 1` and an `Origin` exactly equal to the configured public
+origin. Missing or mismatched protection is `csrf`. A Bearer-authenticated
+request is not subject to either browser check. If both credentials arrive,
+Bearer authentication wins and the cookie is ignored.
+
 ## Pagination
 
 Every collection returns a page:
@@ -170,6 +198,7 @@ person. Extension members carry what the code needs — the holder on
 | 400 | `unknown-field` | a closed request object contains a field it does not define; `field` names it |
 | 400 | `cursor-invalid` | the cursor does not fit the filters or is not one the server issued |
 | 401 | `unauthenticated` | no token, an unknown token, or a revoked one |
+| 403 | `csrf` | a cookie-authenticated write has no CSRF header or the wrong origin |
 | 403 | `forbidden` | the identity may not do this — an agent creating a project, a non-administrator creating a user, an agent setting `ready` under triage required (`ready-requires-user`), an agent forcing a user's claim (`claim-protected`) |
 | 404 | `not-found` | the key or id names nothing the caller can see |
 | 404 | `deleted` | the issue exists but is in its grace period; `restorable_until` says how long |
@@ -177,6 +206,9 @@ person. Extension members carry what the code needs — the holder on
 | 409 | `claim-lost` | the caller's claim has expired and somebody else holds the issue now |
 | 409 | `idempotency-mismatch` | the `Idempotency-Key` was used for a different request |
 | 409 | `release-exists` | the project already has a release with that case-insensitive name |
+| 409 | `last-administrator` | deactivation or demotion would leave no active administrator |
+| 409 | `email-exists` | an invitation or confirmed email would duplicate a normalized address |
+| 410 | `secret-expired` | an invitation, recovery or email-change secret is used, replaced or expired |
 | 412 | `stale` | `If-Match` does not match the object's `updated_at`; the body carries the current object under `current` |
 | 422 | `transition` | the status does not allow the act — closing a closed issue, claiming one in `review` |
 | 422 | `cycle` | the blocker would close a cycle; `path` lists the keys |
@@ -185,6 +217,8 @@ person. Extension members carry what the code needs — the holder on
 | 422 | `unknown-label` | `repo` or a label filter names a label the project does not have |
 | 422 | `wait-too-long` | `wait` exceeds the server's one-hour ceiling; `maximum` is 3600 |
 | 422 | `too-many` | a bulk change contains more than 100 issue keys |
+| 422 | `smtp-not-configured` | an action that must send email cannot do so |
+| 429 | `login-throttled` | too many failed sign-ins for the account or source address; `Retry-After` is set |
 | 500 | `internal` | a bug; the response carries nothing else |
 
 Three things an agent has to tell apart (VISION 6.1) are three different rows:
@@ -254,8 +288,8 @@ offers `--if-match <updated_at>` on the edit verbs and sends nothing without it.
 
 ## Who may do what
 
-The permission model is the coarse one of VISION 12, and cut one has one
-dividing line and one role:
+The permission model is the coarse one of VISION 12, with one dividing line,
+one role and project access:
 
 - **An agent works in projects; a user administers them.** An agent may create,
   read, change, comment on, close, claim and delete issues, epics, labels and
@@ -267,11 +301,15 @@ dividing line and one role:
   they own, and list agents.
 - **An administrator** may in addition create users, rename and revoke any
   agent, and delete projects. Whoever bootstrapped the instance is one.
-- **Project access** is cut three; until then every identity sees every project,
-  and nothing in `blocked_by` is ever hidden. The shape already allows it —
-  `key` and `status` are nullable in a blocker reference, and a hidden one is
-  `{ "key": null, "status": null, "open": true }` — so the contract does not
-  change when access arrives.
+- **Project access belongs to a user.** The user and all their agents see and
+  work in exactly those projects. Administrators manage assignments but the role
+  grants no implicit content access. A hidden blocker is
+  `{ "key": null, "status": null, "open": true }`: it still affects
+  workability without revealing project data. Every list, search, direct key,
+  export, `next` and `needs-you` read uses the same project scope.
+- **A deactivated user cannot authenticate**, through a browser session, user
+  token or owned agent. Reactivation restores credentials that were not
+  separately revoked. At least one active administrator must remain.
 
 Where a rule differs between a user and an agent, the endpoint below says so.
 
@@ -288,8 +326,8 @@ Where a rule differs between a user and an agent, the endpoint below says so.
 
 | method | path | who | does |
 |---|---|---|---|
-| `POST` | `/users` | administrator | `{ name, administrator? }` → 201 with the user and, once, `token: { prefix, secret }`: the user's first user token, which the administrator hands over. This is the invitation of cut one; cut three replaces the secret in this response with the one-time link of VISION 12 |
-| `GET` | `/users` | user | every user, `IdentityRef` plus `administrator` and `created_at`; no pagination, the list is people |
+| `POST` | `/users` | administrator | `{ name, email, administrator? }` → 201 `User`; creates an invited user and sends the activation link. No user token is created |
+| `GET` | `/users` | administrator | every user, including invited and deactivated; no pagination, the list is people |
 | `POST` | `/agents` | user | `{ name? }` → 201 with the agent (`IdentityRef` plus `owner`, `created_at`) and, once, `token: { prefix, secret }`. An omitted name is assigned |
 | `GET` | `/agents` | user | every agent with its owner, prefix, `created_at` and `revoked_at`; no pagination |
 | `PATCH` | `/agents/{id}` | owner or administrator | `{ name }` — rename; the history keeps the id, so old entries show the new name |
@@ -305,10 +343,10 @@ metadata back channel (`PATCH /me/metadata`) is cut two.
 
 | method | path | who | does |
 |---|---|---|---|
-| `POST` | `/projects` | user | `{ key, name, triage_required?, review_required? }` → 201 `Project`, with the `kind` label group created |
+| `POST` | `/projects` | user | `{ key, name, triage_required?, review_required? }` → 201 `Project`, with the `kind` label group and the creator's project access created |
 | `GET` | `/projects` | any | every project the caller sees; no pagination |
 | `GET` | `/projects/{key}` | any | `Project` |
-| `PATCH` | `/projects/{key}` | user | `{ name?, triage_required?, review_required? }`; the key is immutable |
+| `PATCH` | `/projects/{key}` | assigned user | `{ name?, triage_required?, review_required? }`; the key is immutable |
 | `DELETE` | `/projects/{key}` | administrator | soft delete of the project and everything in it; 204. The CLI asks for the key to be typed; the API does not |
 | `POST` | `/projects/{key}/restore` | administrator | back, with everything in it, into whatever state it was |
 
@@ -627,3 +665,79 @@ readable copy. There is no importer; an agent given this document and
 `docs/cli.md` recreates the project through `pa issue create --file`, which is
 the ability the product is built for. A separate endpoint would be a second
 way to read what the lists already say (ADR 0012).
+
+## What cut three adds
+
+### Browser identity
+
+| method | path | who | does |
+|---|---|---|---|
+| `POST` | `/session` | anyone | `{ email, password }` → 204 and a browser cookie. Unknown user, wrong password and inactive user have the same `unauthenticated` response and timing class |
+| `DELETE` | `/session` | browser user | revoke the server-side session and expire the cookie; 204 |
+| `POST` | `/session/bootstrap` | anyone | `{ token, password }` → 204 and a browser cookie; once per bootstrap user token, and never stores that token in the browser |
+| `POST` | `/invitations/accept` | anyone | `{ secret, password }` → 204 and a browser cookie; consumes the invitation and activates the user |
+| `POST` | `/password-recovery` | anyone | `{ email }` → 202 in every case; sends a one-hour link only for an active matching user |
+| `POST` | `/password-recovery/complete` | anyone | `{ secret, password }` → 204; consumes the secret, changes the password and revokes every browser session |
+| `GET` | `/sessions` | user | the caller's `BrowserSession` values, current first |
+| `DELETE` | `/sessions/{id}` | user | revoke one of the caller's sessions; 204 |
+| `DELETE` | `/sessions` | user | revoke every session except the current one; 204 |
+| `POST` | `/me/password` | user | `{ current_password, password }` → 204; revokes every other session |
+| `PATCH` | `/me` | user | `{ name }` → 200 `User`; email and password have their own confirmation-aware acts |
+| `POST` | `/me/email` | user | `{ email }` → 202; sends a confirmation link to the new address while the old remains active |
+| `POST` | `/me/email/confirm` | user | `{ secret }` → 200 `User`; consumes the link and changes the address |
+
+Login failures are throttled over 15 minutes after five attempts for a normalized
+account or 20 for a source address. The public recovery response is deliberately
+indistinguishable for unknown, invited, deactivated and active addresses. If
+SMTP itself is absent it returns `smtp-not-configured` for every address.
+Passwords never appear in response bodies or logs.
+
+### User lifecycle and project access
+
+| method | path | who | does |
+|---|---|---|---|
+| `POST` | `/users/{id}/invitation` | administrator | replace the live invitation and resend it; 202 |
+| `POST` | `/users/{id}/deactivate` | administrator | set `deactivated`, revoke all sessions and suspend user and owned agent authentication; the last active administrator is protected |
+| `POST` | `/users/{id}/reactivate` | administrator | set `active`; separately revoked tokens and agents stay revoked |
+| `PATCH` | `/users/{id}` | administrator | `{ administrator? }`; changing name or email for oneself uses the personal endpoints; the last active administrator is protected |
+| `GET` | `/projects/{key}/users` | assigned user or administrator | assigned users as `User`; an administrator need not have project access for this administrative metadata |
+| `PUT` | `/projects/{key}/users/{id}` | administrator | grant project access; 204 and idempotent |
+| `DELETE` | `/projects/{key}/users/{id}` | administrator | remove project access; 204 and idempotent |
+
+Project access is checked before loading project content. A caller without it
+gets `not-found`, not `forbidden`, so keys cannot be probed. The only exceptions
+are the administrator's explicit project/user assignment endpoints and the list
+of all projects including deleted ones below; neither returns project content.
+An agent resolves access through its owner and never receives an administrator
+role.
+
+`GET /projects` remains the content list and returns only assigned projects.
+`GET /admin/projects?deleted=true|false|all` lists project identity and deletion
+metadata for administrators, without issues, epics, releases or labels.
+
+### SMTP administration
+
+| method | path | who | does |
+|---|---|---|---|
+| `GET` | `/admin/smtp` | administrator | `SmtpStatus`: configured state and non-secret connection facts |
+| `POST` | `/admin/smtp/test` | administrator | `{ email }` → 202 after sending a test message; the address becomes optional and defaults to the caller's address once user email is persisted |
+
+Sending is synchronous up to acceptance by the configured SMTP server. Failure
+returns a problem response and is logged without credentials, secrets or message
+bodies. There is no delivery queue or automatic retry
+([ADR 0018](./adr/0018-transactional-email-is-an-optional-instance-capability.md)).
+
+### Filters for the shared issue list
+
+`GET /issues` accepts the complete cut-three list state: `project`, `q`, one or
+more `status`, `priority`, `label`, `epic`, `assignee`, `claimed`, `author`,
+`blocked`, `ready`, `sort`, `order`, `cursor` and `limit`. Filter values for
+labels, epics, users and agents come from their existing server collections; the
+browser does not reconstruct them from loaded rows. Ready and In progress are
+named client presets, not new endpoints. Needs you retains its own endpoint and
+row reason.
+
+The default issue order for the Ready preset is the business order used by
+`next`; other issue lists default to most recently updated. Alternative sorts
+are updated, created and priority. A cursor binds every filter and ordering
+choice, so changing URL state starts a new page sequence.

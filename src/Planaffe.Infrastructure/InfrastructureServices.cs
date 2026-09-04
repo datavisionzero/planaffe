@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Planaffe.Application.Ports;
+using Planaffe.Infrastructure.Email;
 using Planaffe.Infrastructure.Persistence;
 
 namespace Planaffe.Infrastructure;
@@ -48,6 +49,7 @@ public static class InfrastructureServices
         services.AddScoped<IHistory, History>();
         services.AddScoped<ITransactions, Transactions>();
         services.AddScoped<IIdempotency, Idempotency>();
+        services.AddTransient<IEmailSender, SmtpEmailSender>();
 
         return services;
     }

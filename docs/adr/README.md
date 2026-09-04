@@ -41,3 +41,4 @@ material value to understanding the decision.
 - [0015 – A token is an agent or a user's key, and an agent is never an administrator](./0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)
 - [0016 – Status transitions are acts, not a field you write](./0016-status-transitions-are-acts-not-a-field-you-write.md)
 - [0017 – The web application is drawn by Tailwind and Base UI, in components the repository owns](./0017-the-web-application-is-drawn-by-tailwind-and-base-ui-components-the-repository-owns.md)
+- [0018 – Transactional email is an optional instance capability](./0018-transactional-email-is-an-optional-instance-capability.md)
