@@ -13,7 +13,11 @@ type Loaded = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; 
 export function LabelsView() {
   const { project } = useParams();
   const [known, setKnown] = useState<{ of: string | undefined; loaded: Loaded } | null>(null);
+  const [recentlyDeleted, setRecentlyDeleted] = useState<{ of: string | undefined; label: Label }>();
+  const [restoreProblem, setRestoreProblem] = useState<{ of: string | undefined; why: string }>();
   const loaded: Loaded = known !== null && known.of === project ? known.loaded : { at: "asking" };
+  const deleted = recentlyDeleted !== undefined && recentlyDeleted.of === project ? recentlyDeleted.label : undefined;
+  const restoreError = restoreProblem !== undefined && restoreProblem.of === project ? restoreProblem.why : "";
 
   async function reload() {
     const { data, error, response } = await api.GET("/projects/{key}/labels", { params: { path: { key: project! } } });
@@ -72,6 +76,8 @@ export function LabelsView() {
             <Input name="description" placeholder="What this label means" aria-label="Label description" />
             <Button type="submit">Create</Button>
           </form>
+          {deleted && <div className="flex items-center gap-3 rounded-md border border-brand/40 bg-brand/5 p-3 text-sm"><p role="status" className="min-w-0 flex-1">Deleted <span className="font-mono">{deleted.name}</span>.</p><Button type="button" size="sm" variant="outline" onClick={() => void (async () => { setRestoreProblem(undefined); const result = await api.POST("/projects/{key}/labels/{name}/restore", { params: { path: { key: project!, name: deleted.name } } }); if (!result.data) { setRestoreProblem({ of: project, why: describe(result.error, result.response.status) }); return; } setRecentlyDeleted(undefined); await reload(); })()}>Restore {deleted.name}</Button></div>}
+          {restoreError && <p role="alert" className="text-sm text-destructive">{restoreError}</p>}
           {groups.map((group) => (
             <section key={group}>
               <h2 className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -106,6 +112,8 @@ export function LabelsView() {
                         onConfirm={async () => {
                           const result = await api.DELETE("/projects/{key}/labels/{name}", { params: { path: { key: project!, name: label.name } } });
                           if (!result.response.ok) throw new Error(describe(result.error, result.response.status));
+                          setRestoreProblem(undefined);
+                          setRecentlyDeleted({ of: project, label });
                           await reload();
                         }}
                       />

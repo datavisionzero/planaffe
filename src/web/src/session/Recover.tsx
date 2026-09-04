@@ -15,5 +15,5 @@ export function Recover() {
   }
   return <AuthFrame><h1 className="text-xl font-semibold">{secret ? "Choose a new password" : "Recover your account"}</h1>
     <form onSubmit={submit} className="space-y-5"><Field label={secret ? "Password" : "Email"}><Input id={secret ? "password" : "email"} type={secret ? "password" : "email"} autoComplete={secret ? "new-password" : "email"} value={value} onChange={(e) => setValue(e.target.value)} /></Field>
-      {message && <p role="status" className="text-sm">{message}</p>}<Button className="w-full" disabled={!value || (!!secret && value.length < 12)}>Continue</Button><Link to="/login" className="text-brand block text-center text-sm hover:underline">Back to sign in</Link></form></AuthFrame>;
+      {message && <p role="status" className="text-sm">{message}</p>}<Button type="submit" className="w-full" disabled={!value || (!!secret && value.length < 12)}>Continue</Button><Link to="/login" className="text-brand block text-center text-sm hover:underline">Back to sign in</Link></form></AuthFrame>;
 }

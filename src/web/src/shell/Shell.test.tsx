@@ -113,6 +113,28 @@ describe("the shell (ADR 0006)", () => {
     expect(window.localStorage.getItem("planaffe.project")).toBe("LOG");
   });
 
+  it("offers project creation from the project switcher", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+
+    await screen.findByText("The web shell");
+    await user.click(screen.getByRole("button", { name: "Switch project" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Create project" }));
+
+    expect(await screen.findByRole("heading", { name: "Create project" })).toBeInTheDocument();
+  });
+
+  it("renders the sidebar controls as focusable links", async () => {
+    shell("/PLAN/ready");
+
+    const navigation = await screen.findByRole("navigation");
+    for (const link of within(navigation).getAllByRole("link")) {
+      expect(link.tagName).toBe("A");
+      expect(link).toHaveAttribute("data-sidebar", "menu-button");
+      expect(link.tabIndex).toBe(0);
+    }
+  });
+
   it("lands on the remembered project from /", async () => {
     window.localStorage.setItem("planaffe.project", "LOG");
     shell("/");

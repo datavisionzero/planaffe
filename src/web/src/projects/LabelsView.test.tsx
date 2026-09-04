@@ -56,6 +56,7 @@ it("requires in-page confirmation before deleting a label", async () => {
   const instance = installInstance({
     "GET /projects/PLAN/labels": [label],
     "DELETE /projects/PLAN/labels/web": { status: 204 },
+    "POST /projects/PLAN/labels/web/restore": { body: label },
   });
   renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
   const user = userEvent.setup();
@@ -68,4 +69,7 @@ it("requires in-page confirmation before deleting a label", async () => {
   await user.click(within(row).getByRole("button", { name: "Delete" }));
   await user.click(within(screen.getByRole("dialog", { name: "Delete web?" })).getByRole("button", { name: "Delete label" }));
   expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "DELETE"))).toBe(true);
+
+  await user.click(await screen.findByRole("button", { name: "Restore web" }));
+  expect(await vi.waitFor(() => instance.calls.some((call) => new URL(call.url).pathname.endsWith("/restore")))).toBe(true);
 });

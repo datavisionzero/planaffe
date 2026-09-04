@@ -33,7 +33,8 @@ export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSa
   const [error, setError] = useState<string>();
   async function save(draft: IssueDraft) {
     setSaving(true); setError(undefined);
-    const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: words(draft.labels), epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), status: draft.status };
+    const currentParking = issue.status === "backlog" ? "backlog" : "todo";
+    const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: words(draft.labels), epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), ...(draft.status === currentParking ? {} : { status: draft.status }) };
     try {
       const { data, error: problem, response } = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: body as never });
       if (!data) { setError(describe(problem, response.status)); return; }

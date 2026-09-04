@@ -1,4 +1,4 @@
-import { NavLink } from "react-router";
+import { NavLink, useLocation } from "react-router";
 import { SettingsIcon } from "lucide-react";
 import type { Project } from "@/api/client";
 import {
@@ -25,6 +25,7 @@ import { viewPath, views } from "./views";
 export function AppSidebar({ project }: { project: Project | undefined }) {
   const { me } = useSession();
   const { setOpenMobile } = useSidebar();
+  const { pathname } = useLocation();
 
   const groups = [
     { id: "views", label: "Views" },
@@ -49,30 +50,31 @@ export function AppSidebar({ project }: { project: Project | undefined }) {
               <SidebarMenu>
                 {views
                   .filter((view) => view.group === group.id)
-                  .map((view) => (
-                    <SidebarMenuItem key={view.id}>
+                  .map((view) => {
+                    const path = project === undefined ? "" : viewPath(project.key, view);
+                    return <SidebarMenuItem key={view.id}>
                       {project === undefined ? (
                         <SidebarMenuButton disabled>
                           <view.icon />
                           <span>{view.label}</span>
                         </SidebarMenuButton>
                       ) : (
-                        <NavLink
-                          to={viewPath(project.key, view)}
-                          onClick={() => setOpenMobile(false)}
-                          className="contents"
+                        <SidebarMenuButton
+                          isActive={pathname === path || pathname.startsWith(`${path}/`)}
+                          render={
+                            <NavLink
+                              to={path}
+                              onClick={() => setOpenMobile(false)}
+                            />
+                          }
                         >
-                          {({ isActive }) => (
-                            <SidebarMenuButton isActive={isActive} render={<span />}>
-                              <view.icon />
-                              <span>{view.label}</span>
-                            </SidebarMenuButton>
-                          )}
-                        </NavLink>
+                          <view.icon />
+                          <span>{view.label}</span>
+                        </SidebarMenuButton>
                       )}
-                    </SidebarMenuItem>
-                  ))}
-                {group.id === "structure" && project !== undefined && <SidebarMenuItem><NavLink to={`/${project.key}/settings`} onClick={() => setOpenMobile(false)} className="contents">{({ isActive }) => <SidebarMenuButton isActive={isActive} render={<span />}><SettingsIcon /><span>Project settings</span></SidebarMenuButton>}</NavLink></SidebarMenuItem>}
+                    </SidebarMenuItem>;
+                  })}
+                {group.id === "structure" && project !== undefined && <SidebarMenuItem><SidebarMenuButton isActive={pathname === `/${project.key}/settings`} render={<NavLink to={`/${project.key}/settings`} onClick={() => setOpenMobile(false)} />}><SettingsIcon /><span>Project settings</span></SidebarMenuButton></SidebarMenuItem>}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

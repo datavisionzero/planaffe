@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
+import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import type { Project } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -66,9 +66,14 @@ export function ProjectSwitcher({
         ))}
         {projects.length === 0 && (
           <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            No project yet. <code className="font-mono">pa project create</code> makes one.
+            No project yet.
           </div>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => void navigate("/projects/new")}>
+          <PlusIcon className="size-3.5" />
+          <span>Create project</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
