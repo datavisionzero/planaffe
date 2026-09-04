@@ -5004,7 +5004,8 @@
           "epic",
           "label",
           "repo",
-          "limit"
+          "limit",
+          "wait"
         ],
         "type": "object",
         "properties": {
@@ -5036,6 +5037,13 @@
             ]
           },
           "limit": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "wait": {
             "type": [
               "null",
               "integer"

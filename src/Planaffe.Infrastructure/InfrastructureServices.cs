@@ -30,12 +30,11 @@ public static class InfrastructureServices
             ?? throw new InvalidOperationException(
                 $"ConnectionStrings:{ConnectionStringName} is not configured.")));
 
-        services.AddSingleton<PostgresChanges>(provider => new(
+        services.AddSingleton<IChanges>(provider => new PostgresChanges(
             configuration.GetConnectionString(ConnectionStringName)
             ?? throw new InvalidOperationException(
                 $"ConnectionStrings:{ConnectionStringName} is not configured."),
             provider.GetRequiredService<ILogger<PostgresChanges>>()));
-        services.AddSingleton<IChanges>(provider => provider.GetRequiredService<PostgresChanges>());
 
         services.AddScoped<SchemaMigrator>();
 

@@ -180,6 +180,7 @@ person. Extension members carry what the code needs — the holder on
 | 422 | `cycle` | the blocker would close a cycle; `path` lists the keys |
 | 422 | `has-issues` | the epic cannot be deleted while issues reference it; `count` says how many |
 | 422 | `unknown-label` | `repo` or a label filter names a label the project does not have |
+| 422 | `wait-too-long` | `wait` exceeds the server's one-hour ceiling; `maximum` is 3600 |
 | 500 | `internal` | a bug; the response carries nothing else |
 
 Three things an agent has to tell apart (VISION 6.1) are three different rows:
@@ -333,6 +334,11 @@ Both take the same filters, as query parameters on `GET` and as a JSON body on
 | `epic` | only this epic's issues |
 | `label` | repeatable; only issues carrying every named label |
 | `repo` | the `.planaffe` file's label: only issues carrying it or carrying no label of the `repo` group at all (VISION 13). A name the project does not have is `unknown-label` |
+
+The `POST` body additionally accepts `wait`, a positive number of seconds. It
+first checks for an issue, then waits and checks again after every project
+change, returning the ordinary empty answer when the deadline passes. The
+server accepts at most 3600 seconds; clients may continue in another request.
 
 **Workable** is the eight conditions of VISION 10 evaluated for the caller —
 conditions 5 and 8 are vacuous in cut one — and the order is priority

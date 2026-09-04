@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -15,6 +16,55 @@ namespace Planaffe.IntegrationTests;
 public sealed class NextEndpointTests(PostgresFixture postgres)
 {
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Wait_returns_when_an_issue_becomes_workable_and_the_deadline_returns_the_ordinary_empty_answer()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        using var label = await admin.PostAsJsonAsync("/projects/PLAN/labels", new { name = "wanted" }, Ct);
+        Assert.Equal(HttpStatusCode.Created, label.StatusCode);
+        using var agent = await Agent(instance, admin, "one");
+
+        var waiting = agent.PostAsJsonAsync("/projects/PLAN/next", new { wait = 5, label = new[] { "wanted" } }, Ct);
+        await Task.Delay(200, Ct);
+        Assert.False(waiting.IsCompleted);
+
+        await Issues(admin, new { title = "Does not match" });
+        await Task.Delay(200, Ct);
+        Assert.False(waiting.IsCompleted);
+
+        await Issues(admin, new { title = "Arrived while waiting", labels = new[] { "wanted" } });
+        using var woken = await waiting.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        Assert.Equal(HttpStatusCode.OK, woken.StatusCode);
+        var issue = (await woken.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("issue");
+        Assert.Equal("PLAN-2", issue.GetProperty("key").GetString());
+        Assert.Equal("in_progress", issue.GetProperty("status").GetString());
+
+        var elapsed = Stopwatch.StartNew();
+        using var timedOut = await agent.PostAsJsonAsync("/projects/PLAN/next", new { wait = 1, label = new[] { "wanted" } }, Ct);
+        elapsed.Stop();
+        Assert.Equal(HttpStatusCode.OK, timedOut.StatusCode);
+        Assert.True(elapsed.Elapsed >= TimeSpan.FromMilliseconds(800), $"Wait returned after {elapsed.Elapsed}.");
+        Assert.Equal(JsonValueKind.Null, (await timedOut.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("issue").ValueKind);
+    }
+
+    [Fact]
+    public async Task Wait_has_a_positive_one_hour_server_bound()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        using var agent = await Agent(instance, admin, "one");
+
+        await ProjectEndpointTests.Problem(
+            await agent.PostAsJsonAsync("/projects/PLAN/next", new { wait = 0 }, Ct),
+            HttpStatusCode.BadRequest,
+            "validation");
+        await ProjectEndpointTests.Problem(
+            await agent.PostAsJsonAsync("/projects/PLAN/next", new { wait = 3601 }, Ct),
+            HttpStatusCode.UnprocessableEntity,
+            "wait-too-long");
+    }
 
     [Fact]
     public async Task Two_agents_asking_at_once_get_two_different_issues()

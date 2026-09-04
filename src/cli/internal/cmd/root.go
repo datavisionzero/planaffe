@@ -96,6 +96,10 @@ func newRoot(env Env) *cobra.Command {
 
 // load is what every command that talks to the instance starts with.
 func (g *globals) load() (config.Config, *client.Client, error) {
+	return g.loadForWait(0)
+}
+
+func (g *globals) loadForWait(seconds int) (config.Config, *client.Client, error) {
 	getenv := g.env.Getenv
 	if getenv == nil {
 		getenv = os.Getenv
@@ -115,7 +119,11 @@ func (g *globals) load() (config.Config, *client.Client, error) {
 
 	httpClient := g.env.HTTP
 	if httpClient == nil {
-		httpClient = client.Default()
+		if seconds > 0 {
+			httpClient = client.ForWait(seconds)
+		} else {
+			httpClient = client.Default()
+		}
 	}
 
 	c, err := client.New(cfg, httpClient)

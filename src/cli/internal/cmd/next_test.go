@@ -90,7 +90,7 @@ func TestNextClaimPrintsTheIssueAndSendsWhatEveryWriteCarries(t *testing.T) {
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
-	code, out, errOut := run(t, server, repository(t, "project = PLAN\nrepo = repo/api\n"), "next", "--claim", "--ready", "--label", "feature", "--label", "cut-1")
+	code, out, errOut := run(t, server, repository(t, "project = PLAN\nrepo = repo/api\n"), "next", "--claim", "--wait", "60", "--ready", "--label", "feature", "--label", "cut-1")
 
 	if code != exit.OK || errOut != "" {
 		t.Fatalf("code %d, stderr %q", code, errOut)
@@ -116,6 +116,9 @@ func TestNextClaimPrintsTheIssueAndSendsWhatEveryWriteCarries(t *testing.T) {
 	}
 	if body["ready"] != true || body["repo"] != "repo/api" {
 		t.Errorf("body = %v", body)
+	}
+	if body["wait"] != float64(60) {
+		t.Errorf("wait = %v", body["wait"])
 	}
 	if labels, _ := body["label"].([]any); len(labels) != 2 || labels[0] != "feature" || labels[1] != "cut-1" {
 		t.Errorf("labels = %v", body["label"])
@@ -147,6 +150,36 @@ func TestNextClaimWithNothingWorkableExitsEightWithTheReasons(t *testing.T) {
 	code, out, _ = run(t, server, repository(t, "project = PLAN\n"), "next", "--claim", "--json")
 	if code != exit.Empty || !strings.Contains(out, `"issue": null`) {
 		t.Fatalf("code %d, out %s", code, out)
+	}
+}
+
+func TestWaitLongerThanTheServerLimitUsesRounds(t *testing.T) {
+	calls := 0
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) {
+		calls++
+		if calls == 1 {
+			return 200, `{"issue":null,"reasons":` + reasons + `}`
+		}
+		return 200, `{"issue":` + issue + `,"reasons":` + reasons + `}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, errOut := run(t, server, repository(t, "project = PLAN\n"), "next", "--claim", "--wait", "3601")
+	if code != exit.OK || errOut != "" || !strings.Contains(out, "PLAN-42") {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if len(f.bodies) != 2 {
+		t.Fatalf("requests = %d, want 2", len(f.bodies))
+	}
+	for i, want := range []float64{3600, 1} {
+		var body map[string]any
+		if err := json.Unmarshal([]byte(f.bodies[i]), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body["wait"] != want {
+			t.Errorf("round %d wait = %v, want %.0f", i+1, body["wait"], want)
+		}
 	}
 }
 
@@ -229,6 +262,16 @@ func TestUsageMistakesAreExitTwo(t *testing.T) {
 	code, _, errOut = run(t, server, t.TempDir(), "next", "--nope")
 	if code != exit.Usage || !strings.Contains(errOut, "unknown flag") {
 		t.Fatalf("unknown flag: code %d, stderr %q", code, errOut)
+	}
+
+	code, _, errOut = run(t, server, repository(t, "project = PLAN\n"), "next", "--wait", "60")
+	if code != exit.Usage || !strings.Contains(errOut, "requires --claim") {
+		t.Fatalf("wait without claim: code %d, stderr %q", code, errOut)
+	}
+
+	code, _, errOut = run(t, server, repository(t, "project = PLAN\n"), "next", "--claim", "--wait", "0")
+	if code != exit.Usage || !strings.Contains(errOut, "positive") {
+		t.Fatalf("zero wait: code %d, stderr %q", code, errOut)
 	}
 
 	var out bytes.Buffer

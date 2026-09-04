@@ -91,6 +91,12 @@ func Default() *http.Client {
 	return &http.Client{Timeout: 30 * time.Second}
 }
 
+// ForWait leaves room for the server-held request while retaining a transport
+// deadline if the instance never answers. Server rounds are at most one hour.
+func ForWait(seconds int) *http.Client {
+	return &http.Client{Timeout: time.Duration(seconds)*time.Second + 30*time.Second}
+}
+
 // Check turns a response into a Failure when it is one: the version skew first,
 // because a skewed instance's refusal may be about a shape pa does not know;
 // then the problem document by the table of docs/api.md.

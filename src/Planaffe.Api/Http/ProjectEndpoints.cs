@@ -67,7 +67,7 @@ public static class ProjectEndpoints
 
         // The question at the centre of the product (VISION 10): the list, and the act.
         door.MapGet("/{key}/next", (string key, HttpRequest http, bool? ready, string? epic, string? repo, int? limit, Next next, CancellationToken cancellationToken) =>
-                next.PreviewAsync(key, new NextRequest(ready, epic, [.. http.Query["label"].OfType<string>()], repo, limit), cancellationToken))
+                next.PreviewAsync(key, new NextRequest(ready, epic, [.. http.Query["label"].OfType<string>()], repo, limit, null), cancellationToken))
             .WithName("PreviewNext")
             .WithSummary("What the caller would be handed, in that order — the ready-for-agents list — and why the rest is not on it.")
             .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -75,7 +75,7 @@ public static class ProjectEndpoints
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         door.MapPost("/{key}/next", (string key, NextRequest? request, Next next, CancellationToken cancellationToken) =>
-                next.TakeAsync(key, request ?? new NextRequest(null, null, null, null, null), cancellationToken))
+                next.TakeAsync(key, request ?? new NextRequest(null, null, null, null, null, null), cancellationToken))
             .WithName("TakeNext")
             .WithSummary("Take the highest-ranked workable issue and claim it for the caller, in one transaction. 200 with `issue: null` when nothing is workable.")
             .ProducesProblem(StatusCodes.Status400BadRequest)

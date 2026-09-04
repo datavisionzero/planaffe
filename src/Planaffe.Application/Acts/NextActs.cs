@@ -6,7 +6,7 @@ using Planaffe.Domain.Projects;
 namespace Planaffe.Application.Acts;
 
 /// <summary>The filters of <c>next</c>, as query parameters on GET and as a body on POST.</summary>
-public sealed record NextRequest(bool? Ready, string? Epic, IReadOnlyList<string>? Label, string? Repo, int? Limit);
+public sealed record NextRequest(bool? Ready, string? Epic, IReadOnlyList<string>? Label, string? Repo, int? Limit, int? Wait);
 
 /// <summary>What <c>GET /projects/{key}/next</c> answers: the "ready for agents" list, and why the rest is not on it.</summary>
 public sealed record NextPage(IReadOnlyList<IssueSummaryShape> Items, int Total, bool HasMore, Reasons Reasons);
@@ -28,10 +28,12 @@ public sealed class Next(
     IHistory history,
     ITransactions transactions,
     IssueAssembler assembler,
+    IChanges changes,
     InstanceSettings settings,
     TimeProvider clock)
 {
     public const int DefaultLimit = 50;
+    public const int MaximumWaitSeconds = 3600;
 
     public async Task<NextPage> PreviewAsync(string projectKey, NextRequest request, CancellationToken cancellationToken)
     {
@@ -58,8 +60,61 @@ public sealed class Next(
 
     public async Task<NextAnswer> TakeAsync(string projectKey, NextRequest request, CancellationToken cancellationToken)
     {
-        var caller = callerIdentity.Caller;
+        if (request.Wait is <= 0)
+        {
+            throw Refusal.Validation("wait", "wait is a positive number of seconds.");
+        }
+        if (request.Wait is > MaximumWaitSeconds)
+        {
+            throw new Refusal(
+                RefusalCode.WaitTooLong,
+                $"wait is at most {MaximumWaitSeconds} seconds.",
+                new Dictionary<string, object?> { ["maximum"] = MaximumWaitSeconds });
+        }
+
         var query = await QueryAsync(projectKey, request, cancellationToken);
+        if (request.Wait is null)
+        {
+            return await TakeOnceAsync(query, cancellationToken);
+        }
+
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(request.Wait.Value));
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+
+        while (true)
+        {
+            // LISTEN, then register this pulse, then look. Otherwise a commit
+            // between an empty query and LISTEN could be missed until the deadline.
+            try
+            {
+                await changes.EnsureListeningAsync(query.ProjectId, waiting.Token);
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                return await TakeOnceAsync(query, cancellationToken);
+            }
+            var changed = changes.WaitAsync(query.ProjectId, waiting.Token);
+            var answer = await TakeOnceAsync(query, cancellationToken);
+            if (answer.Issue is not null)
+            {
+                await waiting.CancelAsync();
+                return answer;
+            }
+
+            try
+            {
+                await changed;
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                return answer;
+            }
+        }
+    }
+
+    private async Task<NextAnswer> TakeOnceAsync(NextQuery query, CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller;
 
         var taken = await transactions.RunAsync(async () =>
         {

@@ -22,6 +22,9 @@ public enum RefusalCode
     /// <summary>The cursor does not fit the filters or is not one the server issued.</summary>
     CursorInvalid,
 
+    /// <summary>A wait longer than the server's one-hour ceiling.</summary>
+    WaitTooLong,
+
     /// <summary>No token, an unknown token, or a revoked one.</summary>
     Unauthenticated,
 

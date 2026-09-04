@@ -6,5 +6,8 @@ namespace Planaffe.Application.Ports;
 /// </summary>
 public interface IChanges
 {
+    /// <summary>Ensure the project channel is being listened to before a caller checks its state.</summary>
+    Task EnsureListeningAsync(Guid projectId, CancellationToken cancellationToken);
+
     Task WaitAsync(Guid projectId, CancellationToken cancellationToken);
 }

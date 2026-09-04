@@ -25,20 +25,25 @@ public sealed class PostgresChanges(string connectionString, ILogger<PostgresCha
     private CancellationTokenSource _registrationsChanged = new();
     private Task? _listener;
 
+    public Task EnsureListeningAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        Task listening;
+        lock (_gate)
+        {
+            var registration = RegistrationFor(projectId);
+            listening = registration.Listening.Task;
+        }
+
+        return listening.WaitAsync(cancellationToken);
+    }
+
     public Task WaitAsync(Guid projectId, CancellationToken cancellationToken)
     {
         Task listening;
         Task change;
         lock (_gate)
         {
-            if (!_projects.TryGetValue(projectId, out var registration))
-            {
-                registration = new Registration();
-                _projects.Add(projectId, registration);
-                SignalRegistrationChanged();
-            }
-
-            _listener ??= Task.Run(ListenAsync);
+            var registration = RegistrationFor(projectId);
             listening = registration.Listening.Task;
             change = registration.Changed.Task;
         }
@@ -180,6 +185,19 @@ public sealed class PostgresChanges(string connectionString, ILogger<PostgresCha
         _registrationsChanged = new CancellationTokenSource();
         previous.Cancel();
         previous.Dispose();
+    }
+
+    private Registration RegistrationFor(Guid projectId)
+    {
+        if (!_projects.TryGetValue(projectId, out var registration))
+        {
+            registration = new Registration();
+            _projects.Add(projectId, registration);
+            SignalRegistrationChanged();
+        }
+
+        _listener ??= Task.Run(ListenAsync);
+        return registration;
     }
 
     private static TaskCompletionSource NewSource() =>

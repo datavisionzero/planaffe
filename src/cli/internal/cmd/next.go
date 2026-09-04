@@ -8,6 +8,7 @@ import (
 
 	"github.com/datavisionzero/planaffe/src/cli/internal/api"
 	"github.com/datavisionzero/planaffe/src/cli/internal/client"
+	"github.com/datavisionzero/planaffe/src/cli/internal/config"
 	"github.com/datavisionzero/planaffe/src/cli/internal/render"
 )
 
@@ -17,6 +18,8 @@ type emptyNext struct{}
 
 func (emptyNext) Error() string { return "nothing workable" }
 
+const maximumServerWait = 3600
+
 func newNext(g *globals) *cobra.Command {
 	var (
 		claim  bool
@@ -24,6 +27,7 @@ func newNext(g *globals) *cobra.Command {
 		epic   string
 		labels []string
 		repo   string
+		wait   int
 	)
 
 	cmd := &cobra.Command{
@@ -36,7 +40,19 @@ highest-ranked workable issue is handed out and claimed in one transaction that
 cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, c, err := g.load()
+			waiting := cmd.Flags().Changed("wait")
+			if waiting && !claim {
+				return &config.UsageError{Message: "--wait requires --claim"}
+			}
+			if waiting && wait <= 0 {
+				return &config.UsageError{Message: "--wait must be a positive number of seconds"}
+			}
+
+			round := wait
+			if round > maximumServerWait {
+				round = maximumServerWait
+			}
+			cfg, c, err := g.loadForWait(round)
 			if err != nil {
 				return err
 			}
@@ -99,28 +115,45 @@ cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 				return nil
 			}
 
-			resp, err := c.TakeNextWithResponse(ctx, project, api.NextRequest{Ready: readyPtr, Epic: epicPtr, Repo: repoPtr, Label: labelPtr})
-			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
-				return err
-			}
+			remaining := wait
+			for {
+				var waitPtr *int32
+				seconds := remaining
+				if waiting {
+					if seconds > maximumServerWait {
+						seconds = maximumServerWait
+					}
+					value := int32(seconds)
+					waitPtr = &value
+				}
 
-			if g.json {
-				if err := render.JSON(out, resp.JSON200); err != nil {
+				resp, err := c.TakeNextWithResponse(ctx, project, api.NextRequest{Ready: readyPtr, Epic: epicPtr, Repo: repoPtr, Label: labelPtr, Wait: waitPtr})
+				if err != nil {
+					return client.Transport(err)
+				}
+				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
-			} else if resp.JSON200.Issue != nil {
-				render.Issue(out, *resp.JSON200.Issue)
-			} else {
-				render.Reasons(out, resp.JSON200.Reasons)
-			}
 
-			if resp.JSON200.Issue == nil {
-				return emptyNext{}
+				if resp.JSON200.Issue != nil || !waiting || remaining <= seconds {
+					if g.json {
+						if err := render.JSON(out, resp.JSON200); err != nil {
+							return err
+						}
+					} else if resp.JSON200.Issue != nil {
+						render.Issue(out, *resp.JSON200.Issue)
+					} else {
+						render.Reasons(out, resp.JSON200.Reasons)
+					}
+
+					if resp.JSON200.Issue == nil {
+						return emptyNext{}
+					}
+					return nil
+				}
+
+				remaining -= seconds
 			}
-			return nil
 		},
 	}
 
@@ -129,6 +162,7 @@ cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 	cmd.Flags().StringVar(&epic, "epic", "", "only this epic's issues, e.g. PLAN-E3")
 	cmd.Flags().StringArrayVar(&labels, "label", nil, "only issues carrying this label; repeatable, all must match")
 	cmd.Flags().StringVar(&repo, "repo", "", "the `repo` label of this repository, or `none`; defaults to the .planaffe file")
+	cmd.Flags().IntVar(&wait, "wait", 0, "wait this many seconds for a workable issue; requires --claim")
 
 	return cmd
 }

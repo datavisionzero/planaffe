@@ -38,6 +38,7 @@ public static class Problems
         RefusalCode.Transition or RefusalCode.Cycle or RefusalCode.HasIssues or RefusalCode.OneLevel
             or RefusalCode.OtherProject or RefusalCode.EpicInherited or RefusalCode.HasSubIssues or RefusalCode.UnknownLabel =>
             StatusCodes.Status422UnprocessableEntity,
+        RefusalCode.WaitTooLong => StatusCodes.Status422UnprocessableEntity,
         RefusalCode.Internal => StatusCodes.Status500InternalServerError,
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a status."),
     };
@@ -46,6 +47,7 @@ public static class Problems
     {
         RefusalCode.Validation => "A field is missing, malformed or over its limit",
         RefusalCode.CursorInvalid => "The cursor does not fit this request",
+        RefusalCode.WaitTooLong => "The requested wait exceeds one hour",
         RefusalCode.Unauthenticated => "No token, an unknown token, or a revoked one",
         RefusalCode.Forbidden => "The identity may not do this",
         RefusalCode.ReadyRequiresUser => "Only a user sets ready where triage is required",

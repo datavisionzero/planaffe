@@ -26,6 +26,12 @@ The bootstrap token is the first administrator's user token — what the CLI
 carries as `PLANAFFE_TOKEN`. The first agent gets its own token from that
 administrator, one command later (`POST /agents`, `pa agent create`).
 
+`pa next --claim --wait` holds one HTTP request open for as long as one hour.
+A reverse proxy in front of the instance must therefore allow request and
+upstream-response timeouts of at least 3610 seconds. The client adds another
+30 seconds for transport overhead; no inbound connection to the client is
+needed.
+
 ## Upgrading
 
 Migrations run only forward; there is no downgrade path (ADR 0011). The way

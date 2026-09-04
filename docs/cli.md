@@ -64,6 +64,7 @@ The table of `docs/api.md`, derived from the status and the problem document:
 ```
 pa next                      # the ready-for-agents list, in the order next hands out
 pa next --claim              # take the highest-ranked workable issue and claim it
+pa next --claim --wait 60    # wait up to 60 seconds for one; exit 8 at the deadline
 pa next --claim --ready      # only flagged issues, even where triage is not required
 pa next --claim --epic PLAN-E3 --label cut-1 --repo none
 pa next --json               # the page, with reasons
@@ -142,8 +143,10 @@ pa token create · pa token list · pa token revoke <id>
 Descriptions, results, comments, questions and answers come from an argument, a
 file or stdin (`-`), never an editor. The whole agent cycle of VISION 6.1 is
 `pa next --claim`, work, `pa issue comment`, `pa issue ask`, and `pa issue close
---done --result-file -`; a human answers with `pa question answer`. `--wait` is
-cut two.
+--done --result-file -`; a human answers with `pa question answer`. `pa next
+--claim --wait S` accepts any positive number of seconds, splits waits longer
+than the server's one-hour limit into rounds, and returns the same issue or
+empty answer as the command without `--wait`.
 
 ## Working on it
 
