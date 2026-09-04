@@ -41,7 +41,7 @@ public sealed class NeedsYouEndpointTests(PostgresFixture postgres)
         {
             var user = await context.Users.SingleAsync(Ct);
             var question = await context.Issues.SingleAsync(issue => issue.Number == 1, Ct);
-            context.Questions.Add(Question.Ask(question.Id, "Which way?", user.Id, Migrated.Now));
+            context.Questions.Add(Question.Ask(question.ProjectId, question.Id, "Which way?", user.Id, Migrated.Now));
             await context.Database.ExecuteSqlRawAsync("update issue set status = 'review' where number in (1, 2)", Ct);
             await context.SaveChangesAsync(Ct);
         }

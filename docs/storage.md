@@ -400,6 +400,7 @@ create index comment_issue on comment (issue_id, created_at);
 
 create table question (
     id           uuid        not null primary key,
+    project_id   uuid        not null references project (id) on delete cascade,
     issue_id     uuid        not null references issue (id) on delete cascade,
     question     text        not null,
     asked_by     uuid        not null references identity (id),
@@ -418,7 +419,9 @@ create index question_open  on question (issue_id) where answer is null;
 
 A comment is written once and stays; cut one has no edit and no delete for it.
 A question is open while `answer` is null, and the partial index is what
-condition 4 of VISION 10 and the "needs you" list read.
+condition 4 of VISION 10 and the "needs you" list read. `project_id` is
+denormalised from the issue solely so the wake-up trigger below can choose its
+channel without a join.
 
 ### The history
 

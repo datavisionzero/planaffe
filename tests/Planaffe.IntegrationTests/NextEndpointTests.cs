@@ -67,7 +67,7 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
         {
             var asking = await context.Issues.SingleAsync(i => i.Number == 3, Ct);
             var user = await context.Users.SingleAsync(Ct);
-            context.Questions.Add(Question.Ask(asking.Id, "Which one?", user.Id, Migrated.Now));
+            context.Questions.Add(Question.Ask(asking.ProjectId, asking.Id, "Which one?", user.Id, Migrated.Now));
             await context.SaveChangesAsync(Ct);
         }
 

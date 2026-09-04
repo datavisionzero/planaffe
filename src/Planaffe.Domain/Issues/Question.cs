@@ -17,9 +17,10 @@ public sealed class Question
         // EF Core materializes through this; every other route goes through Ask.
     }
 
-    private Question(Guid id, Guid issueId, string text, Guid askedBy, DateTimeOffset askedAt)
+    private Question(Guid id, Guid projectId, Guid issueId, string text, Guid askedBy, DateTimeOffset askedAt)
     {
         Id = id;
+        ProjectId = projectId;
         IssueId = issueId;
         Text = text;
         AskedBy = askedBy;
@@ -27,6 +28,9 @@ public sealed class Question
     }
 
     public Guid Id { get; private init; }
+
+    /// <summary>Denormalised from the issue for the project's wake-up channel.</summary>
+    public Guid ProjectId { get; private init; }
 
     public Guid IssueId { get; private init; }
 
@@ -46,10 +50,10 @@ public sealed class Question
     public bool Open => Answer is null;
 
     /// <exception cref="ArgumentException"><paramref name="text"/> is blank.</exception>
-    public static Question Ask(Guid issueId, string text, Guid askedBy, DateTimeOffset askedAt) =>
+    public static Question Ask(Guid projectId, Guid issueId, string text, Guid askedBy, DateTimeOffset askedAt) =>
         string.IsNullOrWhiteSpace(text)
             ? throw new ArgumentException("Whoever is stuck has to say on what.", nameof(text))
-            : new(Guid.CreateVersion7(), issueId, text.Trim(), askedBy, askedAt);
+            : new(Guid.CreateVersion7(), projectId, issueId, text.Trim(), askedBy, askedAt);
 
     /// <exception cref="ArgumentException"><paramref name="answer"/> is blank.</exception>
     /// <exception cref="InvalidOperationException">The question is already answered.</exception>

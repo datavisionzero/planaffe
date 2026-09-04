@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Planaffe.Application.Ports;
 using Planaffe.Infrastructure.Persistence;
 
@@ -28,6 +29,13 @@ public static class InfrastructureServices
             configuration.GetConnectionString(ConnectionStringName)
             ?? throw new InvalidOperationException(
                 $"ConnectionStrings:{ConnectionStringName} is not configured.")));
+
+        services.AddSingleton<PostgresChanges>(provider => new(
+            configuration.GetConnectionString(ConnectionStringName)
+            ?? throw new InvalidOperationException(
+                $"ConnectionStrings:{ConnectionStringName} is not configured."),
+            provider.GetRequiredService<ILogger<PostgresChanges>>()));
+        services.AddSingleton<IChanges>(provider => provider.GetRequiredService<PostgresChanges>());
 
         services.AddScoped<SchemaMigrator>();
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Planaffe.Domain.Identities;
 using Planaffe.Domain.Issues;
+using Planaffe.Domain.Projects;
 
 namespace Planaffe.Infrastructure.Persistence.Configurations;
 
@@ -51,6 +52,14 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
 
         builder.HasKey(q => q.Id).HasName("pk_question");
         builder.Property(q => q.Id).HasColumnName("id");
+
+        // Kept beside issue_id so a notification trigger never has to join.
+        builder.Property(q => q.ProjectId).HasColumnName("project_id").IsRequired();
+        builder.HasOne<Project>()
+            .WithMany()
+            .HasForeignKey(q => q.ProjectId)
+            .HasConstraintName("fk_question_project")
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.Property(q => q.IssueId).HasColumnName("issue_id").IsRequired();
         builder.HasOne<Issue>()

@@ -114,7 +114,7 @@ public sealed class AskQuestion(
                 ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
 
             var now = clock.GetUtcNow();
-            var asked = Validated.Field("question", () => Question.Ask(issue.Id, text!, caller.Id, now));
+            var asked = Validated.Field("question", () => Question.Ask(issue.ProjectId, issue.Id, text!, caller.Id, now));
             issues.Add(asked);
             issue.Touch(now);
             issue.ExtendClaimIfHeldBy(caller.Id, caller.Kind, now, settings.ClaimExpiry);

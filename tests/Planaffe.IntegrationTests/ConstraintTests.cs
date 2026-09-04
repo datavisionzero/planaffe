@@ -287,7 +287,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
     public async Task A_question_is_answered_whole_or_not_at_all()
     {
         await using var db = await Migrated.SeededAsync(postgres);
-        var question = Question.Ask(db.Issue.Id, "Which Postgres?", db.Agent.Id, Migrated.Now);
+        var question = Question.Ask(db.Project.Id, db.Issue.Id, "Which Postgres?", db.Agent.Id, Migrated.Now);
         db.Context.Questions.Add(question);
         await db.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
