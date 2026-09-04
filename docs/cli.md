@@ -79,8 +79,9 @@ pa issue list -q '"for update" -flaky' # full text: issue fields, comments and q
 pa issue list --deleted                    # the grace period, the one read that sees deleted rows
 pa issue view PLAN-42 [--json]             # the complete issue, epic description and all
 pa issue edit PLAN-42 --title "…" --priority 2 --assignee none --label a --label b --if-match "<updated_at>"
+pa issue edit PLAN-42 PLAN-43 --priority 2     # same change, one transaction, all or none
 pa issue edit PLAN-42 --status backlog     # parking; every other status move is an act
-pa issue delete PLAN-42 · pa issue restore PLAN-42 · pa issue history PLAN-42
+pa issue delete PLAN-42 PLAN-43 · pa issue restore PLAN-42 · pa issue history PLAN-42
 pa issue label add PLAN-42 feature · pa issue label remove PLAN-42 feature
 pa issue block PLAN-42 --by PLAN-40 · pa issue unblock PLAN-42 --by PLAN-40
 ```

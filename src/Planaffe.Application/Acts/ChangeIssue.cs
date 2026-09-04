@@ -28,6 +28,9 @@ public sealed record IssueChanges(
     IReadOnlyList<string>? Labels,
     string? Status);
 
+/// <summary>What a bulk <c>PATCH /issues</c> answers, in the order the keys were given.</summary>
+public sealed record ChangedIssues(IReadOnlyList<IssueShape> Items);
+
 /// <summary>
 /// The scalar fields, the assignee and the epic by name and key, and the label
 /// set with its groups enforced — under the row's lock, guarded by
@@ -48,6 +51,39 @@ public sealed class ChangeIssue(
     TimeProvider clock)
 {
     public async Task<IssueShape> ExecuteAsync(
+        string key, IssueChanges changes, string? ifMatch, CancellationToken cancellationToken)
+        => await transactions.RunAsync(
+            () => ExecuteWithinTransactionAsync(key, changes, ifMatch, cancellationToken),
+            cancellationToken);
+
+    /// <summary>The same change on several issues, committed only when every issue accepts it.</summary>
+    public async Task<ChangedIssues> ExecuteManyAsync(
+        IReadOnlyList<string>? keys, IssueChanges changes, CancellationToken cancellationToken)
+    {
+        ValidateKeys(keys);
+
+        return await transactions.RunAsync(async () =>
+        {
+            var changed = new List<IssueShape>(keys!.Count);
+            foreach (var key in keys)
+            {
+                try
+                {
+                    changed.Add(await ExecuteWithinTransactionAsync(key, changes, ifMatch: null, cancellationToken));
+                }
+                catch (Refusal refusal)
+                {
+                    var extensions = refusal.Extensions.ToDictionary(pair => pair.Key, pair => pair.Value);
+                    extensions["key"] = key;
+                    throw new Refusal(refusal.Code, refusal.Detail, extensions);
+                }
+            }
+
+            return new ChangedIssues(changed);
+        }, cancellationToken);
+    }
+
+    private async Task<IssueShape> ExecuteWithinTransactionAsync(
         string key, IssueChanges changes, string? ifMatch, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(changes);
@@ -93,155 +129,167 @@ public sealed class ChangeIssue(
             throw new Refusal(RefusalCode.EpicInherited, "A sub-issue's epic follows its parent.");
         }
 
-        await transactions.RunAsync(async () =>
-        {
-            var issue = await issues.LoadForWriteAsync(before.Id, cancellationToken)
+        var issue = await issues.LoadForWriteAsync(before.Id, cancellationToken)
                 ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
 
-            if (expected is { } version && issue.UpdatedAt != version)
+        if (expected is { } version && issue.UpdatedAt != version)
+        {
+            throw new Refusal(
+                RefusalCode.Stale,
+                $"{before.Key} changed at {issue.UpdatedAt:yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'}; you last read it at {version:yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'}.",
+                new Dictionary<string, object?> { ["current"] = await assembler.CompleteAsync(before, cancellationToken) });
+        }
+
+        var now = clock.GetUtcNow();
+
+        if (changes.ParentGiven && parentRow?.Id != issue.ParentId)
+        {
+            if (issue.Closed)
             {
-                throw new Refusal(
-                    RefusalCode.Stale,
-                    $"{before.Key} changed at {issue.UpdatedAt:yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'}; you last read it at {version:yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'}.",
-                    new Dictionary<string, object?> { ["current"] = await assembler.CompleteAsync(before, cancellationToken) });
+                throw new Refusal(RefusalCode.Transition, "A closed issue cannot change parent; reopen it first.");
             }
-
-            var now = clock.GetUtcNow();
-
-            if (changes.ParentGiven && parentRow?.Id != issue.ParentId)
+            if (parentRow is not null)
             {
-                if (issue.Closed)
+                if (parentRow.ProjectId != issue.ProjectId)
                 {
-                    throw new Refusal(RefusalCode.Transition, "A closed issue cannot change parent; reopen it first.");
+                    throw new Refusal(RefusalCode.OtherProject, "A parent and its sub-issue stay in one project.");
                 }
-                if (parentRow is not null)
+                if (parentRow.ParentId is not null || await issues.HasSubIssuesAsync(issue.Id, cancellationToken))
                 {
-                    if (parentRow.ProjectId != issue.ProjectId)
-                    {
-                        throw new Refusal(RefusalCode.OtherProject, "A parent and its sub-issue stay in one project.");
-                    }
-                    if (parentRow.ParentId is not null || await issues.HasSubIssuesAsync(issue.Id, cancellationToken))
-                    {
-                        throw new Refusal(RefusalCode.OneLevel, "Sub-issues are exactly one level deep.");
-                    }
+                    throw new Refusal(RefusalCode.OneLevel, "Sub-issues are exactly one level deep.");
                 }
-
-                var oldParent = issue.ParentId is { } oldParentId
-                    ? (await issues.FindLiveManyAsync([oldParentId], cancellationToken)).SingleOrDefault()?.Key
-                    : null;
-                issue.AttachToParent(parentRow?.Id, now);
-                if (parentRow is not null)
-                {
-                    issue.AttachTo(parentRow.EpicId, now);
-                }
-                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Parent, oldParent, parentRow?.Key));
             }
 
-            if (parking is { } target)
+            var oldParent = issue.ParentId is { } oldParentId
+                ? (await issues.FindLiveManyAsync([oldParentId], cancellationToken)).SingleOrDefault()?.Key
+                : null;
+            issue.AttachToParent(parentRow?.Id, now);
+            if (parentRow is not null)
             {
-                var from = issue.Status;
-                issue.MoveTo(target, now);
-                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, ClaimHistory.SnakeCase(from), ClaimHistory.SnakeCase(target)));
+                issue.AttachTo(parentRow.EpicId, now);
+            }
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Parent, oldParent, parentRow?.Key));
+        }
+
+        if (parking is { } target)
+        {
+            var from = issue.Status;
+            issue.MoveTo(target, now);
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, ClaimHistory.SnakeCase(from), ClaimHistory.SnakeCase(target)));
+        }
+
+        if (changes.Title is not null && changes.Title != issue.Title)
+        {
+            var old = issue.Title;
+            Validated.Field("title", () => { issue.Retitle(changes.Title, now); return true; });
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Title, old, issue.Title));
+        }
+
+        if (changes.DescriptionGiven && (changes.Description ?? string.Empty) != issue.Description)
+        {
+            issue.Describe(changes.Description, now);
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Description));
+        }
+
+        if (changes.ResultGiven && changes.Result != issue.Result)
+        {
+            issue.RecordResult(changes.Result, now);
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Result));
+        }
+
+        if (changes.Priority is { } priority && priority != issue.Priority)
+        {
+            var old = issue.Priority;
+            Validated.Field("priority", () => { issue.Prioritize(priority, now); return true; });
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Priority, ((int)old).ToString(CultureInfo.InvariantCulture), ((int)priority).ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (changes.Ready is { } flag && flag != issue.Ready)
+        {
+            issue.SetReady(flag, now);
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Ready, (!flag).ToString().ToLowerInvariant(), flag.ToString().ToLowerInvariant()));
+        }
+
+        if (changes.AssigneeGiven && assignee?.Id != issue.AssigneeId)
+        {
+            var old = issue.AssigneeId;
+            issue.Assign(assignee?.Id, now);
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Assignee, old?.ToString(), assignee?.Id.ToString()));
+        }
+
+        if (changes.EpicGiven && epic?.Id != issue.EpicId)
+        {
+            var old = issue.EpicId is { } oldId ? await epics.FindAsync(oldId, cancellationToken) : null;
+            issue.AttachTo(epic?.Id, now);
+            history.Add(HistoryEntry.OnIssue(
+                issue.Id, caller.Id, now, HistoryField.Epic,
+                old is null ? null : EpicKey.Of(project.Key, old.Number),
+                epic is null ? null : EpicKey.Of(project.Key, epic.Number)));
+
+            if (epic is { Closed: true })
+            {
+                epic.Reopen(now);
+                history.Add(HistoryEntry.OnEpic(epic.Id, caller.Id, now, HistoryField.Status, "closed", "open", "reopened by attaching an issue"));
             }
 
-            if (changes.Title is not null && changes.Title != issue.Title)
+            foreach (var childRow in await issues.SubIssuesOfAsync(issue.Id, cancellationToken))
             {
-                var old = issue.Title;
-                Validated.Field("title", () => { issue.Retitle(changes.Title, now); return true; });
-                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Title, old, issue.Title));
-            }
-
-            if (changes.DescriptionGiven && (changes.Description ?? string.Empty) != issue.Description)
-            {
-                issue.Describe(changes.Description, now);
-                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Description));
-            }
-
-            if (changes.ResultGiven && changes.Result != issue.Result)
-            {
-                issue.RecordResult(changes.Result, now);
-                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Result));
-            }
-
-            if (changes.Priority is { } priority && priority != issue.Priority)
-            {
-                var old = issue.Priority;
-                Validated.Field("priority", () => { issue.Prioritize(priority, now); return true; });
-                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Priority, ((int)old).ToString(CultureInfo.InvariantCulture), ((int)priority).ToString(CultureInfo.InvariantCulture)));
-            }
-
-            if (changes.Ready is { } flag && flag != issue.Ready)
-            {
-                issue.SetReady(flag, now);
-                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Ready, (!flag).ToString().ToLowerInvariant(), flag.ToString().ToLowerInvariant()));
-            }
-
-            if (changes.AssigneeGiven && assignee?.Id != issue.AssigneeId)
-            {
-                var old = issue.AssigneeId;
-                issue.Assign(assignee?.Id, now);
-                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Assignee, old?.ToString(), assignee?.Id.ToString()));
-            }
-
-            if (changes.EpicGiven && epic?.Id != issue.EpicId)
-            {
-                var old = issue.EpicId is { } oldId ? await epics.FindAsync(oldId, cancellationToken) : null;
-                issue.AttachTo(epic?.Id, now);
-                history.Add(HistoryEntry.OnIssue(
-                    issue.Id, caller.Id, now, HistoryField.Epic,
+                var child = await issues.LoadForWriteAsync(childRow.Id, cancellationToken)
+                    ?? throw new InvalidOperationException($"Sub-issue {childRow.Key} vanished under its parent's write.");
+                child.AttachTo(epic?.Id, now);
+                history.Add(HistoryEntry.OnIssue(child.Id, caller.Id, now, HistoryField.Epic,
                     old is null ? null : EpicKey.Of(project.Key, old.Number),
                     epic is null ? null : EpicKey.Of(project.Key, epic.Number)));
-
-                if (epic is { Closed: true })
-                {
-                    epic.Reopen(now);
-                    history.Add(HistoryEntry.OnEpic(epic.Id, caller.Id, now, HistoryField.Status, "closed", "open", "reopened by attaching an issue"));
-                }
-
-                foreach (var childRow in await issues.SubIssuesOfAsync(issue.Id, cancellationToken))
-                {
-                    var child = await issues.LoadForWriteAsync(childRow.Id, cancellationToken)
-                        ?? throw new InvalidOperationException($"Sub-issue {childRow.Key} vanished under its parent's write.");
-                    child.AttachTo(epic?.Id, now);
-                    history.Add(HistoryEntry.OnIssue(child.Id, caller.Id, now, HistoryField.Epic,
-                        old is null ? null : EpicKey.Of(project.Key, old.Number),
-                        epic is null ? null : EpicKey.Of(project.Key, epic.Number)));
-                }
             }
+        }
 
-            if (newLabels is not null)
+        if (newLabels is not null)
+        {
+            var current = (await issues.LabelsOfAsync([issue.Id], cancellationToken)).Select(l => l.Label).ToList();
+            foreach (var gone in current.Where(c => newLabels.All(n => n.Id != c.Id)))
             {
-                var current = (await issues.LabelsOfAsync([issue.Id], cancellationToken)).Select(l => l.Label).ToList();
-                foreach (var gone in current.Where(c => newLabels.All(n => n.Id != c.Id)))
-                {
-                    await issues.DetachAsync(issue.Id, gone.Id, cancellationToken);
-                    history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Label, oldValue: gone.Name));
-                }
-
-                foreach (var added in newLabels.Where(n => current.All(c => c.Id != n.Id)))
-                {
-                    issues.Attach(IssueLabel.Attach(issue.Id, added.Id));
-                    history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Label, newValue: added.Name));
-                }
-
-                if (current.Count != newLabels.Count || current.Any(c => newLabels.All(n => n.Id != c.Id)))
-                {
-                    issue.Touch(now);
-                }
+                await issues.DetachAsync(issue.Id, gone.Id, cancellationToken);
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Label, oldValue: gone.Name));
             }
 
-            // The holder's write is the sign of life (VISION 11); anybody else's
-            // moves updated_at and nothing about the claim.
-            issue.ExtendClaimIfHeldBy(caller.Id, caller.Kind, now, settings.ClaimExpiry);
+            foreach (var added in newLabels.Where(n => current.All(c => c.Id != n.Id)))
+            {
+                issues.Attach(IssueLabel.Attach(issue.Id, added.Id));
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Label, newValue: added.Name));
+            }
 
-            await issues.SaveAsync(cancellationToken);
-            return true;
-        }, cancellationToken);
+            if (current.Count != newLabels.Count || current.Any(c => newLabels.All(n => n.Id != c.Id)))
+            {
+                issue.Touch(now);
+            }
+        }
+
+        // The holder's write is the sign of life (VISION 11); anybody else's
+        // moves updated_at and nothing about the claim.
+        issue.ExtendClaimIfHeldBy(caller.Id, caller.Kind, now, settings.ClaimExpiry);
+
+        await issues.SaveAsync(cancellationToken);
 
         var after = await issues.FindLiveAsync(before.ProjectKey, before.Number, cancellationToken)
             ?? throw new InvalidOperationException($"Issue {before.Key} vanished under its own write.");
 
         return await assembler.CompleteAsync(after, cancellationToken);
+    }
+
+    private static void ValidateKeys(IReadOnlyList<string>? keys)
+    {
+        if (keys is null || keys.Count == 0)
+        {
+            throw Refusal.Validation("keys", "At least one issue key.");
+        }
+        if (keys.Count > CreateIssues.MaximumPerRequest)
+        {
+            throw new Refusal(RefusalCode.TooMany, $"At most {CreateIssues.MaximumPerRequest} issue keys in one request.");
+        }
+        if (keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != keys.Count)
+        {
+            throw Refusal.Validation("keys", "An issue key may occur only once.");
+        }
     }
 
     /// <summary>The `If-Match` value — the `updated_at` as the client last read it, quoted or not.</summary>

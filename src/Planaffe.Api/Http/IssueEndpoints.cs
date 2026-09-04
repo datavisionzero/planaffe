@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi;
 using Planaffe.Application.Acts;
 using Planaffe.Domain.Issues;
@@ -23,6 +24,10 @@ public sealed record ChangeIssueRequest(
     string? Parent,
     IReadOnlyList<string>? Labels,
     string? Status);
+
+public sealed record ChangeIssuesRequest(IReadOnlyList<string>? Keys, ChangeIssueRequest? Changes);
+
+public sealed record DeleteIssuesRequest(IReadOnlyList<string>? Keys);
 
 /// <summary>
 /// Issues without their acts (<c>docs/api.md</c>): the bulk create, the list,
@@ -85,6 +90,42 @@ public static class IssueEndpoints
             .WithSummary("A page of slim issues, filtered and sorted; `status` and `label` repeat.")
             .AddOpenApiOperationTransformer(RepeatableFilters)
             .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        door.MapPatch(string.Empty, async (HttpRequest http, ChangeIssue change, CancellationToken cancellationToken) =>
+            {
+                var body = await JsonDocument.ParseAsync(http.Body, cancellationToken: cancellationToken);
+                if (body.RootElement.ValueKind is not JsonValueKind.Object)
+                {
+                    throw Domain.Refusal.Validation("body", "A bulk change is an object.");
+                }
+                var keys = body.RootElement.TryGetProperty("keys", out var keysElement) && keysElement.ValueKind is JsonValueKind.Array
+                    ? keysElement.EnumerateArray().Select(key => key.GetString() ?? string.Empty).ToArray()
+                    : null;
+                var changes = body.RootElement.TryGetProperty("changes", out var changesElement)
+                    ? Changes(changesElement)
+                    : throw Domain.Refusal.Validation("changes", "The changes object is required.");
+                return await change.ExecuteManyAsync(keys, changes, cancellationToken);
+            })
+            .WithName("ChangeIssues")
+            .WithSummary("Apply the same change to up to 100 issues in one transaction: all of them or none.")
+            .Accepts<ChangeIssuesRequest>("application/json")
+            .Produces<ChangedIssues>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+
+        door.MapDelete(string.Empty, async ([FromBody] DeleteIssuesRequest? request, DeleteIssue delete, CancellationToken cancellationToken) =>
+            {
+                await delete.ExecuteManyAsync(request?.Keys, cancellationToken);
+                return Results.NoContent();
+            })
+            .WithName("DeleteIssues")
+            .WithSummary("Soft-delete up to 100 issues in one transaction: all of them or none.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         door.MapGet("/{key}", (string key, ReadIssue read, CancellationToken cancellationToken) => read.ExecuteAsync(key, cancellationToken))
             .WithName("ReadIssue")

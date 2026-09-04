@@ -158,6 +158,54 @@ func TestIssueEditSendsOnlyWhatWasGivenAndTheIfMatch(t *testing.T) {
 	}
 }
 
+func TestIssueEditAndDeleteUseTheBulkEndpointsForSeveralKeys(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
+		if r.Method == http.MethodPatch {
+			return 200, `{"items":[` + issue + `,` + issue + `]}`
+		}
+		return 204, ""
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+	dir := t.TempDir()
+
+	code, out, errOut := run(t, server, dir, "issue", "edit", "PLAN-2", "PLAN-1", "--priority", "3")
+	if code != exit.OK || errOut != "" || strings.Count(out, "PLAN-42") != 2 {
+		t.Fatalf("bulk edit: code %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if request := f.requests[0]; request.Method != http.MethodPatch || request.URL.Path != "/issues" {
+		t.Fatalf("bulk edit request: %s %s", request.Method, request.URL.Path)
+	}
+	var changed map[string]any
+	_ = json.Unmarshal([]byte(f.bodies[0]), &changed)
+	keys := changed["keys"].([]any)
+	changes := changed["changes"].(map[string]any)
+	if keys[0] != "PLAN-2" || keys[1] != "PLAN-1" || changes["priority"] != float64(3) {
+		t.Errorf("bulk edit body = %v", changed)
+	}
+
+	code, out, errOut = run(t, server, dir, "issue", "delete", "plan-2", "plan-1")
+	if code != exit.OK || errOut != "" || !strings.Contains(out, "PLAN-2 deleted") || !strings.Contains(out, "PLAN-1 deleted") {
+		t.Fatalf("bulk delete: code %d, stdout %q, stderr %q", code, out, errOut)
+	}
+	if request := f.requests[1]; request.Method != http.MethodDelete || request.URL.Path != "/issues" {
+		t.Fatalf("bulk delete request: %s %s", request.Method, request.URL.Path)
+	}
+	var deleted map[string]any
+	_ = json.Unmarshal([]byte(f.bodies[1]), &deleted)
+	if got := deleted["keys"].([]any); got[0] != "plan-2" || got[1] != "plan-1" {
+		t.Errorf("bulk delete body = %v", deleted)
+	}
+	if f.requests[0].Header.Get("Idempotency-Key") == "" || f.requests[1].Header.Get("Idempotency-Key") == "" {
+		t.Error("each bulk request is one idempotent write")
+	}
+
+	code, _, errOut = run(t, server, dir, "issue", "edit", "PLAN-1", "PLAN-2", "--title", "x", "--if-match", "2026-09-02T14:03:07Z")
+	if code != exit.Usage || !strings.Contains(errOut, "--if-match") {
+		t.Errorf("bulk --if-match: code %d, stderr %q", code, errOut)
+	}
+}
+
 func TestIssueViewDeleteRestoreHistoryAndTheEdges(t *testing.T) {
 	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
 		switch {

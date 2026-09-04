@@ -184,6 +184,7 @@ person. Extension members carry what the code needs — the holder on
 | 422 | `in-published-release` | the issue is part of an immutable published release and cannot be deleted |
 | 422 | `unknown-label` | `repo` or a label filter names a label the project does not have |
 | 422 | `wait-too-long` | `wait` exceeds the server's one-hour ceiling; `maximum` is 3600 |
+| 422 | `too-many` | a bulk change contains more than 100 issue keys |
 | 500 | `internal` | a bug; the response carries nothing else |
 
 Three things an agent has to tell apart (VISION 6.1) are three different rows:

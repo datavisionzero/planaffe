@@ -36,10 +36,21 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
     public async Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken cancellationToken)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        var result = await work();
-        await PurgeAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return result;
+        try
+        {
+            var result = await work();
+            await PurgeAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        }
+        catch
+        {
+            // The scoped context is also used by the idempotency middleware
+            // after a refusal. Do not let its SaveChanges persist entities
+            // whose transaction was rolled back.
+            context.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     private async Task PurgeAsync(CancellationToken cancellationToken)

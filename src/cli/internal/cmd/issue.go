@@ -349,9 +349,9 @@ func newIssueEdit(g *globals) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "edit KEY",
-		Short: "Change the fields given; `none` clears assignee or epic. --if-match guards the write.",
-		Args:  cobra.ExactArgs(1),
+		Use:   "edit KEY [KEY...]",
+		Short: "Change the fields given on one or several issues; a bulk change is all or none.",
+		Args:  cobra.RangeArgs(1, 100),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, c, err := g.load()
 			if err != nil {
@@ -410,22 +410,46 @@ func newIssueEdit(g *globals) *cobra.Command {
 			if len(changes) == 0 {
 				return &config.UsageError{Message: "nothing to change: give at least one field."}
 			}
+			if len(args) > 1 && ifMatch != "" {
+				return &config.UsageError{Message: "--if-match guards a single issue and cannot be used with several keys."}
+			}
 
-			body, _ := json.Marshal(changes)
-			resp, err := c.ChangeIssueWithBodyWithResponse(cmd.Context(), args[0], "application/json", bytes.NewReader(body),
-				func(_ context.Context, req *http.Request) error {
-					if ifMatch != "" {
-						req.Header.Set("If-Match", `"`+strings.Trim(ifMatch, `"`)+`"`)
-					}
-					return nil
-				})
+			if len(args) == 1 {
+				body, _ := json.Marshal(changes)
+				resp, err := c.ChangeIssueWithBodyWithResponse(cmd.Context(), args[0], "application/json", bytes.NewReader(body),
+					func(_ context.Context, req *http.Request) error {
+						if ifMatch != "" {
+							req.Header.Set("If-Match", `"`+strings.Trim(ifMatch, `"`)+`"`)
+						}
+						return nil
+					})
+				if err != nil {
+					return client.Transport(err)
+				}
+				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+					return err
+				}
+				return printIssue(g, cmd, *resp.JSON200)
+			}
+
+			body, _ := json.Marshal(map[string]any{"keys": args, "changes": changes})
+			resp, err := c.ChangeIssuesWithBodyWithResponse(cmd.Context(), "application/json", bytes.NewReader(body))
 			if err != nil {
 				return client.Transport(err)
 			}
 			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
-			return printIssue(g, cmd, *resp.JSON200)
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			for i, issue := range resp.JSON200.Items {
+				if i > 0 {
+					fmt.Fprintln(cmd.OutOrStdout())
+				}
+				render.Issue(cmd.OutOrStdout(), issue)
+			}
+			return nil
 		},
 	}
 
@@ -448,28 +472,51 @@ func newIssueEdit(g *globals) *cobra.Command {
 
 func newIssueDelete(g *globals) *cobra.Command {
 	return &cobra.Command{
-		Use:   "delete KEY",
-		Short: "Soft-delete: invisible everywhere, restorable for the grace period.",
-		Args:  cobra.ExactArgs(1),
+		Use:   "delete KEY [KEY...]",
+		Short: "Soft-delete one or several issues; a bulk delete is all or none.",
+		Args:  cobra.RangeArgs(1, 100),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, c, err := g.load()
 			if err != nil {
 				return err
 			}
-			resp, err := c.DeleteIssueWithResponse(cmd.Context(), args[0])
-			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
-				return err
+			if len(args) == 1 {
+				resp, err := c.DeleteIssueWithResponse(cmd.Context(), args[0])
+				if err != nil {
+					return client.Transport(err)
+				}
+				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+					return err
+				}
+			} else {
+				resp, err := c.DeleteIssuesWithResponse(cmd.Context(), api.DeleteIssuesRequest{Keys: &args})
+				if err != nil {
+					return client.Transport(err)
+				}
+				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+					return err
+				}
 			}
 			if g.json {
-				return render.JSON(cmd.OutOrStdout(), map[string]any{"key": strings.ToUpper(args[0]), "deleted": true})
+				if len(args) == 1 {
+					return render.JSON(cmd.OutOrStdout(), map[string]any{"key": strings.ToUpper(args[0]), "deleted": true})
+				}
+				return render.JSON(cmd.OutOrStdout(), map[string]any{"keys": upper(args), "deleted": true})
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s deleted; `pa issue restore %s` brings it back.\n", strings.ToUpper(args[0]), strings.ToUpper(args[0]))
+			for _, key := range upper(args) {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s deleted; `pa issue restore %s` brings it back.\n", key, key)
+			}
 			return nil
 		},
 	}
+}
+
+func upper(keys []string) []string {
+	result := make([]string, len(keys))
+	for i, key := range keys {
+		result[i] = strings.ToUpper(key)
+	}
+	return result
 }
 
 func newIssueRestore(g *globals) *cobra.Command {

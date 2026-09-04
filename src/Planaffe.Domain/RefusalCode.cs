@@ -28,6 +28,9 @@ public enum RefusalCode
     /// <summary>A wait longer than the server's one-hour ceiling.</summary>
     WaitTooLong,
 
+    /// <summary>A bulk request contains more than its one-hundred-item ceiling.</summary>
+    TooMany,
+
     /// <summary>No token, an unknown token, or a revoked one.</summary>
     Unauthenticated,
 

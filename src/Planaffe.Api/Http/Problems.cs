@@ -39,7 +39,7 @@ public static class Problems
             or RefusalCode.OtherProject or RefusalCode.EpicInherited or RefusalCode.HasSubIssues or RefusalCode.UnknownLabel
             or RefusalCode.InPublishedRelease =>
             StatusCodes.Status422UnprocessableEntity,
-        RefusalCode.WaitTooLong => StatusCodes.Status422UnprocessableEntity,
+        RefusalCode.WaitTooLong or RefusalCode.TooMany => StatusCodes.Status422UnprocessableEntity,
         RefusalCode.Internal => StatusCodes.Status500InternalServerError,
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a status."),
     };
@@ -50,6 +50,7 @@ public static class Problems
         RefusalCode.UnknownField => "The request contains a field this object does not define",
         RefusalCode.CursorInvalid => "The cursor does not fit this request",
         RefusalCode.WaitTooLong => "The requested wait exceeds one hour",
+        RefusalCode.TooMany => "The bulk request contains too many issues",
         RefusalCode.Unauthenticated => "No token, an unknown token, or a revoked one",
         RefusalCode.Forbidden => "The identity may not do this",
         RefusalCode.ReadyRequiresUser => "Only a user sets ready where triage is required",
