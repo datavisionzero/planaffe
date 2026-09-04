@@ -44,6 +44,11 @@ var smtpSettings = SmtpSettings.FromVariables(
     builder.Environment.IsDevelopment());
 builder.Services.AddSingleton(smtpSettings);
 
+// Who may speak for the caller (docs/operations.md). Unset, nothing may, and
+// the instance reads the socket.
+var trustedProxies = TrustedProxies.FromVariable(builder.Configuration[TrustedProxies.Variable]);
+builder.Services.AddSingleton(trustedProxies);
+
 // The acts are registered here; the layers below know nothing about the
 // container they are resolved from. The clock is the base class library's.
 builder.Services.AddSingleton(TimeProvider.System);
@@ -179,6 +184,14 @@ builder.Services.AddProblemDetails();
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+// Before anything reads a scheme or an address: the log line, the CSRF origin
+// and the login limit all want the caller's, not the proxy's. Only when an
+// operator has named the proxy — an unnamed one is a client with a header.
+if (trustedProxies.Configured)
+{
+    app.UseForwardedHeaders(trustedProxies.Options());
+}
 
 // Method, path, status and duration — and nothing an agent wrote (VISION 13).
 app.UseSerilogRequestLogging();

@@ -79,8 +79,7 @@ public sealed class BrowserCsrfMiddleware(RequestDelegate next)
             && context.User.Identity?.IsAuthenticated == true && caller.Caller.SessionId is not null
             && context.Request.Method is not ("GET" or "HEAD" or "OPTIONS"))
         {
-            var origin = smtp.PublicUrl?.AbsoluteUri.TrimEnd('/') ?? $"{context.Request.Scheme}://{context.Request.Host}";
-            if (!CsrfProtection.IsSafe(context.Request, origin)) { await Problems.WriteAsync(context, RefusalCode.Csrf, "The browser write failed its CSRF check."); return; }
+            if (!CsrfProtection.IsSafe(context.Request, smtp.PublicUrl)) { await Problems.WriteAsync(context, RefusalCode.Csrf, "The browser write failed its CSRF check."); return; }
         }
         await next(context);
     }

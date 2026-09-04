@@ -33,6 +33,10 @@ services:
       PLANAFFE_BOOTSTRAP_EMAIL: "${PLANAFFE_BOOTSTRAP_EMAIL:?set PLANAFFE_BOOTSTRAP_EMAIL in deploy/.env}"
       PLANAFFE_BOOTSTRAP_TOKEN: "${PLANAFFE_BOOTSTRAP_TOKEN:?set PLANAFFE_BOOTSTRAP_TOKEN in deploy/.env}"
       PLANAFFE_PUBLIC_URL: "${PLANAFFE_PUBLIC_URL:-}"
+      # The reverse proxy in front of this, so that the caller's address and
+      # scheme are the caller's: an address, a CIDR network, or `all`. Unset,
+      # every request looks as if it came from the proxy.
+      PLANAFFE_TRUSTED_PROXY: "${PLANAFFE_TRUSTED_PROXY:-}"
       PLANAFFE_SMTP_HOST: "${PLANAFFE_SMTP_HOST:-}"
       PLANAFFE_SMTP_PORT: "${PLANAFFE_SMTP_PORT:-}"
       PLANAFFE_SMTP_USERNAME: "${PLANAFFE_SMTP_USERNAME:-}"

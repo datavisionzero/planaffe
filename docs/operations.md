@@ -36,6 +36,14 @@ upstream-response timeouts of at least 3610 seconds. The client adds another
 30 seconds for transport overhead; no inbound connection to the client is
 needed.
 
+Set `PLANAFFE_TRUSTED_PROXY` to that proxy — its address, its network, or `all`
+where a Compose network renumbers it on every start. Unset, the instance reads
+the socket, and behind a proxy that is the proxy's own address for every
+request: the failed-sign-in limit of twenty per address in fifteen minutes then
+counts every caller together, and twenty bad passwords by anybody stop
+everybody until the window passes. `all` trusts whoever connects, so publish no
+port the proxy does not own.
+
 ## Upgrading
 
 Migrations run only forward; there is no downgrade path (ADR 0011). The way
@@ -61,6 +69,7 @@ Set in `deploy/.env`; read once, at start.
 | `PLANAFFE_BOOTSTRAP_EMAIL` | first start | | the first administrator's sign-in email |
 | `PLANAFFE_BOOTSTRAP_TOKEN` | first start | | their user token, at least 32 characters; shorter refuses the start |
 | `PLANAFFE_PUBLIC_URL` | for browser or email | | canonical external origin, for Origin checks and links; for example `https://plan.example.com`, without a trailing slash |
+| `PLANAFFE_TRUSTED_PROXY` | behind a proxy | | which peers may set `X-Forwarded-For` and `X-Forwarded-Proto`: addresses and CIDR networks, comma-separated, or `all` |
 | `PLANAFFE_SMTP_HOST` | no | | SMTP host; when absent, transactional email is disabled |
 | `PLANAFFE_SMTP_PORT` | with SMTP | `587` | SMTP port |
 | `PLANAFFE_SMTP_USERNAME` | no | | SMTP authentication user; set with the password |
@@ -96,7 +105,14 @@ inferred from request headers.
 Production must expose the public URL over HTTPS: the session cookie is
 `Secure`, `HttpOnly`, `SameSite=Lax`, has no `Domain` and uses the `__Host-`
 prefix. Only the explicit Development environment uses a non-Secure cookie with
-a different name. A reverse proxy must preserve the original `Origin` header.
+a different name. A reverse proxy must preserve the original `Origin` and `Host`
+headers.
+
+A browser write carries `X-Planaffe-CSRF: 1`, which no cross-site form can set,
+and an `Origin` the instance checks. With `PLANAFFE_PUBLIC_URL` set it is
+checked whole; without it the scheme is left out, because a proxy that
+terminates TLS forwards the request as `http` unless `PLANAFFE_TRUSTED_PROXY`
+lets it say otherwise. The public URL itself is never taken from a header.
 
 ## Logging
 
