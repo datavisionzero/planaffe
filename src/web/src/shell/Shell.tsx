@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { EpicsView } from "@/epics/EpicsView";
 import { IssueListView } from "@/issues/IssueListView";
+import { NewIssueView } from "@/issues/IssueEditor";
 import { LabelsView } from "@/projects/LabelsView";
 import { ProjectSwitcher } from "@/projects/ProjectSwitcher";
 import { NewProjectView } from "@/projects/NewProjectView";
@@ -107,6 +108,7 @@ export function Shell() {
               .map((view) => (
                 <Route key={view.id} path={view.path} element={<IssueListView view={view} />} />
               ))}
+            <Route path="issues/new" element={<NewIssueView />} />
             <Route path="issues/:key" element={<Suspense fallback={null}><IssueView /></Suspense>} />
             <Route path="epics" element={<EpicsView />} />
             <Route path="epics/:key" element={<EpicsView />} />

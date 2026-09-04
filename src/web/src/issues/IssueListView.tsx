@@ -98,6 +98,7 @@ export function IssueListView({ view }: { view: View }) {
         const next = Math.max(0, Math.min(page.items.length - 1, active + (event.key === "j" ? 1 : -1)));
         setActive(next); virtualizer.scrollToIndex(next, { align: "auto" });
       } else if (!editing && event.key === "Enter" && page.items[active]) void navigate(`/${project}/issues/${page.items[active].key}`);
+      else if (!editing && event.key === "c") { event.preventDefault(); void navigate(`/${project}/issues/new`); }
       else if (event.key === "Escape" && filtersOpen) setFiltersOpen(false);
     }
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);

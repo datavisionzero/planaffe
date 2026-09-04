@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installInstance, renderAt } from "@/shared/testing";
@@ -50,5 +51,18 @@ describe("the human-first issue detail", () => {
     expect(screen.getByRole("link", { name: /^PLAN-10 ·/ })).toBeInTheDocument();
     expect(screen.getByText("Issue outside your project access")).toBeInTheDocument();
     expect(screen.getByText("A comment.")).toBeInTheDocument();
+  });
+
+  it("answers the action that needs attention without leaving the issue", async () => {
+    const answered = { ...issue.questions[0], answer: "Use the browser path.", answered_by: person, answered_at: "2026-09-04T11:00:00Z" };
+    const instance = installInstance({ "GET /issues/PLAN-9": issue, "GET /issues/PLAN-9/history": [], "POST /questions/0199a000-0000-7000-8000-000000000004/answer": { body: answered } });
+    renderAt("/PLAN/issues/PLAN-9", routedIssue);
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByLabelText("Answer"), "Use the browser path.");
+    await user.click(screen.getByRole("button", { name: "Answer" }));
+
+    expect(await screen.findByText("Use the browser path.")).toBeInTheDocument();
+    expect(await instance.calls.at(-1)!.json()).toEqual({ answer: "Use the browser path." });
   });
 });
