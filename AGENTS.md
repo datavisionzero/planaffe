@@ -64,8 +64,14 @@ experiments. It is in `.gitignore` and never reaches the remote. Its rules are
 in `scratchpad/README.md` on the machine you are working on. If the directory
 does not exist, proceed silently; it is not part of the published repository.
 
-**Issues live in planaffe itself**, not on GitHub: the maintainer's own
-instance tracks the work (`.planaffe` at the root names the project, and
-`docs/cli.md` says how `pa` is configured), because this repository is public
-and the working level of a product that is still being cut into shape is not a
-shop window. GitHub issues stay the place where strangers report things.
+During the project's early **solo-builder phase**, working tickets and plans
+live in the local `scratchpad/`, not in a planaffe instance. Read
+`scratchpad/README.md`, the relevant notes and `scratchpad/inbox.md` to find
+what is open and what comes next. Do not consult or start a local planaffe
+instance for the backlog unless the current task explicitly asks for it.
+
+The scratchpad keeps the working level of a product that is still being cut
+into shape out of the public repository. GitHub issues remain the place where
+strangers report things. The checked-in `.planaffe` file documents the project
+association and prepares the later transition to planaffe as the tracker; it
+does not make an instance the source of truth during this phase.
