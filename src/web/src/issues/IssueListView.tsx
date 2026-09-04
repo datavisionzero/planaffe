@@ -6,7 +6,10 @@ import { api, describe, type IssueSummary } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import { PageHeader } from "@/shared/PageHeader";
 import { keyPath, type View } from "@/shell/views";
 import { priorityLabel } from "./priority";
@@ -34,6 +37,10 @@ export function IssueListView({ view }: { view: View }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [active, setActive] = useState(0);
   const scrollElement = useRef<HTMLDivElement>(null);
+  // The one control the filters belong to, whichever shape they take, and
+  // where the focus goes back to when they close.
+  const filtersButton = useRef<HTMLButtonElement>(null);
+  const narrow = useIsMobile();
   const query = useMemo(() => readQuery(project, search, view), [project, search, view]);
   const fingerprint = JSON.stringify(query);
   const [loaded, setLoaded] = useState<{ of: string; page: PageState } | null>(null);
@@ -99,7 +106,7 @@ export function IssueListView({ view }: { view: View }) {
         setActive(next); virtualizer.scrollToIndex(next, { align: "auto" });
       } else if (!editing && event.key === "Enter" && page.items[active]) void navigate(keyPath(page.items[active].key));
       else if (!editing && event.key === "c") { event.preventDefault(); void navigate(`/${project}/issues/new`); }
-      else if (event.key === "Escape" && filtersOpen) setFiltersOpen(false);
+      else if (event.key === "Escape" && filtersOpen) { setFiltersOpen(false); filtersButton.current?.focus(); }
     }
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
   }, [active, filtersOpen, navigate, page.items, project, virtualizer]);
@@ -114,14 +121,26 @@ export function IssueListView({ view }: { view: View }) {
 
   return <div className="flex min-h-0 flex-1 flex-col">
     <PageHeader title={view.label} meta={page.total === undefined ? "…" : `${page.total} ${page.total === 1 ? "issue" : "issues"}`}>
-      <Button variant={filtersOpen || explicit ? "secondary" : "outline"} size="sm" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><SlidersHorizontalIcon /> Filters</Button>
+      <Button ref={filtersButton} variant={filtersOpen || explicit ? "secondary" : "outline"} size="sm" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><SlidersHorizontalIcon /> Filters</Button>
     </PageHeader>
     <div className="flex flex-wrap items-center gap-2 border-b p-2">
       <div className="relative min-w-48 flex-1 sm:max-w-sm"><SearchIcon className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" /><Input data-issue-search aria-label="Search issues" placeholder="Search issues…" value={search.get("q") ?? ""} onChange={(event) => change("q", event.target.value)} className="pl-8" /></div>
       <select aria-label="Sort issues" value={search.get("sort") ?? "updated"} onChange={(event) => change("sort", event.target.value === "updated" ? undefined : event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="priority">Priority</option></select>
       <Button variant="ghost" size="sm" onClick={() => change("order", (search.get("order") ?? "desc") === "desc" ? "asc" : undefined)} aria-label="Reverse sort order">{(search.get("order") ?? "desc") === "desc" ? "Descending" : "Ascending"}</Button>
     </div>
-    {filtersOpen && <FilterBar search={search} change={change} clear={() => setSearch(new URLSearchParams(), { replace: true })} />}
+    {/* Wide: the bar stays in place above the list. Narrow: the same controls
+        arrive as a sheet that dismisses itself and hands the focus back
+        (`docs/human-interface.md`, the screen matrix). */}
+    {filtersOpen && !narrow && <FilterBar search={search} change={change} clear={() => setSearch(new URLSearchParams(), { replace: true })} />}
+    {narrow && <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+      <SheetContent side="bottom" finalFocus={filtersButton} className="max-h-[85svh] overflow-y-auto pb-4">
+        <SheetHeader className="pb-0">
+          <SheetTitle>Filters</SheetTitle>
+          <SheetDescription>What you choose is carried by the address of this list.</SheetDescription>
+        </SheetHeader>
+        <FilterBar search={search} change={change} clear={() => setSearch(new URLSearchParams(), { replace: true })} className="border-b-0 bg-transparent px-4 pt-0" />
+      </SheetContent>
+    </Sheet>}
     {page.at === "asking" && !page.items.length && <Loading />}
     {page.at === "failed" && !page.items.length && <p className="p-4 text-sm text-destructive">{page.why}</p>}
     {page.at === "known" && !page.items.length && <div className="flex flex-1 flex-col items-center justify-center gap-1 p-8 text-center"><p className="text-sm">{explicit ? "No issues match these filters." : "No issues yet."}</p><p className="text-xs text-muted-foreground">{view.hint}</p></div>}
@@ -132,8 +151,8 @@ export function IssueListView({ view }: { view: View }) {
   </div>;
 }
 
-function FilterBar({ search, change, clear }: { search: URLSearchParams; change: (name: string, value?: string) => void; clear: () => void }) {
-  return <div className="flex flex-wrap items-end gap-2 border-b bg-muted/30 p-2" aria-label="Issue filters">
+function FilterBar({ search, change, clear, className }: { search: URLSearchParams; change: (name: string, value?: string) => void; clear: () => void; className?: string }) {
+  return <div className={cn("flex flex-wrap items-end gap-2 border-b bg-muted/30 p-2", className)} role="group" aria-label="Issue filters">
     <Filter label="Status" name="status" value={search.get("status") ?? ""} change={change}><option value="">Any</option>{["backlog", "todo", "in_progress", "review", "done", "canceled"].map((value) => <option key={value}>{value}</option>)}</Filter>
     <Filter label="Priority" name="priority" value={search.get("priority") ?? ""} change={change}><option value="">Any</option>{[0, 1, 2, 3, 4].map((value) => <option key={value} value={value}>{priorityLabel(value)}</option>)}</Filter>
     {[["Label", "label"], ["Epic", "epic"], ["Assignee", "assignee"], ["Author", "author"]].map(([label, name]) => <label key={name} className="grid gap-1 text-xs text-muted-foreground">{label}<Input value={search.get(name) ?? ""} onChange={(event) => change(name, event.target.value)} className="w-32 text-foreground" /></label>)}

@@ -113,6 +113,47 @@ describe("the shell (ADR 0006)", () => {
     expect(query.getAll("status")).toEqual(["backlog", "todo"]);
   });
 
+  // The screen matrix gives /:project/issues "filters open as a dismissible
+  // sheet" on a narrow screen; they were an inline bar on every width.
+  it("opens the filters as a sheet on a narrow screen and hands the focus back", async () => {
+    vi.stubGlobal("matchMedia", (media: string) => ({
+      matches: true, media, onchange: null,
+      addEventListener: () => undefined, removeEventListener: () => undefined,
+      addListener: () => undefined, removeListener: () => undefined, dispatchEvent: () => false,
+    }));
+    shell("/PLAN/issues");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    const filters = screen.getByRole("button", { name: "Filters" });
+    await user.click(filters);
+
+    const sheet = await screen.findByRole("dialog", { name: "Filters" });
+    expect(within(sheet).getByRole("group", { name: "Issue filters" })).toBeInTheDocument();
+
+    await user.click(within(sheet).getByRole("button", { name: "Close" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Filters" })).not.toBeInTheDocument());
+    expect(filters).toHaveFocus();
+  });
+
+  it("keeps the filter bar in place on a wide screen, and Escape returns the focus", async () => {
+    shell("/PLAN/issues");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    const filters = screen.getByRole("button", { name: "Filters" });
+    await user.click(filters);
+
+    expect(screen.getByRole("group", { name: "Issue filters" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Filters" })).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("group", { name: "Issue filters" })).not.toBeInTheDocument();
+    expect(filters).toHaveFocus();
+  });
+
   it("switches the project and keeps the view", async () => {
     shell("/PLAN/in-progress");
     const user = userEvent.setup();
