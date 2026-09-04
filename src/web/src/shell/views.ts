@@ -54,13 +54,14 @@ export const views: View[] = [
     hint: "Who holds what, and since when.",
   },
   {
+    // Not a filtered issue list: it has an endpoint of its own that says why
+    // each issue is on it, and a screen of its own that reads it.
     id: "needs-you",
     label: "Needs you",
     path: "needs-you",
     icon: HandIcon,
     group: "views",
-    filter: { status: ["review"] },
-    hint: "What only a human can resolve: questions and reviews.",
+    hint: "What only a human can resolve: questions, reviews, triage and dead ends.",
   },
   {
     id: "all",

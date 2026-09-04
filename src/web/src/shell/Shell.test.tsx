@@ -41,6 +41,12 @@ function shell(path: string) {
       return { items, total: items.length, has_more: false, next_cursor: null };
     },
     "GET /epics": { items: [], total: 0, has_more: false, next_cursor: null },
+    "GET /projects/PLAN/needs-you": {
+      items: [{ issue: anIssue("PLAN-13", "The web shell", "review"), because: "review" }],
+      total: 1,
+      has_more: false,
+      next_cursor: null,
+    },
     "GET /projects/PLAN/labels": [{ name: "feature", group: "kind", description: null }],
   });
 
@@ -71,6 +77,16 @@ describe("the shell (ADR 0006)", () => {
         `/PLAN/${view.path}`,
       );
     }
+  });
+
+  // Needs you is the one view of the four that is not a filtered issue list:
+  // it has an endpoint of its own that says why each issue is on it.
+  it("gives Needs you its own screen rather than a filtered issue list", async () => {
+    const { calls } = shell("/PLAN/needs-you");
+
+    expect(await screen.findByRole("heading", { name: "In review · 1", level: 2 })).toBeInTheDocument();
+    expect(calls.some((call) => new URL(call.url).pathname === "/projects/PLAN/needs-you")).toBe(true);
+    expect(calls.some((call) => new URL(call.url).pathname === "/issues")).toBe(false);
   });
 
   it("frames the list of the view it was opened on, filtered by the view", async () => {
