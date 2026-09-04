@@ -175,6 +175,40 @@ describe("the shell (ADR 0006)", () => {
     expect(await screen.findByRole("heading", { name: /PLAN-13/ })).toBeInTheDocument();
   });
 
+  it("offers what the instance finds for words, and the way to all of them", async () => {
+    const { calls } = shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    await user.type(await screen.findByRole("combobox", { name: /command/i }), "shell");
+
+    const match = await screen.findByRole("option", { name: /The web shell/ });
+    expect(within(match).getByText("PLAN-13")).toBeInTheDocument();
+    await waitFor(() => {
+      const search = calls.map((call) => new URL(call.url)).find((url) => url.searchParams.get("q") === "shell")!;
+      expect(search.searchParams.get("project")).toBe("PLAN");
+      expect(search.searchParams.get("limit")).toBe("5");
+    });
+
+    await user.click(match);
+
+    expect(await screen.findByRole("heading", { name: /PLAN-13/ })).toBeInTheDocument();
+  });
+
+  it("lands on the filtered list from the last row of the matches", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    await user.type(await screen.findByRole("combobox", { name: /command/i }), "shell");
+    await user.click(await screen.findByRole("option", { name: /All issues matching/ }));
+
+    expect(await screen.findByRole("heading", { name: "All issues" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search issues" })).toHaveValue("shell");
+  });
+
   // PLAN-51: the dropdown advertised ⌘P and nothing was bound to it. ⌘P is the
   // browser's print, so the shortcut that got bound is the bare key the lists
   // already speak.

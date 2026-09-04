@@ -1,7 +1,7 @@
 import { ArrowRightIcon, SearchIcon } from "lucide-react";
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
-import type { Project } from "@/api/client";
+import { api, type IssueSummary, type Project } from "@/api/client";
 import { useTheme } from "@/components/theme-provider";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
@@ -16,12 +16,21 @@ type Command = {
   hint?: string;
   group: string;
   run: () => void;
+  /** A row the instance found, or the way to all of them: never filtered again here. */
+  found?: boolean;
 };
+
+/** Enough of a word to ask the instance about, and few enough answers to stay a palette. */
+const shortest = 2;
+const matches = 5;
+const settle = 150;
 
 /**
  * The command palette — ⌘K, or Ctrl+K — over the views, the projects and the
  * few acts the shell itself has. A key typed into it opens that issue or epic,
- * which is the fastest way from a chat to a ticket.
+ * which is the fastest way from a chat to a ticket. Words rather than a key ask
+ * the instance: a few full-text matches, and the row that opens all of them as
+ * a filtered list.
  *
  * Owned rather than imported (ADR 0017): a filtered list with a roving index
  * inside a Base UI dialog, which is what a palette is before it does more.
@@ -54,6 +63,45 @@ function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "op
   const { signOut } = useSession();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
+  const [found, setFound] = useState<{ of: string; items: IssueSummary[] }>({ of: "", items: [] });
+
+  const needle = query.trim();
+  const projectKey = current?.key;
+  // Words, not a key, and a project to search in. `q` on the issue list is the
+  // same full-text search the list itself uses.
+  const searching = projectKey !== undefined && needle.length >= shortest && !keyPattern.test(needle);
+
+  useEffect(() => {
+    if (!searching) {
+      return;
+    }
+
+    const controller = new AbortController();
+    // Typed words settle before the instance is asked; the palette answers
+    // from its own commands the whole time, and a request that fails or is
+    // overtaken costs them nothing.
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const { data } = await api.GET("/issues", {
+            params: { query: { project: projectKey, q: needle, limit: matches } },
+            signal: controller.signal,
+          });
+
+          if (data !== undefined) {
+            setFound({ of: needle, items: data.items });
+          }
+        } catch {
+          // Nothing found is what the palette shows; the commands remain.
+        }
+      })();
+    }, settle);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [needle, projectKey, searching]);
 
   const commands = useMemo<Command[]>(() => {
     const go = (to: string) => () => {
@@ -62,7 +110,7 @@ function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "op
     };
 
     const list: Command[] = [];
-    const key = query.trim().match(keyPattern);
+    const key = needle.match(keyPattern);
 
     if (key !== null) {
       const project = key[1]!.toUpperCase();
@@ -75,6 +123,27 @@ function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "op
         hint: isEpic ? "epic" : "issue",
         group: "Go to",
         run: go(keyPath(`${project}-${number}`)),
+      });
+    }
+
+    if (searching && projectKey !== undefined) {
+      for (const issue of found.of === needle ? found.items : []) {
+        list.push({
+          id: `found:${issue.key}`,
+          label: issue.title,
+          hint: issue.key,
+          group: "Issues",
+          run: go(keyPath(issue.key)),
+          found: true,
+        });
+      }
+
+      list.push({
+        id: "found:all",
+        label: `All issues matching “${needle}”`,
+        group: "Issues",
+        run: go(`/${projectKey}/issues?q=${encodeURIComponent(needle)}`),
+        found: true,
       });
     }
 
@@ -114,22 +183,25 @@ function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "op
     );
 
     return list;
-  }, [current, navigate, onOpenChange, projects, query, setTheme, signOut]);
+  }, [current, found, navigate, needle, onOpenChange, projectKey, projects, searching, setTheme, signOut]);
 
   const matching = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const lowered = needle.toLowerCase();
 
-    if (needle === "" || keyPattern.test(needle)) {
+    if (lowered === "" || keyPattern.test(lowered)) {
       return commands;
     }
 
+    // What the instance found is not filtered again: it matched on a
+    // description or a comment this screen never saw.
     return commands.filter(
       (command) =>
-        command.label.toLowerCase().includes(needle) ||
-        command.hint?.toLowerCase().includes(needle) ||
-        command.group.toLowerCase().includes(needle),
+        command.found === true ||
+        command.label.toLowerCase().includes(lowered) ||
+        command.hint?.toLowerCase().includes(lowered) ||
+        command.group.toLowerCase().includes(lowered),
     );
-  }, [commands, query]);
+  }, [commands, needle]);
 
   const selected = matching[Math.min(index, Math.max(matching.length - 1, 0))];
 
