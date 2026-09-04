@@ -73,3 +73,52 @@ it("requires in-page confirmation before deleting a label", async () => {
   await user.click(await screen.findByRole("button", { name: "Restore web" }));
   expect(await vi.waitFor(() => instance.calls.some((call) => new URL(call.url).pathname.endsWith("/restore")))).toBe(true);
 });
+
+// The banner used to live inside the loaded list, so a reload that failed
+// after the delete had succeeded took the only way back with it.
+it("still offers the way back when the reload after a delete fails", async () => {
+  const label = { name: "web", group: "area", description: "Browser application" };
+  let asked = 0;
+  installInstance({
+    "GET /projects/PLAN/labels": () => (asked++ === 0 ? [label] : { status: 500, body: { detail: "no" } }),
+    "DELETE /projects/PLAN/labels/web": { status: 204 },
+  });
+  renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
+  const user = userEvent.setup();
+
+  const row = (await screen.findByText("web")).closest("li")!;
+  await user.click(within(row).getByRole("button", { name: "Delete" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Delete web?" })).getByRole("button", { name: "Delete label" }));
+
+  const restore = await screen.findByRole("button", { name: "Restore web" });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  // The row the dialog sat in is gone; the offer to undo is where the keyboard
+  // goes, rather than back to the top of the document.
+  expect(restore).toHaveFocus();
+});
+
+// `reload` is run after a write that already succeeded, so a reload that cannot
+// reach the instance must not be reported as the delete having failed.
+it("does not report a delete as failed when the reload cannot reach the instance", async () => {
+  const label = { name: "web", group: "area", description: "Browser application" };
+  let asked = 0;
+  installInstance({
+    "GET /projects/PLAN/labels": () => {
+      if (asked++ > 0) throw new TypeError("Failed to fetch");
+      return [label];
+    },
+    "DELETE /projects/PLAN/labels/web": { status: 204 },
+  });
+  renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
+  const user = userEvent.setup();
+
+  const row = (await screen.findByText("web")).closest("li")!;
+  await user.click(within(row).getByRole("button", { name: "Delete" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Delete web?" })).getByRole("button", { name: "Delete label" }));
+
+  expect(await screen.findByRole("button", { name: "Restore web" })).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  // The page says the list could not be loaded — a separate statement from the
+  // delete, which the banner reports as done.
+  expect(screen.getByText("The instance did not answer.")).toBeInTheDocument();
+});

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router";
 import { api, describe, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -19,9 +19,16 @@ export function LabelsView() {
   const deleted = recentlyDeleted !== undefined && recentlyDeleted.of === project ? recentlyDeleted.label : undefined;
   const restoreError = restoreProblem !== undefined && restoreProblem.of === project ? restoreProblem.why : "";
 
+  // Never throws. Every caller runs it after a write that already succeeded,
+  // and a reload that cannot reach the instance would otherwise be reported as
+  // the write having failed.
   async function reload() {
-    const { data, error, response } = await api.GET("/projects/{key}/labels", { params: { path: { key: project! } } });
-    setKnown({ of: project, loaded: data ? { at: "known", labels: data } : { at: "failed", why: describe(error, response.status) } });
+    try {
+      const { data, error, response } = await api.GET("/projects/{key}/labels", { params: { path: { key: project! } } });
+      setKnown({ of: project, loaded: data ? { at: "known", labels: data } : { at: "failed", why: describe(error, response.status) } });
+    } catch {
+      setKnown({ of: project, loaded: { at: "failed", why: "The instance did not answer." } });
+    }
   }
 
   async function create(event: FormEvent<HTMLFormElement>) {
@@ -57,6 +64,11 @@ export function LabelsView() {
     };
   }, [project]);
 
+  const restoreRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    restoreRef.current?.focus();
+  }, [deleted?.name]);
+
   const groups =
     loaded.at === "known"
       ? [...new Set(loaded.labels.map((label) => label.group ?? ""))].sort((a, b) =>
@@ -68,6 +80,16 @@ export function LabelsView() {
     <>
       <PageHeader title="Labels" meta={loaded.at === "known" ? `${loaded.labels.length}` : undefined} />
       {loaded.at === "failed" && <p className="p-4 text-sm text-destructive">{loaded.why}</p>}
+      {/* Outside the loaded list on purpose. A reload that fails after the
+          delete succeeded must not take the way back with it: the label is
+          gone either way, and the grace period is the only thing that offers
+          it again. */}
+      {(deleted !== undefined || restoreError !== "") && (
+        <div className="space-y-2 px-4 pt-4">
+          {deleted && <div className="flex items-center gap-3 rounded-md border border-brand/40 bg-brand/5 p-3 text-sm"><p role="status" className="min-w-0 flex-1">Deleted <span className="font-mono">{deleted.name}</span>.</p><Button ref={restoreRef} type="button" size="sm" variant="outline" onClick={() => void (async () => { setRestoreProblem(undefined); const result = await api.POST("/projects/{key}/labels/{name}/restore", { params: { path: { key: project!, name: deleted.name } } }); if (!result.data) { setRestoreProblem({ of: project, why: describe(result.error, result.response.status) }); return; } setRecentlyDeleted(undefined); await reload(); })()}>Restore {deleted.name}</Button></div>}
+          {restoreError && <p role="alert" className="text-sm text-destructive">{restoreError}</p>}
+        </div>
+      )}
       {loaded.at === "known" && (
         <div className="space-y-5 p-4">
           <form className="grid gap-2 rounded-md border p-3 sm:grid-cols-[1fr_1fr_2fr_auto]" onSubmit={(e) => void create(e)}>
@@ -76,8 +98,6 @@ export function LabelsView() {
             <Input name="description" placeholder="What this label means" aria-label="Label description" />
             <Button type="submit">Create</Button>
           </form>
-          {deleted && <div className="flex items-center gap-3 rounded-md border border-brand/40 bg-brand/5 p-3 text-sm"><p role="status" className="min-w-0 flex-1">Deleted <span className="font-mono">{deleted.name}</span>.</p><Button type="button" size="sm" variant="outline" onClick={() => void (async () => { setRestoreProblem(undefined); const result = await api.POST("/projects/{key}/labels/{name}/restore", { params: { path: { key: project!, name: deleted.name } } }); if (!result.data) { setRestoreProblem({ of: project, why: describe(result.error, result.response.status) }); return; } setRecentlyDeleted(undefined); await reload(); })()}>Restore {deleted.name}</Button></div>}
-          {restoreError && <p role="alert" className="text-sm text-destructive">{restoreError}</p>}
           {groups.map((group) => (
             <section key={group}>
               <h2 className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">

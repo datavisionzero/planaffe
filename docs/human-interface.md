@@ -103,7 +103,8 @@ last one can neither be deactivated nor demoted.
 Every action is reachable by keyboard, focus is visible and restored after a
 dialog, controls have accessible names, status and errors are not conveyed by
 colour alone, and asynchronous changes are announced. Dialogs trap focus and
-return it to their trigger. The phone layout performs the same actions as the
+return it to their trigger, or, where the action they confirmed removed that
+trigger, to what the screen offers next. The phone layout performs the same actions as the
 desktop layout.
 
 The shell renders before project data, navigation does not remount it, list rows
