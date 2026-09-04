@@ -268,7 +268,7 @@ public sealed record QuestionListRequest(string? Project, bool? Open, string? Is
 /// "Are there open questions?" as a list (VISION 7): across the project, oldest
 /// first, open by default.
 /// </summary>
-public sealed class ListQuestions(IProjects projects, IIdentities identities, IIssues issues, InstanceSettings settings)
+public sealed class ListQuestions(IProjects projects, IIdentities identities, IIssues issues, ProjectScope scope, InstanceSettings settings)
 {
     public async Task<QuestionPage> ExecuteAsync(QuestionListRequest request, CancellationToken cancellationToken)
     {
@@ -279,8 +279,10 @@ public sealed class ListQuestions(IProjects projects, IIdentities identities, II
         }
 
         Guid? projectId = request.Project is null ? null : (await projects.LiveAsync(request.Project, settings, cancellationToken)).Id;
+        if (projectId is { } selectedProjectId)
+            await scope.RequireAsync(selectedProjectId, cancellationToken);
         Guid? issueId = request.Issue is null ? null : (await issues.LiveAsync(request.Issue, settings, cancellationToken)).Id;
-        var query = new QuestionQuery(projectId, request.Open ?? true, issueId,
+        var query = new QuestionQuery(await scope.ProjectIdsAsync(cancellationToken), projectId, request.Open ?? true, issueId,
             string.IsNullOrWhiteSpace(request.Search) ? null : request.Search.Trim());
 
         var after = request.Cursor is null ? null : Questions.Decode(request.Cursor, query);

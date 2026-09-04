@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/datavisionzero/planaffe/src/cli/internal/api"
@@ -16,8 +18,78 @@ import (
 
 func newProject(g *globals) *cobra.Command {
 	cmd := &cobra.Command{Use: "project", Short: "Projects: the bracket everything belongs to, and its two switches."}
-	cmd.AddCommand(newProjectCreate(g), newProjectList(g), newProjectView(g), newProjectEdit(g), newProjectDelete(g), newProjectRestore(g))
+	cmd.AddCommand(newProjectCreate(g), newProjectList(g), newProjectView(g), newProjectEdit(g), newProjectDelete(g), newProjectRestore(g), newProjectAccess(g))
 	return cmd
+}
+
+func newProjectAccess(g *globals) *cobra.Command {
+	cmd := &cobra.Command{Use: "access", Short: "Project access: users assigned to a project. Administrators grant and revoke it."}
+	cmd.AddCommand(
+		&cobra.Command{Use: "list KEY", Short: "List the users assigned to a project.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			resp, err := c.ListProjectUsersWithResponse(cmd.Context(), strings.ToUpper(args[0]))
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			for _, user := range *resp.JSON200 {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", user.Id, user.Name, user.State)
+			}
+			return nil
+		}},
+		projectAccessChange(g, true),
+		projectAccessChange(g, false),
+	)
+	return cmd
+}
+
+func projectAccessChange(g *globals, grant bool) *cobra.Command {
+	verb := "revoke"
+	short := "Remove a user's project access. Administrators only."
+	if grant {
+		verb, short = "grant", "Grant project access to a user. Administrators only."
+	}
+	return &cobra.Command{Use: verb + " KEY USER_ID", Short: short, Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := uuid.Parse(args[1])
+		if err != nil {
+			return &config.UsageError{Message: "USER_ID is a UUID."}
+		}
+		_, c, err := g.load()
+		if err != nil {
+			return err
+		}
+		var responseBody []byte
+		var response *http.Response
+		if grant {
+			resp, callErr := c.GrantProjectAccessWithResponse(cmd.Context(), strings.ToUpper(args[0]), id)
+			if callErr != nil {
+				return client.Transport(callErr)
+			}
+			response, responseBody = resp.HTTPResponse, resp.Body
+		} else {
+			resp, callErr := c.RevokeProjectAccessWithResponse(cmd.Context(), strings.ToUpper(args[0]), id)
+			if callErr != nil {
+				return client.Transport(callErr)
+			}
+			response, responseBody = resp.HTTPResponse, resp.Body
+		}
+		if err := client.Check(response, responseBody); err != nil {
+			return err
+		}
+		if g.json {
+			return render.JSON(cmd.OutOrStdout(), map[string]any{"project": strings.ToUpper(args[0]), "user_id": id, "access": grant})
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%s access for %s %s.\n", strings.ToUpper(args[0]), id, map[bool]string{true: "granted", false: "revoked"}[grant])
+		return nil
+	}}
 }
 
 func printProject(g *globals, cmd *cobra.Command, project api.Project) error {

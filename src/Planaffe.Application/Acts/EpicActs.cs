@@ -150,6 +150,7 @@ public static class EpicLookup
 /// <summary>A theme several issues will hang under (VISION 7): the key from the project's epic counter, in one transaction with its labels.</summary>
 public sealed class CreateEpic(
     ICallerIdentity callerIdentity,
+    ProjectScope scope,
     IProjects projects,
     ILabels labels,
     IEpics epics,
@@ -165,6 +166,7 @@ public sealed class CreateEpic(
         var caller = callerIdentity.Caller;
 
         var project = await projects.LiveAsync(request.Project ?? throw Refusal.Validation("project", "A project key is required."), settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         var title = Validated.Field("title", () => Epic.NormalizeTitle(request.Title!));
         var resolved = await labels.ResolveLabelsAsync(project, request.Labels ?? [], "labels", cancellationToken);
 
@@ -193,7 +195,7 @@ public sealed class CreateEpic(
 }
 
 /// <summary>A page of slim epics, newest first: `open` by default, `closed`, or `all`.</summary>
-public sealed class ListEpics(IProjects projects, IEpics epics, EpicAssembler assembler, InstanceSettings settings)
+public sealed class ListEpics(IProjects projects, IEpics epics, EpicAssembler assembler, ProjectScope scope, InstanceSettings settings)
 {
     public async Task<EpicPage> ExecuteAsync(EpicListRequest request, CancellationToken cancellationToken)
     {
@@ -212,7 +214,9 @@ public sealed class ListEpics(IProjects projects, IEpics epics, EpicAssembler as
         };
 
         Guid? projectId = request.Project is null ? null : (await projects.LiveAsync(request.Project, settings, cancellationToken)).Id;
-        var query = new EpicQuery(projectId, closed, request.Label);
+        if (projectId is { } selectedProjectId)
+            await scope.RequireAsync(selectedProjectId, cancellationToken);
+        var query = new EpicQuery(await scope.ProjectIdsAsync(cancellationToken), projectId, closed, request.Label);
         var after = request.Cursor is null ? null : EpicCursor.Decode(request.Cursor, query);
 
         var page = await epics.ListAsync(query, after, limit, cancellationToken);

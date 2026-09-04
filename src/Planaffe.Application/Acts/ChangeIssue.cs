@@ -39,6 +39,7 @@ public sealed record ChangedIssues(IReadOnlyList<IssueShape> Items);
 /// </summary>
 public sealed class ChangeIssue(
     ICallerIdentity callerIdentity,
+    ProjectScope scope,
     IProjects projects,
     ILabels labels,
     IEpics epics,
@@ -101,6 +102,7 @@ public sealed class ChangeIssue(
         }
 
         var before = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(before.ProjectId, cancellationToken);
 
         if (parking is not null)
         {
@@ -324,7 +326,9 @@ public sealed class ChangeIssue(
         {
             throw Refusal.Validation("parent", $"{key} is not an issue key.");
         }
-        return await issues.FindLiveAsync(projectKey, number, cancellationToken)
+        var parent = await issues.FindLiveAsync(projectKey, number, cancellationToken)
             ?? throw Refusal.Validation("parent", $"No issue {key}.");
+        await scope.RequireAsync(parent.ProjectId, cancellationToken);
+        return parent;
     }
 }

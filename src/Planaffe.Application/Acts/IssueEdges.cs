@@ -12,6 +12,7 @@ namespace Planaffe.Application.Acts;
 /// </summary>
 public sealed class IssueEdges(
     ICallerIdentity callerIdentity,
+    ProjectScope scope,
     IProjects projects,
     ILabels labels,
     IIssues issues,
@@ -69,6 +70,7 @@ public sealed class IssueEdges(
         OnAsync(key, async (issue, row, now) =>
         {
             var blocker = await issues.LiveAsync(blockerKey, settings, cancellationToken);
+            await scope.RequireAsync(blocker.ProjectId, cancellationToken);
             if (blocker.Id == issue.Id)
             {
                 throw new Refusal(RefusalCode.Cycle, $"{row.Key} cannot block itself.", new Dictionary<string, object?> { ["path"] = new[] { row.Key, row.Key } });
@@ -106,6 +108,8 @@ public sealed class IssueEdges(
 
             var blocker = await issues.FindLiveAsync(projectKey, number, cancellationToken)
                 ?? await issues.FindDeletedAsync(projectKey, number, cancellationToken);
+            if (blocker is not null)
+                await scope.RequireAsync(blocker.ProjectId, cancellationToken);
             if (blocker is null || !await issues.HasBlockerAsync(blocker.Id, issue.Id, cancellationToken))
             {
                 return;

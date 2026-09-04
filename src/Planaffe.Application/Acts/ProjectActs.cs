@@ -80,30 +80,38 @@ public sealed class CreateProject(ICallerIdentity callerIdentity, IProjects proj
         project.RequireTriage(triageRequired, now);
         project.RequireReview(reviewRequired, now);
 
-        await projects.AddAsync(project, Label.Kind(project.Id, now), Release.Open(project.Id, now), cancellationToken);
+        await projects.AddAsync(project, Label.Kind(project.Id, now), Release.Open(project.Id, now),
+            ProjectAccess.Grant(project.Id, caller.Id, caller.Id, now), cancellationToken);
 
         return ProjectShape.Of(project);
     }
 }
 
 /// <summary>Every project the caller sees — in cut one, every live project.</summary>
-public sealed class ListProjects(IProjects projects)
+public sealed class ListProjects(ICallerIdentity callerIdentity, IProjects projects, IProjectAccess access)
 {
-    public async Task<IReadOnlyList<ProjectShape>> ExecuteAsync(CancellationToken cancellationToken) =>
-        [.. (await projects.ListAsync(cancellationToken)).Select(ProjectShape.Of)];
+    public async Task<IReadOnlyList<ProjectShape>> ExecuteAsync(CancellationToken cancellationToken)
+    {
+        var ids = await access.ProjectIdsAsync(callerIdentity.Caller.OwnerId ?? callerIdentity.Caller.Id, cancellationToken);
+        return [.. (await projects.ListAsync(cancellationToken)).Where(project => ids.Contains(project.Id)).Select(ProjectShape.Of)];
+    }
 }
 
-public sealed class ReadProject(IProjects projects, InstanceSettings settings)
+public sealed class ReadProject(IProjects projects, ProjectScope scope, InstanceSettings settings)
 {
-    public async Task<ProjectShape> ExecuteAsync(string key, CancellationToken cancellationToken) =>
-        ProjectShape.Of(await projects.LiveAsync(key, settings, cancellationToken));
+    public async Task<ProjectShape> ExecuteAsync(string key, CancellationToken cancellationToken)
+    {
+        var project = await projects.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
+        return ProjectShape.Of(project);
+    }
 }
 
 /// <summary>What a <c>PATCH</c> carries: only what is present changes.</summary>
 public sealed record ProjectChanges(string? Name, bool? TriageRequired, bool? ReviewRequired);
 
 /// <summary>A user changes the name or the switches; the key is immutable.</summary>
-public sealed class ChangeProject(ICallerIdentity callerIdentity, IProjects projects, InstanceSettings settings, TimeProvider clock)
+public sealed class ChangeProject(ICallerIdentity callerIdentity, IProjects projects, ProjectScope scope, InstanceSettings settings, TimeProvider clock)
 {
     public async Task<ProjectShape> ExecuteAsync(string key, ProjectChanges changes, CancellationToken cancellationToken)
     {
@@ -111,6 +119,7 @@ public sealed class ChangeProject(ICallerIdentity callerIdentity, IProjects proj
         ArgumentNullException.ThrowIfNull(changes);
 
         var project = await projects.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         var now = clock.GetUtcNow();
 
         if (changes.Name is not null)

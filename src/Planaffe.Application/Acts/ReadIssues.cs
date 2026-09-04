@@ -44,6 +44,7 @@ public sealed class ListIssues(
     IEpics epics,
     IIdentities identities,
     IIssues issues,
+    ProjectScope scope,
     IssueAssembler assembler,
     InstanceSettings settings)
 {
@@ -98,6 +99,7 @@ public sealed class ListIssues(
         if (request.Project is not null)
         {
             project = await projects.LiveAsync(request.Project, settings, cancellationToken);
+            await scope.RequireAsync(project.Id, cancellationToken);
         }
 
         var statuses = new List<IssueStatus>();
@@ -120,6 +122,7 @@ public sealed class ListIssues(
             {
                 var owner = await projects.FindByKeyAsync(epicProject, cancellationToken)
                     ?? throw Refusal.Validation("epic", $"No project {epicProject}.");
+                await scope.RequireAsync(owner.Id, cancellationToken);
                 epicId = (await epics.FindLiveAsync(owner.Id, number, cancellationToken))?.Id
                     ?? throw Refusal.Validation("epic", $"No epic {request.Epic}.");
             }
@@ -148,6 +151,7 @@ public sealed class ListIssues(
         var (authorId, _) = await IdentityFilterAsync(request.Author, "author", caller, allowNone: false, cancellationToken);
 
         return new IssueQuery(
+            await scope.ProjectIdsAsync(cancellationToken),
             project?.Id,
             statuses,
             request.Ready,

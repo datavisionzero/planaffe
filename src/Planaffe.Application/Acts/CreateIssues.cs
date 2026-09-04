@@ -34,6 +34,7 @@ public sealed record CreateIssuesRequest(string? Project, IReadOnlyList<NewIssue
 /// </summary>
 public sealed class CreateIssues(
     ICallerIdentity callerIdentity,
+    ProjectScope scope,
     IProjects projects,
     ILabels labels,
     IEpics epics,
@@ -68,6 +69,7 @@ public sealed class CreateIssues(
         }
 
         var project = await projects.LiveAsync(request.Project, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         var plans = new List<Plan>();
         var refs = new HashSet<string>(StringComparer.Ordinal);
 
@@ -281,6 +283,7 @@ public sealed class CreateIssues(
 
         var row = await issues.FindLiveAsync(projectKey, number, cancellationToken)
             ?? throw Refusal.Validation(field, $"{IssueKey.Of(projectKey, number)} names no issue.");
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         return (row.Id, row.Key, null);
     }

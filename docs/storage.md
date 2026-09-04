@@ -745,6 +745,7 @@ create table project_access (
     granted_at  timestamptz not null,
     primary key (project_id, user_id)
 );
+create index project_access_user on project_access (user_id);
 ```
 
 Both referenced identities are users, and `granted_by` is an administrator;

@@ -99,23 +99,68 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task An_agent_reads_projects_and_administers_none_and_a_user_deletes_none()
+    public async Task Project_access_is_granted_to_users_inherited_by_agents_and_hidden_as_not_found()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
         using var admin = instance.ClientWith(AnInstance.BootstrapToken);
         await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
 
-        using var user = instance.ClientWith(await instance.AddActiveUserAsync("other"));
-        using var createdAgent = await admin.PostAsJsonAsync("/agents", new { }, Ct);
-        using var agent = instance.ClientWith((await createdAgent.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
+        var otherToken = await instance.AddActiveUserAsync("other");
+        using var user = instance.ClientWith(otherToken);
+        using var users = await admin.GetAsync("/users", Ct);
+        var otherId = (await users.Content.ReadFromJsonAsync<JsonElement>(Ct)).EnumerateArray()
+            .Single(value => value.GetProperty("name").GetString() == "other").GetProperty("id").GetGuid();
+
+        using var otherAgentResponse = await user.PostAsJsonAsync("/agents", new { }, Ct);
+        using var agent = instance.ClientWith((await otherAgentResponse.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
 
         Assert.Equal(HttpStatusCode.OK, (await agent.GetAsync("/projects", Ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await agent.GetAsync("/projects/PLAN", Ct)).StatusCode);
-        await Problem(await agent.PostAsJsonAsync("/projects", new { key = "AG", name = "x" }, Ct), HttpStatusCode.Forbidden, "forbidden");
-        await Problem(await agent.PatchAsJsonAsync("/projects/PLAN", new { name = "x" }, Ct), HttpStatusCode.Forbidden, "forbidden");
+        Assert.Empty((await agent.GetFromJsonAsync<JsonElement>("/projects", Ct)).EnumerateArray());
+        await Problem(await agent.GetAsync("/projects/PLAN", Ct), HttpStatusCode.NotFound, "not-found");
+        await Problem(await user.GetAsync("/issues?project=PLAN", Ct), HttpStatusCode.NotFound, "not-found");
 
+        using var granted = await admin.PutAsync($"/projects/PLAN/users/{otherId}", null, Ct);
+        Assert.Equal(HttpStatusCode.NoContent, granted.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await agent.GetAsync("/projects/PLAN", Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await user.PatchAsJsonAsync("/projects/PLAN", new { name = "renamed" }, Ct)).StatusCode);
+
+        var assigned = await user.GetFromJsonAsync<JsonElement>("/projects/PLAN/users", Ct);
+        Assert.Equal(["maintainer", "other"], assigned.EnumerateArray().Select(value => value.GetProperty("name").GetString()).Order());
+
+        using var revoked = await admin.DeleteAsync($"/projects/PLAN/users/{otherId}", Ct);
+        Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
+        await Problem(await agent.GetAsync("/projects/PLAN", Ct), HttpStatusCode.NotFound, "not-found");
+
+        await Problem(await agent.PostAsJsonAsync("/projects", new { key = "AG", name = "x" }, Ct), HttpStatusCode.Forbidden, "forbidden");
+        await Problem(await agent.PatchAsJsonAsync("/projects/PLAN", new { name = "x" }, Ct), HttpStatusCode.NotFound, "not-found");
         await Problem(await user.DeleteAsync("/projects/PLAN", Ct), HttpStatusCode.Forbidden, "forbidden");
+    }
+
+    [Fact]
+    public async Task Collections_are_scoped_and_a_foreign_blocker_stays_anonymous_but_open()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "ONE", name = "one" }, Ct);
+        await admin.PostAsJsonAsync("/projects", new { key = "TWO", name = "two" }, Ct);
+        await admin.PostAsJsonAsync("/issues", new { project = "ONE", issues = new[] { new { title = "Visible" } } }, Ct);
+        await admin.PostAsJsonAsync("/issues", new { project = "TWO", issues = new[] { new { title = "Hidden" } } }, Ct);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync("/issues/ONE-1/blocked-by/TWO-1", null, Ct)).StatusCode);
+
+        using var user = instance.ClientWith(await instance.AddActiveUserAsync("reader"));
+        var users = await admin.GetFromJsonAsync<JsonElement>("/users", Ct);
+        var userId = users.EnumerateArray().Single(value => value.GetProperty("name").GetString() == "reader").GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsync($"/projects/ONE/users/{userId}", null, Ct)).StatusCode);
+
+        var listed = await user.GetFromJsonAsync<JsonElement>("/issues", Ct);
+        Assert.Equal(1, listed.GetProperty("total").GetInt32());
+        Assert.Equal("ONE-1", listed.GetProperty("items")[0].GetProperty("key").GetString());
+        var blocker = Assert.Single(listed.GetProperty("items")[0].GetProperty("blocked_by").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, blocker.GetProperty("key").ValueKind);
+        Assert.True(blocker.GetProperty("open").GetBoolean());
+
+        await Problem(await user.GetAsync("/issues/TWO-1", Ct), HttpStatusCode.NotFound, "not-found");
+        await Problem(await user.GetAsync("/issues?project=TWO", Ct), HttpStatusCode.NotFound, "not-found");
     }
 
     internal static async Task<JsonElement> Problem(HttpResponseMessage response, HttpStatusCode status, string code)

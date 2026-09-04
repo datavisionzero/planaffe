@@ -14,7 +14,8 @@ public sealed class IssueAssembler(
     IEpics epics,
     IProjects projects,
     ILabels labels,
-    IReleases releases)
+    IReleases releases,
+    ProjectScope scope)
 {
     public async Task<IReadOnlyList<IssueSummaryShape>> SummariesAsync(
         IReadOnlyList<IssueRow> rows, CancellationToken cancellationToken)
@@ -35,6 +36,7 @@ public sealed class IssueAssembler(
         var people = await identities.FindManyAsync(
             rows.SelectMany(r => new[] { r.AssigneeId, r.ClaimedBy, r.DeletedBy }).OfType<Guid>().Distinct(),
             cancellationToken);
+        var allowedProjects = await scope.ProjectIdsAsync(cancellationToken);
 
         return
         [
@@ -54,7 +56,9 @@ public sealed class IssueAssembler(
                     releaseNames.GetValueOrDefault(row.Id),
                     Ref(people, row.AssigneeId),
                     Claim(people, row),
-                    [.. blockedBy.Select(b => new BlockerRefShape(b.Key, !b.Closed))],
+                    [.. blockedBy.Select(b => allowedProjects.Contains(b.ProjectId)
+                        ? new BlockerRefShape(b.Key, !b.Closed)
+                        : new BlockerRefShape(null, true))],
                     questions.GetValueOrDefault(row.Id),
                     blockedBy.Count(b => !b.Closed),
                     children.GetValueOrDefault(row.Id),
@@ -82,6 +86,7 @@ public sealed class IssueAssembler(
             ?? throw new InvalidOperationException($"Issue {row.Key} has no project row.");
         var projectLabels = await labels.ListAsync(project.Id, cancellationToken);
         var releaseNames = await releases.CurrentNamesAsync([row.Id], cancellationToken);
+        var allowedProjects = await scope.ProjectIdsAsync(cancellationToken);
 
         var people = await identities.FindManyAsync(
             new[] { row.AuthorId, row.AssigneeId, row.ClaimedBy }
@@ -108,8 +113,8 @@ public sealed class IssueAssembler(
             Ref(people, row.AssigneeId),
             Claim(people, row),
             Ref(people, row.AuthorId)!,
-            [.. blockedBy.Select(Link)],
-            [.. blocks.Select(Link)],
+            [.. blockedBy.Select(issue => Link(issue, allowedProjects))],
+            [.. blocks.Select(issue => Link(issue, allowedProjects))],
             questions.Count(q => q.Open),
             blockedBy.Count(b => !b.Closed),
             subIssues.Count(i => !i.Closed),
@@ -143,7 +148,10 @@ public sealed class IssueAssembler(
         return found.ToDictionary(e => e.Id, e => EpicKey.Of(projectKeys[e.ProjectId], e.Number));
     }
 
-    private static BlockerLinkShape Link(IssueRow far) => new(far.Key, far.Title, far.Status, !far.Closed);
+    private static BlockerLinkShape Link(IssueRow far, IReadOnlySet<Guid> allowedProjects) =>
+        allowedProjects.Contains(far.ProjectId)
+            ? new(far.Key, far.Title, far.Status, !far.Closed)
+            : new(null, null, null, true);
 
     private static IssueRefShape Ref(IssueRow issue) => new(issue.Key, issue.Title);
 

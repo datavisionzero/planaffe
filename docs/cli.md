@@ -120,6 +120,8 @@ Projects, labels and epics:
 ```
 pa project create PLAN "planaffe" [--triage-required] [--review-required]
 pa project list · pa project view [KEY] · pa project edit PLAN --review-required true --name "…"
+pa project access list PLAN
+pa project access grant PLAN <user-id> · pa project access revoke PLAN <user-id> # administrators only
 pa project delete PLAN --confirm PLAN      # the key typed twice, never prompted for; administrators only
 pa project restore PLAN
 pa label list                              # the project's schema: name, group, description

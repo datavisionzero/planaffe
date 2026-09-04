@@ -24,7 +24,8 @@ public interface IProjects
 
     /// <summary>The project and its first labels in one transaction.</summary>
     /// <exception cref="Domain.Refusal"><c>validation</c> on <c>key</c> when the unique index refuses it.</exception>
-    Task AddAsync(Project project, IEnumerable<Label> labels, Release release, CancellationToken cancellationToken);
+    Task AddAsync(Project project, IEnumerable<Label> labels, Release release, ProjectAccess creatorAccess,
+        CancellationToken cancellationToken);
 
     Task SaveAsync(Project project, CancellationToken cancellationToken);
 

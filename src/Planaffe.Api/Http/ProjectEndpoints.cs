@@ -67,6 +67,35 @@ public static class ProjectEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
+        door.MapGet("/{key}/users", (string key, ListProjectUsers list, CancellationToken cancellationToken) =>
+                list.ExecuteAsync(key, cancellationToken))
+            .WithName("ListProjectUsers")
+            .WithSummary("Assigned users. Assigned users and administrators only.")
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        door.MapPut("/{key}/users/{id:guid}", async (string key, Guid id, GrantProjectAccess grant, CancellationToken cancellationToken) =>
+            {
+                await grant.ExecuteAsync(key, id, cancellationToken);
+                return Results.NoContent();
+            })
+            .WithName("GrantProjectAccess")
+            .WithSummary("Grant project access to a user. Administrators only.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        door.MapDelete("/{key}/users/{id:guid}", async (string key, Guid id, RevokeProjectAccess revoke, CancellationToken cancellationToken) =>
+            {
+                await revoke.ExecuteAsync(key, id, cancellationToken);
+                return Results.NoContent();
+            })
+            .WithName("RevokeProjectAccess")
+            .WithSummary("Remove a user's project access. Administrators only.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         // The question at the centre of the product (VISION 10): the list, and the act.
         door.MapGet("/{key}/next", (string key, HttpRequest http, bool? ready, string? epic, string? repo, int? limit, Next next, CancellationToken cancellationToken) =>
                 next.PreviewAsync(key, new NextRequest(ready, epic, [.. http.Query["label"].OfType<string>()], repo, limit, null), cancellationToken))

@@ -43,6 +43,7 @@ public static class InfrastructureServices
         services.AddScoped<IIdentities, Identities>();
         services.AddScoped<ITokens, Tokens>();
         services.AddScoped<IProjects, Projects>();
+        services.AddScoped<IProjectAccess, ProjectAccesses>();
         services.AddScoped<ILabels, Labels>();
         services.AddScoped<IEpics, Epics>();
         services.AddScoped<IIssues, Issues>();

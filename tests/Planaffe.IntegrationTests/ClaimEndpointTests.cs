@@ -140,6 +140,9 @@ public sealed class ClaimEndpointTests(PostgresFixture postgres)
         Assert.Equal("maintainer", protectedClaim.GetProperty("holder").GetProperty("name").GetString());
 
         using var other = instance.ClientWith(await instance.AddActiveUserAsync("other"));
+        var users = await admin.GetFromJsonAsync<JsonElement>("/users", Ct);
+        var otherId = users.EnumerateArray().Single(user => user.GetProperty("name").GetString() == "other").GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsync($"/projects/PLAN/users/{otherId}", null, Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await other.PostAsJsonAsync("/issues/PLAN-2/claim", new { force = true }, Ct)).StatusCode);
 
         await using var reader = Migrated.ContextFor(instance.ConnectionString);

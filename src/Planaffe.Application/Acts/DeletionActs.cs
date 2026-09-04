@@ -11,6 +11,7 @@ namespace Planaffe.Application.Acts;
 /// </summary>
 public sealed class DeleteIssue(
     ICallerIdentity callerIdentity,
+    ProjectScope scope,
     IIssues issues,
     IReleases releases,
     IHistory history,
@@ -64,6 +65,7 @@ public sealed class DeleteIssue(
     {
         var caller = callerIdentity.Caller;
         var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         if (await issues.HasSubIssuesAsync(row.Id, cancellationToken))
         {
@@ -101,6 +103,7 @@ public sealed class DeleteIssue(
 /// <summary>Back into whatever state it was in, without its claim — one command, for the agent that deleted the wrong seven.</summary>
 public sealed class RestoreIssue(
     ICallerIdentity callerIdentity,
+    ProjectScope scope,
     IIssues issues,
     IHistory history,
     ITransactions transactions,
@@ -123,6 +126,8 @@ public sealed class RestoreIssue(
                 ? new Refusal(RefusalCode.Transition, $"Issue {IssueKey.Of(projectKey, number)} is not deleted.")
                 : new Refusal(RefusalCode.NotFound, $"No issue {IssueKey.Of(projectKey, number)}.");
         }
+
+        await scope.RequireAsync(deleted.ProjectId, cancellationToken);
 
         await transactions.RunAsync(async () =>
         {

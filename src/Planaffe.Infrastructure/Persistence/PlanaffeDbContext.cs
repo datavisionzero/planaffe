@@ -49,6 +49,8 @@ public sealed class PlanaffeDbContext(DbContextOptions<PlanaffeDbContext> option
 
     public DbSet<Project> Projects => Set<Project>();
 
+    public DbSet<ProjectAccess> ProjectAccesses => Set<ProjectAccess>();
+
     public DbSet<Label> Labels => Set<Label>();
 
     public DbSet<Epic> Epics => Set<Epic>();

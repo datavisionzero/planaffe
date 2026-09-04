@@ -114,8 +114,10 @@ endpoints, bearer and browser-session authentication that answer the caller port
 header and the one place a refusal becomes a problem document; `Hosting/` the
 services that run before anything is served — the migrations, the bootstrap.
 It also owns browser-session authentication, CSRF and login rate limits, the
-static files of the built SPA and SMTP composition around the application's
-email port. The later MCP server will be a second adapter over the same acts and
+central direct-key project-scope door, the static files of the built SPA and
+SMTP composition around the application's email port. Collection acts carry
+the same scope into their store queries, so search and unfiltered lists cannot
+step around it. The later MCP server will be a second adapter over the same acts and
 not a second way into the data.
 
 ## The CLI is a client, not a layer

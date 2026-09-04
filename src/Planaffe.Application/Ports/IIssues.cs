@@ -87,6 +87,7 @@ public enum SortOrder
 /// </summary>
 /// <param name="Claimed"><c>null</c>: any; <c>true</c>/<c>false</c>: whether held; an id: held by that identity.</param>
 public sealed record IssueQuery(
+    IReadOnlyCollection<Guid> AllowedProjectIds,
     Guid? ProjectId,
     IReadOnlyList<IssueStatus> Statuses,
     bool? Ready,
@@ -264,7 +265,7 @@ public interface IIssues
 public sealed record QuestionRow(Question Question, string IssueKey, string IssueTitle);
 
 /// <param name="Open"><c>true</c>: unanswered only; <c>false</c>: answered only; <c>null</c>: both.</param>
-public sealed record QuestionQuery(Guid? ProjectId, bool? Open, Guid? IssueId, string? Search);
+public sealed record QuestionQuery(IReadOnlyCollection<Guid> AllowedProjectIds, Guid? ProjectId, bool? Open, Guid? IssueId, string? Search);
 
 /// <summary>Where a page of questions ended: asked when, and the id.</summary>
 public sealed record QuestionPosition(DateTimeOffset AskedAt, Guid Id);
@@ -297,7 +298,7 @@ public interface ITransactions
 public sealed record Progress(int Total, int Closed, int Done, int Canceled);
 
 /// <param name="Closed"><c>null</c>: open and closed alike.</param>
-public sealed record EpicQuery(Guid? ProjectId, bool? Closed, IReadOnlyList<string> LabelNames);
+public sealed record EpicQuery(IReadOnlyCollection<Guid> AllowedProjectIds, Guid? ProjectId, bool? Closed, IReadOnlyList<string> LabelNames);
 
 /// <summary>Where a page of epics ended: created when, the number, the id — newest first.</summary>
 public sealed record EpicPosition(DateTimeOffset CreatedAt, int Number, Guid Id);

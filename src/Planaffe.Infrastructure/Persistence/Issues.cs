@@ -389,6 +389,9 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
             join i in Live() on q.IssueId equals i.Id
             select new { Question = q, i.ProjectId, IssueKey = i.ProjectKey + "-" + i.Number, i.Title };
 
+        var allowedProjectIds = query.AllowedProjectIds.ToArray();
+        rows = rows.Where(r => allowedProjectIds.Contains(r.ProjectId));
+
         if (query.ProjectId is { } projectId)
         {
             rows = rows.Where(r => r.ProjectId == projectId);
@@ -506,6 +509,9 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
 
     private IQueryable<IssueRow> Filtered(IQueryable<IssueRow> rows, IssueQuery query)
     {
+        var allowedProjectIds = query.AllowedProjectIds.ToArray();
+        rows = rows.Where(r => allowedProjectIds.Contains(r.ProjectId));
+
         if (query.ProjectId is { } projectId)
         {
             rows = rows.Where(r => r.ProjectId == projectId);

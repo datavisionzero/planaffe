@@ -27,6 +27,9 @@ public sealed class Epics(PlanaffeDbContext context) : IEpics
     {
         var rows = context.Epics.Where(e => e.DeletedAt == null);
 
+        var allowedProjectIds = query.AllowedProjectIds.ToArray();
+        rows = rows.Where(e => allowedProjectIds.Contains(e.ProjectId));
+
         if (query.ProjectId is { } projectId)
         {
             rows = rows.Where(e => e.ProjectId == projectId);
