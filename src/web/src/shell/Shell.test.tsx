@@ -175,6 +175,31 @@ describe("the shell (ADR 0006)", () => {
     expect(await screen.findByRole("heading", { name: /PLAN-13/ })).toBeInTheDocument();
   });
 
+  // PLAN-51: the dropdown advertised ⌘P and nothing was bound to it. ⌘P is the
+  // browser's print, so the shortcut that got bound is the bare key the lists
+  // already speak.
+  it("opens the project switcher on the key it advertises", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.keyboard("p");
+
+    const label = await screen.findByText("Projects");
+    expect(within(label).getByText("P")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /logaffe/ })).toBeInTheDocument();
+  });
+
+  it("leaves the key alone while something is being typed", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.type(screen.getByRole("textbox", { name: "Search issues" }), "print");
+
+    expect(screen.queryByRole("menuitem", { name: /logaffe/ })).not.toBeInTheDocument();
+  });
+
   // The shell is not remounted by navigation (ADR 0006), so the frame kept the
   // list it had asked for once: on arrival at the project just created there
   // was no current project, and every link in the frame was drawn disabled.

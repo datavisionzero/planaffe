@@ -18,20 +18,27 @@ import { rememberProject } from "./useProjects";
  * The project switcher of the header (ADR 0006). Switching keeps the view:
  * whoever is in "In progress" of PLAN lands in "In progress" of the next
  * project, because the question was about the view, not about the project.
+ *
+ * The shell owns whether it is open, because `p` opens it from anywhere; the
+ * menu closes itself the way every menu does.
  */
 export function ProjectSwitcher({
   projects,
   current,
   viewPath,
+  open,
+  onOpenChange,
 }: {
   projects: Project[];
   current: Project | undefined;
   viewPath: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
         render={
           <Button variant="ghost" size="sm" className="gap-1.5 px-2 font-medium" aria-label="Switch project" />
@@ -47,7 +54,7 @@ export function ProjectSwitcher({
         <DropdownMenuGroup>
           <DropdownMenuLabel className="flex items-center justify-between">
             Projects
-            <Kbd>⌘P</Kbd>
+            <Kbd>P</Kbd>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

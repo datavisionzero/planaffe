@@ -37,7 +37,10 @@ issue or an epic takes its project from the key it names and not from the
 address it sits on, so a blocker in another project leads to that project.
 
 The application shell persists around every project route. Its project switcher
-contains only projects the caller can access. Non-administrators do not see the
+contains only projects the caller can access. The shell binds three shortcuts:
+`⌘K` opens the command palette, `⌘B` folds the sidebar, and `p` opens the
+project switcher — a bare key, because `⌘P` belongs to the browser's print
+dialog and an issue tracker is worth printing. Non-administrators do not see the
 admin entry, but hiding navigation is never the authorization check.
 The Labels navigation entry required by ADR 0006 opens the labels section of
 project settings; labels do not need a second management screen.

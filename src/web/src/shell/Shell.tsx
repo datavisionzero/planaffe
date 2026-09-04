@@ -41,6 +41,7 @@ export function Shell() {
   const list = useProjects();
   const projects = list.projects;
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   const match = matchPath("/:project/*", location.pathname);
   const projectKey = match?.params.project;
@@ -57,12 +58,35 @@ export function Shell() {
     }
   }, [current]);
 
+  // The two shortcuts the frame itself owns. `p` for the switcher is a bare
+  // key on purpose: ⌘P is the browser's print, and taking printing away from
+  // an issue tracker costs more than the switcher gains. Bare keys are what
+  // the lists already use — `j`, `k`, `c`, `/` — so the switcher joins that
+  // alphabet instead of fighting the browser for a modifier.
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setPaletteOpen((open) => !open);
+        return;
       }
+
+      if (event.metaKey || event.ctrlKey || event.altKey || event.key.toLowerCase() !== "p") {
+        return;
+      }
+
+      // Not while something is being typed, and not while a menu or a dialog
+      // has the focus — those close with Escape, as they always did.
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, select, [contenteditable=true]") === true) {
+        return;
+      }
+      if (target?.closest('[role="menu"], [role="dialog"]') != null) {
+        return;
+      }
+
+      event.preventDefault();
+      setSwitcherOpen(true);
     }
 
     window.addEventListener("keydown", onKeyDown);
@@ -82,7 +106,13 @@ export function Shell() {
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
           <SidebarTrigger className="md:hidden" />
           <Separator orientation="vertical" className="mr-1 h-4! md:hidden" />
-          <ProjectSwitcher projects={known} current={current} viewPath={viewPath.split("/")[0] || "ready"} />
+          <ProjectSwitcher
+            projects={known}
+            current={current}
+            viewPath={viewPath.split("/")[0] || "ready"}
+            open={switcherOpen}
+            onOpenChange={setSwitcherOpen}
+          />
           <div className="flex-1" />
           <Button
             variant="outline"
