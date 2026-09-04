@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import { api, describe, type HistoryEntry, type Issue } from "@/api/client";
+import { api, codeOf, describe, type HistoryEntry, type Issue, type Problem } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,30 +14,51 @@ import { StatusDot } from "./status";
 import { EditIssueForm, MarkdownField } from "./IssueEditor";
 
 type Load<T> = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; value: T };
+/** The issue alone can also be gone: deleted, and restorable until a moment. */
+type IssueLoad = Load<Issue> | { at: "gone"; until: string | null };
 const asking = { at: "asking" } as const;
+
+/**
+ * An issue in its grace period is `404 deleted` and not simply missing
+ * (`docs/api.md`): the screen that says so is the only way back to it, and
+ * `restorable_until` is how long that way stays open. The extension member is
+ * read by name — the generated type knows only RFC 9457's own five.
+ */
+function refused(problem: Problem | undefined, status: number): IssueLoad {
+  if (status === 404 && codeOf(problem) === "deleted") {
+    const until = (problem as { restorable_until?: string } | undefined)?.restorable_until;
+    return { at: "gone", until: until ?? null };
+  }
+
+  return { at: "failed", why: describe(problem, status) };
+}
 
 /** The complete issue, ordered by what a human needs from it now. */
 export function IssueView() {
   const { project, number } = useParams();
   const key = pathKey(project!, number!);
-  const [state, setState] = useState<{ key: string; issue: Load<Issue>; history: Load<HistoryEntry[]> }>();
+  const [state, setState] = useState<{ key: string; issue: IssueLoad; history: Load<HistoryEntry[]> }>();
   const [editing, setEditing] = useState(false);
-  const [deleted, setDeleted] = useState<Issue>();
+  const [deleted, setDeleted] = useState<{ until: string | null }>();
   const current = state !== undefined && state.key === key ? state : { key, issue: asking, history: asking };
 
   useEffect(() => {
     let live = true;
-    void api.GET("/issues/{key}", { params: { path: { key } } }).then(({ data, error, response }) => live && setState((old) => ({ key, history: old !== undefined && old.key === key ? old.history : asking, issue: data ? { at: "known", value: data } : { at: "failed", why: describe(error, response.status) } })), () => live && setState((old) => ({ key, history: old?.history ?? asking, issue: { at: "failed", why: "The instance did not answer." } })));
+    void api.GET("/issues/{key}", { params: { path: { key } } }).then(({ data, error, response }) => live && setState((old) => ({ key, history: old !== undefined && old.key === key ? old.history : asking, issue: data ? { at: "known", value: data } : refused(error, response.status) })), () => live && setState((old) => ({ key, history: old?.history ?? asking, issue: { at: "failed", why: "The instance did not answer." } })));
     void api.GET("/issues/{key}/history", { params: { path: { key } } }).then(({ data, error, response }) => live && setState((old) => ({ key, issue: old !== undefined && old.key === key ? old.issue : asking, history: data ? { at: "known", value: data } : { at: "failed", why: describe(error, response.status) } })), () => live && setState((old) => ({ key, issue: old?.issue ?? asking, history: { at: "failed", why: "The instance did not answer." } })));
     return () => { live = false; };
   }, [key]);
 
+  const changed = (value: Issue) => { setState((old) => ({ key, issue: { at: "known", value }, history: old?.history ?? asking })); setEditing(false); };
+  const restored = (value: Issue) => { setDeleted(undefined); changed(value); };
+
   if (current.issue.at === "asking") return <><PageHeader title={<Skeleton className="h-4 w-64" />} /><div className="space-y-3 p-4"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></>;
+  // Deleted just now, or deleted long before this browser asked for it: the
+  // same screen either way, and the deadline whenever the instance named one.
+  if (deleted !== undefined) return <Gone issueKey={key} until={deleted.until} onRestored={restored} />;
+  if (current.issue.at === "gone") return <Gone issueKey={key} until={current.issue.until} onRestored={restored} />;
   if (current.issue.at === "failed") return <><PageHeader title={key} /><p className="p-4 text-sm text-destructive">{current.issue.why}</p></>;
   const issue = current.issue.value;
-  const changed = (value: Issue) => { setState((old) => ({ key, issue: { at: "known", value }, history: old?.history ?? asking })); setEditing(false); };
-
-  if (deleted) return <><PageHeader title={deleted.key} /><div className="m-auto grid max-w-md justify-items-center gap-3 p-8 text-center"><p>This issue is deleted and hidden from the project.</p><IssueAction label="Restore issue" path="/issues/{key}/restore" issue={deleted} body={undefined} onChanged={(value) => { setDeleted(undefined); changed(value); }} /></div></>;
   if (editing) return <><PageHeader title={`Edit ${issue.key}`} /><EditIssueForm issue={issue} onSaved={changed} onCancel={() => setEditing(false)} /></>;
 
   return <><PageHeader title={<span className="flex items-center gap-2"><span className="font-mono text-xs font-normal text-muted-foreground">{issue.key}</span>{issue.title}</span>}><Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button></PageHeader>
@@ -48,12 +69,45 @@ export function IssueView() {
         {issue.result !== null && <Section title="Result"><Markdown>{issue.result}</Markdown></Section>}
         <Relationships issue={issue} />
         <Conversation issue={issue} />
-        <Actions issue={issue} onChanged={changed} onDeleted={() => setDeleted(issue)} />
+        <Actions issue={issue} onChanged={changed} onDeleted={() => setDeleted({ until: null })} />
         <History loaded={current.history} />
       </main>
       <Metadata issue={issue} />
     </div>
   </>;
+}
+
+/**
+ * A deleted issue, and the way back. The focus lands on Restore, which is what
+ * the accessibility floor asks for where the confirmed action removed the
+ * control that started it.
+ */
+function Gone({ issueKey, until, onRestored }: { issueKey: string; until: string | null; onRestored: (issue: Issue) => void }) {
+  const restore = useRef<HTMLButtonElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => { restore.current?.focus(); }, []);
+
+  async function run() {
+    setBusy(true); setError(undefined);
+    try {
+      const result = await api.POST("/issues/{key}/restore", { params: { path: { key: issueKey } } });
+      if (!result.data) throw new Error(describe(result.error, result.response.status));
+      onRestored(result.data);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The instance did not answer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <><PageHeader title={issueKey} /><div className="m-auto grid max-w-md justify-items-center gap-3 p-8 text-center">
+    <p role="status">This issue is deleted and hidden from the project.</p>
+    {until !== null && <p className="text-sm text-muted-foreground">It can be restored until {new Date(until).toLocaleString()} — {timeLeft(until)}.</p>}
+    <Button ref={restore} disabled={busy} onClick={() => void run()}>{busy ? "Working…" : "Restore issue"}</Button>
+    {error !== undefined && <p role="alert" className="text-sm text-destructive">{error}</p>}
+  </div></>;
 }
 
 function Attention({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
@@ -147,4 +201,6 @@ function Eyebrow({ children }: { children: React.ReactNode }) { return <h2 class
 function Byline({ name, at }: { name?: string; at: string }) { return <p className="mt-1 text-xs text-muted-foreground">{name && <>{name} · </>}<time dateTime={at}>{date(at)}</time></p>; }
 function date(x: string) { return new Date(x).toLocaleString(); }
 function relativeTime(x: string) { const hours = Math.max(0, Math.floor((Date.now() - new Date(x).getTime()) / 3_600_000)); return hours < 24 ? `${hours} hour${hours === 1 ? "" : "s"} ago` : `${Math.floor(hours / 24)} days ago`; }
+/** How much of the grace period is left, in the words the deadline is read in. */
+function timeLeft(x: string) { const hours = Math.floor((new Date(x).getTime() - Date.now()) / 3_600_000); if (hours < 1) return "less than an hour left"; return hours < 48 ? `${hours} hour${hours === 1 ? "" : "s"} left` : `${Math.floor(hours / 24)} days left`; }
 function isLong(x: string) { return x.length > 600 || x.split("\n").length > 8; }

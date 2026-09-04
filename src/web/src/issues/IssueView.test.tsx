@@ -82,4 +82,43 @@ describe("the human-first issue detail", () => {
     expect(await screen.findByText("Use the browser path.")).toBeInTheDocument();
     expect(await instance.calls.at(-1)!.json()).toEqual({ answer: "Use the browser path." });
   });
+
+  // `GET /issues/{key}` answers 404 `deleted` in the grace period and the view
+  // used to print that as a red sentence: the way back existed for the few
+  // seconds after a delete and nowhere else.
+  it("offers the way back when the key names a deleted issue", async () => {
+    const until = new Date(Date.now() + 84 * 3_600_000).toISOString();
+    let restored = false;
+    installInstance({
+      "GET /issues/PLAN-9": () => restored
+        ? issue
+        : {
+            status: 404,
+            body: { type: "/problems/deleted", title: "deleted", status: 404, detail: "Issue PLAN-9 is deleted.", restorable_until: until },
+          },
+      "GET /issues/PLAN-9/history": [],
+      "POST /issues/PLAN-9/restore": () => { restored = true; return issue; },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+
+    const restore = await screen.findByRole("button", { name: "Restore issue" });
+    expect(screen.getByRole("status")).toHaveTextContent("deleted and hidden from the project");
+    expect(screen.getByText(/It can be restored until .* — 3 days left\./)).toBeInTheDocument();
+    expect(restore).toHaveFocus();
+
+    await userEvent.setup().click(restore);
+
+    expect(await screen.findByText("Human-first issue")).toBeInTheDocument();
+  });
+
+  it("puts the focus on Restore after a delete removed the control that started it", async () => {
+    installInstance({ "GET /issues/PLAN-9": issue, "GET /issues/PLAN-9/history": [], "DELETE /issues/PLAN-9": { status: 204 } });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Delete issue" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete issue" }));
+
+    expect(await screen.findByRole("button", { name: "Restore issue" })).toHaveFocus();
+  });
 });

@@ -77,6 +77,14 @@ api.use({
 });
 
 /**
+ * The code a client switches on: the last segment of a refusal's relative
+ * `type` (`docs/api.md`, Errors). `/problems/deleted` is `deleted`.
+ */
+export function codeOf(problem: Problem | undefined): string | undefined {
+  return problem?.type?.split("/").pop();
+}
+
+/**
  * The problem document of a refused request (RFC 9457), or a sentence when the
  * answer was not one — the instance is down, or something in between spoke.
  */

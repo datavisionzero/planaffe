@@ -154,6 +154,21 @@ describe("the shell (ADR 0006)", () => {
     expect(filters).toHaveFocus();
   });
 
+  // ADR 0013 calls the deleted list a real read; it was reachable only by
+  // typing ?deleted=true into the address.
+  it("offers the deleted list from the filters", async () => {
+    const { calls } = shell("/PLAN/issues");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.click(screen.getByRole("button", { name: "Filters" }));
+    await user.selectOptions(screen.getByLabelText("Deleted"), "true");
+
+    await waitFor(() =>
+      expect(calls.some((call) => new URL(call.url).searchParams.get("deleted") === "true")).toBe(true),
+    );
+  });
+
   it("switches the project and keeps the view", async () => {
     shell("/PLAN/in-progress");
     const user = userEvent.setup();
