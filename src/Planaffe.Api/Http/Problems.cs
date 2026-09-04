@@ -35,7 +35,8 @@ public static class Problems
         RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch =>
             StatusCodes.Status409Conflict,
         RefusalCode.Stale => StatusCodes.Status412PreconditionFailed,
-        RefusalCode.Transition or RefusalCode.Cycle or RefusalCode.HasIssues or RefusalCode.UnknownLabel =>
+        RefusalCode.Transition or RefusalCode.Cycle or RefusalCode.HasIssues or RefusalCode.OneLevel
+            or RefusalCode.OtherProject or RefusalCode.EpicInherited or RefusalCode.HasSubIssues or RefusalCode.UnknownLabel =>
             StatusCodes.Status422UnprocessableEntity,
         RefusalCode.Internal => StatusCodes.Status500InternalServerError,
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a status."),
@@ -58,6 +59,10 @@ public static class Problems
         RefusalCode.Transition => "The status does not allow this act",
         RefusalCode.Cycle => "The blocker would close a cycle",
         RefusalCode.HasIssues => "The epic still has issues",
+        RefusalCode.OneLevel => "Sub-issues are exactly one level deep",
+        RefusalCode.OtherProject => "The parent belongs to another project",
+        RefusalCode.EpicInherited => "A sub-issue inherits its epic",
+        RefusalCode.HasSubIssues => "The issue still has sub-issues",
         RefusalCode.UnknownLabel => "The project has no such label",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),

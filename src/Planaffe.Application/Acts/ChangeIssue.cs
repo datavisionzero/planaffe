@@ -23,6 +23,8 @@ public sealed record IssueChanges(
     string? Assignee,
     bool EpicGiven,
     string? Epic,
+    bool ParentGiven,
+    string? Parent,
     IReadOnlyList<string>? Labels,
     string? Status);
 
@@ -82,6 +84,14 @@ public sealed class ChangeIssue(
             ? await identities.FindByNameAsync(changes.Assignee, cancellationToken) ?? throw Refusal.Validation("assignee", $"No identity named {changes.Assignee}.")
             : null;
         var epic = changes is { EpicGiven: true, Epic: not null } ? await EpicAsync(project, changes.Epic, cancellationToken) : null;
+        var parentRow = changes is { ParentGiven: true, Parent: not null }
+            ? await ParentAsync(changes.Parent, cancellationToken)
+            : null;
+
+        if (changes.EpicGiven && (before.ParentId is not null || parentRow is not null))
+        {
+            throw new Refusal(RefusalCode.EpicInherited, "A sub-issue's epic follows its parent.");
+        }
 
         await transactions.RunAsync(async () =>
         {
@@ -97,6 +107,35 @@ public sealed class ChangeIssue(
             }
 
             var now = clock.GetUtcNow();
+
+            if (changes.ParentGiven && parentRow?.Id != issue.ParentId)
+            {
+                if (issue.Closed)
+                {
+                    throw new Refusal(RefusalCode.Transition, "A closed issue cannot change parent; reopen it first.");
+                }
+                if (parentRow is not null)
+                {
+                    if (parentRow.ProjectId != issue.ProjectId)
+                    {
+                        throw new Refusal(RefusalCode.OtherProject, "A parent and its sub-issue stay in one project.");
+                    }
+                    if (parentRow.ParentId is not null || await issues.HasSubIssuesAsync(issue.Id, cancellationToken))
+                    {
+                        throw new Refusal(RefusalCode.OneLevel, "Sub-issues are exactly one level deep.");
+                    }
+                }
+
+                var oldParent = issue.ParentId is { } oldParentId
+                    ? (await issues.FindLiveManyAsync([oldParentId], cancellationToken)).SingleOrDefault()?.Key
+                    : null;
+                issue.AttachToParent(parentRow?.Id, now);
+                if (parentRow is not null)
+                {
+                    issue.AttachTo(parentRow.EpicId, now);
+                }
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Parent, oldParent, parentRow?.Key));
+            }
 
             if (parking is { } target)
             {
@@ -157,6 +196,16 @@ public sealed class ChangeIssue(
                 {
                     epic.Reopen(now);
                     history.Add(HistoryEntry.OnEpic(epic.Id, caller.Id, now, HistoryField.Status, "closed", "open", "reopened by attaching an issue"));
+                }
+
+                foreach (var childRow in await issues.SubIssuesOfAsync(issue.Id, cancellationToken))
+                {
+                    var child = await issues.LoadForWriteAsync(childRow.Id, cancellationToken)
+                        ?? throw new InvalidOperationException($"Sub-issue {childRow.Key} vanished under its parent's write.");
+                    child.AttachTo(epic?.Id, now);
+                    history.Add(HistoryEntry.OnIssue(child.Id, caller.Id, now, HistoryField.Epic,
+                        old is null ? null : EpicKey.Of(project.Key, old.Number),
+                        epic is null ? null : EpicKey.Of(project.Key, epic.Number)));
                 }
             }
 
@@ -219,5 +268,15 @@ public sealed class ChangeIssue(
 
         return await epics.FindLiveAsync(project.Id, number, cancellationToken)
             ?? throw Refusal.Validation("epic", $"No epic {key}.");
+    }
+
+    private async Task<IssueRow> ParentAsync(string key, CancellationToken cancellationToken)
+    {
+        if (!IssueKey.TryParse(key, out var projectKey, out var number))
+        {
+            throw Refusal.Validation("parent", $"{key} is not an issue key.");
+        }
+        return await issues.FindLiveAsync(projectKey, number, cancellationToken)
+            ?? throw Refusal.Validation("parent", $"No issue {key}.");
     }
 }

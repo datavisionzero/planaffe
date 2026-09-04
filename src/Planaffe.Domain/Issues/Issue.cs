@@ -2,7 +2,7 @@ namespace Planaffe.Domain.Issues;
 
 /// <summary>
 /// The unit of work (<c>CONTEXT.md</c>, Issue): the field set of VISION 8
-/// without <c>release</c> and <c>parent</c>, which are cut two.
+/// without <c>release</c>, which is cut two.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -69,6 +69,9 @@ public sealed class Issue
     public Guid? AssigneeId { get; private set; }
 
     public Guid? EpicId { get; private set; }
+
+    /// <summary>The issue this sub-issue is part of, or <c>null</c> for a top-level issue.</summary>
+    public Guid? ParentId { get; private set; }
 
     /// <summary>Who is working now, or <c>null</c>.</summary>
     public Claim? Claim { get; private set; }
@@ -170,6 +173,18 @@ public sealed class Issue
     public void AttachTo(Guid? epicId, DateTimeOffset at)
     {
         EpicId = epicId;
+        UpdatedAt = at;
+    }
+
+    /// <summary>Make this issue a sub-issue, or detach it. Cross-row hierarchy rules are checked by the act.</summary>
+    public void AttachToParent(Guid? parentId, DateTimeOffset at)
+    {
+        if (parentId == Id)
+        {
+            throw new Refusal(RefusalCode.OneLevel, "An issue cannot be its own parent.");
+        }
+
+        ParentId = parentId;
         UpdatedAt = at;
     }
 

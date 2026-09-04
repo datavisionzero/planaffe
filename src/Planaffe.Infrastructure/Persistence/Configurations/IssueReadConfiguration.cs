@@ -23,6 +23,7 @@ public sealed class IssueReadConfiguration : IEntityTypeConfiguration<IssueRead>
         builder.Property(i => i.Priority).HasColumnName("priority").HasColumnType("smallint").HasConversion<short>();
         builder.Property(i => i.AssigneeId).HasColumnName("assignee_id");
         builder.Property(i => i.EpicId).HasColumnName("epic_id");
+        builder.Property(i => i.ParentId).HasColumnName("parent_id");
         builder.Property(i => i.ClaimedBy).HasColumnName("claimed_by");
         builder.Property(i => i.ClaimedAt).HasColumnName("claimed_at");
         builder.Property(i => i.ClaimExpiresAt).HasColumnName("claim_expires_at");

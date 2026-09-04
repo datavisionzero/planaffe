@@ -110,6 +110,12 @@ func newIssueClose(g *globals) *cobra.Command {
 			if resp.JSON200.Result == nil || *resp.JSON200.Result == "" {
 				fmt.Fprintf(cmd.ErrOrStderr(), "pa: %s closed without a result; `--result-file` says what was done, or why not.\n", resp.JSON200.Key)
 			}
+			if resp.JSON200.OpenSubIssues > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "pa: %s closed with %d sub-issue(s) still open; they are no longer workable:\n", resp.JSON200.Key, resp.JSON200.OpenSubIssues)
+				for _, child := range resp.JSON200.SubIssues {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  %s  %s\n", child.Key, child.Title)
+				}
+			}
 			return printIssue(g, cmd, *resp.JSON200)
 		},
 	}

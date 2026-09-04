@@ -29,6 +29,7 @@ public sealed class IssueConfiguration : IEntityTypeConfiguration<Issue>
                 "ck_issue_status",
                 "status in ('backlog', 'todo', 'in_progress', 'review', 'done', 'canceled')");
             table.HasCheckConstraint("ck_issue_priority", "priority between 0 and 4");
+            table.HasCheckConstraint("ck_issue_parent_not_self", "parent_id is distinct from id");
 
             // An issue is in_progress exactly when somebody holds a claim on it
             // (VISION 11): claiming sets the status, releasing clears it, one
@@ -104,6 +105,16 @@ public sealed class IssueConfiguration : IEntityTypeConfiguration<Issue>
             .HasForeignKey(i => i.EpicId)
             .HasConstraintName("fk_issue_epic")
             .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Property(i => i.ParentId).HasColumnName("parent_id");
+        builder.HasOne<Issue>()
+            .WithMany()
+            .HasForeignKey(i => i.ParentId)
+            .HasConstraintName("fk_issue_parent")
+            .OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(i => i.ParentId)
+            .HasFilter("parent_id is not null")
+            .HasDatabaseName("issue_parent");
 
         // Four columns on this row, present together or absent together — an
         // optional dependent sharing the table, and null when nobody holds it.

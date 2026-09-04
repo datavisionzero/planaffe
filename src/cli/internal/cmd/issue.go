@@ -37,6 +37,7 @@ func newIssueCreate(g *globals) *cobra.Command {
 		ready           bool
 		labels          []string
 		epic            string
+		parent          string
 		assignee        string
 		blockedBy       []string
 		blocks          []string
@@ -85,7 +86,7 @@ the .planaffe file is added unless --repo none says otherwise.`,
 				if err != nil {
 					return err
 				}
-				item := api.NewIssue{Title: &args[0], Description: description, Epic: optional(epic), Assignee: optional(assignee)}
+				item := api.NewIssue{Title: &args[0], Description: description, Epic: optional(epic), Parent: optional(parent), Assignee: optional(assignee)}
 				if cmd.Flags().Changed("priority") {
 					p := api.Priority(priority)
 					item.Priority = &p
@@ -159,6 +160,7 @@ the .planaffe file is added unless --repo none says otherwise.`,
 	cmd.Flags().BoolVar(&ready, "ready", false, "concrete enough to implement without asking first")
 	cmd.Flags().StringArrayVar(&labels, "label", nil, "a label; repeatable")
 	cmd.Flags().StringVar(&epic, "epic", "", "the epic, e.g. PLAN-E3")
+	cmd.Flags().StringVar(&parent, "parent", "", "the parent issue, e.g. PLAN-42")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "who it belongs to, by name")
 	cmd.Flags().StringArrayVar(&blockedBy, "blocked-by", nil, "an issue this one waits for; repeatable")
 	cmd.Flags().StringArrayVar(&blocks, "blocks", nil, "an issue that waits for this one; repeatable")
@@ -338,6 +340,7 @@ func newIssueEdit(g *globals) *cobra.Command {
 		ready           string
 		assignee        string
 		epic            string
+		parent          string
 		labels          []string
 		status          string
 		ifMatch         string
@@ -393,6 +396,9 @@ func newIssueEdit(g *globals) *cobra.Command {
 			if given, value := noneOrValue(epic); given {
 				changes["epic"] = value
 			}
+			if given, value := noneOrValue(parent); given {
+				changes["parent"] = value
+			}
 			if cmd.Flags().Changed("label") {
 				changes["labels"] = labels
 			}
@@ -428,6 +434,7 @@ func newIssueEdit(g *globals) *cobra.Command {
 	cmd.Flags().StringVar(&ready, "ready", "", "true or false")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "a name, or `none`")
 	cmd.Flags().StringVar(&epic, "epic", "", "an epic key, or `none`")
+	cmd.Flags().StringVar(&parent, "parent", "", "a parent issue key, or `none`")
 	cmd.Flags().StringArrayVar(&labels, "label", nil, "the whole label set; repeatable, replaces what is there")
 	cmd.Flags().StringVar(&status, "status", "", "backlog or todo: parking and unparking; every other move is an act")
 	cmd.Flags().StringVar(&ifMatch, "if-match", "", "the updated_at as last read; the write is refused as stale when it moved")

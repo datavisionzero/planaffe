@@ -28,6 +28,7 @@ public static class HistoryField
     public const string Claim = "claim";
 
     public const string Epic = "epic";
+    public const string Parent = "parent";
 
     /// <summary>An edge: an addition carries the new value, a removal the old.</summary>
     public const string Label = "label";

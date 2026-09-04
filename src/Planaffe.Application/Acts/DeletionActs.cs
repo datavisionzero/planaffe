@@ -22,6 +22,11 @@ public sealed class DeleteIssue(
         var caller = callerIdentity.Caller;
         var row = await issues.LiveAsync(key, settings, cancellationToken);
 
+        if (await issues.HasSubIssuesAsync(row.Id, cancellationToken))
+        {
+            throw new Refusal(RefusalCode.HasSubIssues, $"{row.Key} has sub-issues; detach or delete them first.");
+        }
+
         await transactions.RunAsync(async () =>
         {
             var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)

@@ -61,6 +61,18 @@ public enum RefusalCode
     /// <summary>The epic cannot be deleted while issues reference it; <c>count</c> says how many.</summary>
     HasIssues,
 
+    /// <summary>The requested parent would create more than one level of sub-issues.</summary>
+    OneLevel,
+
+    /// <summary>The requested parent belongs to another project.</summary>
+    OtherProject,
+
+    /// <summary>A sub-issue's epic is inherited from its parent and cannot be written directly.</summary>
+    EpicInherited,
+
+    /// <summary>The issue cannot be deleted while sub-issues, including deleted ones, reference it.</summary>
+    HasSubIssues,
+
     /// <summary><c>repo</c> or a label filter names a label the project does not have.</summary>
     UnknownLabel,
 

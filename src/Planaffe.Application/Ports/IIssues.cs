@@ -37,6 +37,8 @@ public sealed record IssueRow
 
     public Guid? EpicId { get; init; }
 
+    public Guid? ParentId { get; init; }
+
     public Guid? ClaimedBy { get; init; }
 
     public DateTimeOffset? ClaimedAt { get; init; }
@@ -138,7 +140,8 @@ public sealed record Reasons(
     int InReview,
     int Parked,
     int NotReady,
-    int AssignedElsewhere);
+    int AssignedElsewhere,
+    int ParentGated);
 
 /// <summary>
 /// The issue rows and everything that hangs on them. Reads go through the view;
@@ -184,6 +187,13 @@ public interface IIssues
     Task<IReadOnlyList<EdgeRow>> BlockedByEachAsync(IReadOnlyCollection<Guid> issueIds, CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<Guid, int>> OpenQuestionCountsAsync(IReadOnlyCollection<Guid> issueIds, CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<Guid, int>> OpenSubIssueCountsAsync(IReadOnlyCollection<Guid> issueIds, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<IssueRow>> SubIssuesOfAsync(Guid issueId, CancellationToken cancellationToken);
+
+    /// <summary>Includes deleted rows so a parent can never be purged from under a child.</summary>
+    Task<bool> HasSubIssuesAsync(Guid issueId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<Comment>> CommentsOfAsync(Guid issueId, CancellationToken cancellationToken);
 

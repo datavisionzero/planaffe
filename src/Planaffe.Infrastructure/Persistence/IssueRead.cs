@@ -38,6 +38,8 @@ public sealed class IssueRead
 
     public Guid? EpicId { get; init; }
 
+    public Guid? ParentId { get; init; }
+
     public Guid? ClaimedBy { get; init; }
 
     public DateTimeOffset? ClaimedAt { get; init; }

@@ -18,6 +18,7 @@ public sealed record NewIssue(
     bool? Ready,
     IReadOnlyList<string>? Labels,
     string? Epic,
+    string? Parent,
     string? Assignee,
     IReadOnlyList<string>? BlockedBy,
     IReadOnlyList<string>? Blocks,
@@ -85,6 +86,11 @@ public sealed class CreateIssues(
                 throw Refusal.Validation($"{field}.status", "An issue is born in todo, or parked in backlog; every other status is an act.");
             }
 
+            if (item.Parent is not null && item.Epic is not null)
+            {
+                throw new Refusal(RefusalCode.EpicInherited, $"{field}.epic cannot be set on a sub-issue; it follows the parent.");
+            }
+
             var ready = item.Ready ?? false;
             if (!Issue.ReadyMayBeSetBy(caller.Kind, project.TriageRequired, ready))
             {
@@ -144,6 +150,50 @@ public sealed class CreateIssues(
             }
 
             await issues.SaveAsync(cancellationToken);
+
+            // Parent links are resolved only after every row exists so refs may
+            // point forward in the same bulk request.
+            foreach (var (plan, index) in plans.Select((p, index) => (p, index)))
+            {
+                if (plan.Item.Parent is null)
+                {
+                    continue;
+                }
+
+                var child = rows[index];
+                var (parentId, parentKey, localParent) = await ResolveAsync(
+                    plan.Item.Parent, byRef, project, $"{plan.Field}.parent", cancellationToken);
+                var parent = localParent ?? await issues.LoadForWriteAsync(parentId, cancellationToken)
+                    ?? throw Refusal.Validation($"{plan.Field}.parent", $"{parentKey} names no issue.");
+
+                if (parent.ProjectId != project.Id)
+                {
+                    throw new Refusal(RefusalCode.OtherProject, "A parent and its sub-issue stay in one project.");
+                }
+                child.AttachToParent(parent.Id, now);
+                child.AttachTo(parent.EpicId, now);
+                if (plan.Item.Priority is null)
+                {
+                    child.Prioritize(parent.Priority, now);
+                }
+                history.Add(HistoryEntry.OnIssue(child.Id, caller.Id, now, HistoryField.Parent, newValue: parentKey));
+            }
+
+            await issues.SaveAsync(cancellationToken);
+
+            // Validate after all links are written: otherwise a pair of
+            // forward refs could acquire its own parent later in this loop and
+            // briefly evade the one-level rule.
+            foreach (var child in rows.Where(i => i.ParentId is not null))
+            {
+                var parent = rows.SingleOrDefault(i => i.Id == child.ParentId)
+                    ?? await issues.LoadForWriteAsync(child.ParentId!.Value, cancellationToken)
+                    ?? throw new InvalidOperationException("A parent vanished inside the create transaction.");
+                if (parent.ParentId is not null || await issues.HasSubIssuesAsync(child.Id, cancellationToken))
+                {
+                    throw new Refusal(RefusalCode.OneLevel, "Sub-issues are exactly one level deep.");
+                }
+            }
 
             // Edges after the rows, so that a ref or a key resolves to a row
             // that exists; a cycle among them is found with the edges written

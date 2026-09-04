@@ -40,6 +40,9 @@ func Issue(w io.Writer, issue api.Issue) {
 	if issue.Epic != nil {
 		fmt.Fprintf(w, "  epic: %s", issue.Epic.Key)
 	}
+	if issue.Parent != nil {
+		fmt.Fprintf(w, "  parent: %s", issue.Parent.Key)
+	}
 	fmt.Fprintln(w)
 	if len(issue.Labels) > 0 {
 		names := make([]string, 0, len(issue.Labels))
@@ -59,6 +62,13 @@ func Issue(w io.Writer, issue api.Issue) {
 	}
 	if issue.Description != "" {
 		fmt.Fprintf(w, "\n%s\n", issue.Description)
+	}
+	if len(issue.SubIssues) > 0 {
+		fmt.Fprintln(w, "\n## Sub-issues")
+		for _, child := range issue.SubIssues {
+			fmt.Fprintf(w, "\n- %s  %s", child.Key, child.Title)
+		}
+		fmt.Fprintln(w)
 	}
 	if issue.Result != nil && *issue.Result != "" {
 		fmt.Fprintf(w, "\n## Result\n\n%s\n", *issue.Result)

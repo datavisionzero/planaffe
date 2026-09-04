@@ -3586,6 +3586,7 @@
           "ready",
           "assignee",
           "epic",
+          "parent",
           "labels",
           "status"
         ],
@@ -3629,6 +3630,12 @@
             ]
           },
           "epic": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parent": {
             "type": [
               "null",
               "string"
@@ -4269,6 +4276,8 @@
           "priority",
           "labels",
           "epic",
+          "parent",
+          "sub_issues",
           "assignee",
           "claim",
           "author",
@@ -4328,6 +4337,22 @@
                 "$ref": "#/components/schemas/EpicRef"
               }
             ]
+          },
+          "parent": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IssueRef"
+              }
+            ]
+          },
+          "sub_issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueRef"
+            }
           },
           "assignee": {
             "oneOf": [
@@ -4474,6 +4499,7 @@
           "priority",
           "labels",
           "epic",
+          "parent",
           "assignee",
           "claim",
           "blocked_by",
@@ -4513,6 +4539,12 @@
             }
           },
           "epic": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parent": {
             "type": [
               "null",
               "string"
@@ -4688,6 +4720,7 @@
           "ready",
           "labels",
           "epic",
+          "parent",
           "assignee",
           "blocked_by",
           "blocks",
@@ -4739,6 +4772,12 @@
             }
           },
           "epic": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parent": {
             "type": [
               "null",
               "string"
@@ -5150,7 +5189,8 @@
           "in_review",
           "parked",
           "not_ready",
-          "assigned_elsewhere"
+          "assigned_elsewhere",
+          "parent_gated"
         ],
         "type": "object",
         "properties": {
@@ -5179,6 +5219,10 @@
             "format": "int32"
           },
           "assigned_elsewhere": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "parent_gated": {
             "type": "integer",
             "format": "int32"
           }

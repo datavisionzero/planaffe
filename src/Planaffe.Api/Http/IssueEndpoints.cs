@@ -20,6 +20,7 @@ public sealed record ChangeIssueRequest(
     bool? Ready,
     string? Assignee,
     string? Epic,
+    string? Parent,
     IReadOnlyList<string>? Labels,
     string? Status);
 
@@ -223,6 +224,8 @@ public static class IssueEndpoints
             Text(body, "assignee"),
             body.TryGetProperty("epic", out _),
             Text(body, "epic"),
+            body.TryGetProperty("parent", out _),
+            Text(body, "parent"),
             body.TryGetProperty("labels", out var labels) && labels.ValueKind is JsonValueKind.Array
                 ? [.. labels.EnumerateArray().Select(l => l.GetString() ?? string.Empty)]
                 : null,

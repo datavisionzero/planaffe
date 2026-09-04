@@ -46,13 +46,13 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         return new IssuePageRows(hasMore ? page[..limit] : page, total, hasMore);
     }
 
-    // The eight conditions of VISION 10 (five and eight vacuous in cut one) as
+    // The eight conditions of VISION 10 as
     // one statement over the table, with the two derived rules repeated inline
     // — because the row it locks is the row, not the view (docs/storage.md).
     // The GET and the POST run the same text; the POST adds the lock.
     private const string Workable = """
         with derived as (
-            select i.id, i.project_id, i.epic_id, i.priority, i.created_at, i.number, i.assignee_id, i.ready,
+            select i.id, i.project_id, i.epic_id, i.parent_id, i.priority, i.created_at, i.number, i.assignee_id, i.ready,
                    case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
                         then 'todo' else i.status end as status,
                    case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
@@ -71,6 +71,12 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
            and not exists (select 1 from question q where q.issue_id = d.id and q.answer is null)
            and not exists (select 1 from blocker b join derived f on f.id = b.blocker_id
                             where b.blocked_id = d.id and f.status not in ('done', 'canceled'))
+           and not exists (select 1 from derived c where c.parent_id = d.id and c.status not in ('done', 'canceled'))
+           and (d.parent_id is null or exists (
+               select 1 from derived p
+                where p.id = d.parent_id and p.status not in ('backlog', 'done', 'canceled')
+                  and not exists (select 1 from blocker pb join derived pf on pf.id = pb.blocker_id
+                                   where pb.blocked_id = p.id and pf.status not in ('done', 'canceled'))))
            and ({3}::uuid is null or d.epic_id = {3}::uuid)
            and not exists (select 1 from unnest({4}::text[]) as wanted(name)
                             where not exists (select 1 from issue_label il join label l on l.id = il.label_id
@@ -145,6 +151,9 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                 r.AssigneeId,
                 Blocked = context.Blockers.Any(b => b.BlockedId == r.Id && live.Any(f => f.Id == b.BlockerId && f.Status != IssueStatus.Done && f.Status != IssueStatus.Canceled)),
                 Asking = context.Questions.Any(q => q.IssueId == r.Id && q.Answer == null),
+                ParentGated = r.ParentId != null && live.Any(p => p.Id == r.ParentId &&
+                    (p.Status == IssueStatus.Backlog || p.Status == IssueStatus.Done || p.Status == IssueStatus.Canceled
+                     || context.Blockers.Any(b => b.BlockedId == p.Id && live.Any(f => f.Id == b.BlockerId && f.Status != IssueStatus.Done && f.Status != IssueStatus.Canceled)))),
             })
             .ToListAsync(cancellationToken);
 
@@ -155,7 +164,8 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
             rows.Count(r => r.Status == IssueStatus.Review),
             rows.Count(r => r.Status == IssueStatus.Backlog),
             query.RequireReady ? rows.Count(r => r.Status == IssueStatus.Todo && !r.Ready) : 0,
-            rows.Count(r => r.Status == IssueStatus.Todo && r.AssigneeId != null && r.AssigneeId != query.CallerId));
+            rows.Count(r => r.Status == IssueStatus.Todo && r.AssigneeId != null && r.AssigneeId != query.CallerId),
+            rows.Count(r => r.ParentGated));
     }
 
     private static object[] Parameters(NextQuery query, int limit) =>
@@ -231,6 +241,19 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
             .GroupBy(q => q.IssueId)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(g => g.Key, g => g.Count, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, int>> OpenSubIssueCountsAsync(IReadOnlyCollection<Guid> issueIds, CancellationToken cancellationToken) =>
+        await Live().Where(i => i.ParentId != null && issueIds.Contains(i.ParentId.Value)
+                                      && i.Status != IssueStatus.Done && i.Status != IssueStatus.Canceled)
+            .GroupBy(i => i.ParentId!.Value)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Key, g => g.Count, cancellationToken);
+
+    public async Task<IReadOnlyList<IssueRow>> SubIssuesOfAsync(Guid issueId, CancellationToken cancellationToken) =>
+        await Live().Where(i => i.ParentId == issueId).OrderBy(i => i.Number).ToListAsync(cancellationToken);
+
+    public Task<bool> HasSubIssuesAsync(Guid issueId, CancellationToken cancellationToken) =>
+        context.Issues.AnyAsync(i => i.ParentId == issueId, cancellationToken);
 
     public async Task<IReadOnlyList<Comment>> CommentsOfAsync(Guid issueId, CancellationToken cancellationToken) =>
         await context.Comments.Where(c => c.IssueId == issueId).OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).ToListAsync(cancellationToken);
@@ -344,7 +367,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         {
             Id = i.Id, ProjectId = i.ProjectId, ProjectKey = p.Key, Number = i.Number, Title = i.Title,
             Description = i.Description, Result = i.Result, Status = i.Status, Ready = i.Ready, Priority = i.Priority,
-            AssigneeId = i.AssigneeId, EpicId = i.EpicId, ClaimedBy = i.ClaimedBy, ClaimedAt = i.ClaimedAt,
+            AssigneeId = i.AssigneeId, EpicId = i.EpicId, ParentId = i.ParentId, ClaimedBy = i.ClaimedBy, ClaimedAt = i.ClaimedAt,
             ClaimExpiresAt = i.ClaimExpiresAt, AuthorId = i.AuthorId, CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
             ClosedAt = i.ClosedAt,
         };
@@ -359,7 +382,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         {
             Id = i.Id, ProjectId = i.ProjectId, ProjectKey = p.Key, Number = i.Number, Title = i.Title,
             Description = i.Description, Result = i.Result, Status = i.Status, Ready = i.Ready, Priority = i.Priority,
-            AssigneeId = i.AssigneeId, EpicId = i.EpicId, ClaimedBy = i.Claim!.HolderId, ClaimedAt = i.Claim!.ClaimedAt,
+            AssigneeId = i.AssigneeId, EpicId = i.EpicId, ParentId = i.ParentId, ClaimedBy = i.Claim!.HolderId, ClaimedAt = i.Claim!.ClaimedAt,
             ClaimExpiresAt = i.Claim!.ExpiresAt, AuthorId = i.AuthorId, CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
             ClosedAt = i.ClosedAt, DeletedAt = i.DeletedAt, DeletedBy = i.DeletedBy,
         };
