@@ -23,7 +23,8 @@ public sealed class BootstrapService(
     {
         var settings = new BootstrapSettings(
             configuration[BootstrapSettings.AdministratorVariable],
-            configuration[BootstrapSettings.TokenVariable]);
+            configuration[BootstrapSettings.TokenVariable],
+            configuration[BootstrapSettings.EmailVariable]);
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var bootstrap = scope.ServiceProvider.GetRequiredService<BootstrapTheInstance>();
@@ -64,10 +65,11 @@ public sealed class BootstrapService(
 
             case BootstrapOutcome.NothingToBootstrapFrom:
                 logger.LogWarning(
-                    "No identity exists and nothing can authenticate. Set {AdministratorVariable} "
-                    + "and {TokenVariable} (at least {MinimumLength} characters) and start again "
+                    "No identity exists and nothing can authenticate. Set {AdministratorVariable}, "
+                    + "{EmailVariable} and {TokenVariable} (at least {MinimumLength} characters) and start again "
                     + "to create the first administrator and their token.",
                     BootstrapSettings.AdministratorVariable,
+                    BootstrapSettings.EmailVariable,
                     BootstrapSettings.TokenVariable,
                     Domain.Identities.TokenSecret.MinimumLength);
                 break;

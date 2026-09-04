@@ -5,17 +5,18 @@ namespace Planaffe.Application.Acts;
 
 /// <summary>
 /// What the operator put in the environment for the first start:
-/// <c>PLANAFFE_BOOTSTRAP_ADMIN</c> and <c>PLANAFFE_BOOTSTRAP_TOKEN</c>, either
-/// of which may be missing.
+/// <c>PLANAFFE_BOOTSTRAP_ADMIN</c>, <c>PLANAFFE_BOOTSTRAP_EMAIL</c> and
+/// <c>PLANAFFE_BOOTSTRAP_TOKEN</c>, any of which may be missing.
 /// </summary>
-public sealed record BootstrapSettings(string? AdministratorName, string? TokenSecret)
+public sealed record BootstrapSettings(string? AdministratorName, string? TokenSecret, string? Email = null)
 {
     public const string AdministratorVariable = "PLANAFFE_BOOTSTRAP_ADMIN";
 
     public const string TokenVariable = "PLANAFFE_BOOTSTRAP_TOKEN";
+    public const string EmailVariable = "PLANAFFE_BOOTSTRAP_EMAIL";
 
     public bool IsComplete =>
-        !string.IsNullOrWhiteSpace(AdministratorName) && !string.IsNullOrWhiteSpace(TokenSecret);
+        !string.IsNullOrWhiteSpace(AdministratorName) && !string.IsNullOrWhiteSpace(TokenSecret) && !string.IsNullOrWhiteSpace(Email);
 }
 
 /// <summary>
@@ -88,8 +89,11 @@ public sealed class BootstrapTheInstance(IIdentities identities, TimeProvider cl
                 + $"and at most {Domain.Identities.TokenSecret.MaximumLength}.");
         }
 
+        try { User.NormalizeEmail(settings.Email!); }
+        catch (ArgumentException exception) { throw new BootstrapRefusedException($"{BootstrapSettings.EmailVariable} is not a valid email address: {exception.Message}"); }
+
         var now = clock.GetUtcNow();
-        var administrator = User.Create(settings.AdministratorName!, administrator: true, now);
+        var administrator = User.Create(settings.AdministratorName!, settings.Email!, administrator: true, now);
         var token = Token.Issue(administrator, settings.TokenSecret!, now);
 
         await identities.AddAsync(administrator, token, cancellationToken);

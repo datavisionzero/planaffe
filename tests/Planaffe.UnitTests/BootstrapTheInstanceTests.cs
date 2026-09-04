@@ -15,7 +15,7 @@ public sealed class BootstrapTheInstanceTests
     {
         var store = new Store(any: false);
 
-        var outcome = await Act(store).ExecuteAsync(new BootstrapSettings("maintainer", Secret), CancellationToken.None);
+        var outcome = await Act(store).ExecuteAsync(new BootstrapSettings("maintainer", Secret, "maintainer@example.test"), CancellationToken.None);
 
         Assert.Equal(BootstrapOutcome.Bootstrapped, outcome);
         Assert.NotNull(store.Added);
@@ -36,7 +36,7 @@ public sealed class BootstrapTheInstanceTests
     {
         var store = new Store(any: true);
 
-        var outcome = await Act(store).ExecuteAsync(new BootstrapSettings("somebody", "short"), CancellationToken.None);
+        var outcome = await Act(store).ExecuteAsync(new BootstrapSettings("somebody", "short", "somebody@example.test"), CancellationToken.None);
 
         Assert.Equal(BootstrapOutcome.AlreadyBootstrapped, outcome);
         Assert.Null(store.Added);
@@ -64,7 +64,7 @@ public sealed class BootstrapTheInstanceTests
         var store = new Store(any: false);
 
         var refusal = await Assert.ThrowsAsync<BootstrapRefusedException>(() =>
-            Act(store).ExecuteAsync(new BootstrapSettings("maintainer", "only-nine"), CancellationToken.None));
+            Act(store).ExecuteAsync(new BootstrapSettings("maintainer", "only-nine", "maintainer@example.test"), CancellationToken.None));
 
         Assert.Contains("PLANAFFE_BOOTSTRAP_TOKEN", refusal.Message, StringComparison.Ordinal);
         Assert.Null(store.Added);

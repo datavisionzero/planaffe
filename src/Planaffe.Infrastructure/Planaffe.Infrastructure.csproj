@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="MailKit" />
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
     <!-- Design-time only: this project is its own startup project for
          `dotnet ef`, through the factory in Persistence. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">

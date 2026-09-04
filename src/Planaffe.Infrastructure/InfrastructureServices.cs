@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Planaffe.Application.Ports;
 using Planaffe.Infrastructure.Email;
+using Planaffe.Infrastructure.Security;
 using Planaffe.Infrastructure.Persistence;
 
 namespace Planaffe.Infrastructure;
@@ -49,6 +50,9 @@ public static class InfrastructureServices
         services.AddScoped<IHistory, History>();
         services.AddScoped<ITransactions, Transactions>();
         services.AddScoped<IIdempotency, Idempotency>();
+        services.AddScoped<IOneTimeSecrets, OneTimeSecrets>();
+        services.AddScoped<IBrowserSessions, BrowserSessions>();
+        services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddTransient<IEmailSender, SmtpEmailSender>();
 
         return services;

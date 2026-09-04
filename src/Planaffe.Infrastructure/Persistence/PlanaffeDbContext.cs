@@ -44,6 +44,8 @@ public sealed class PlanaffeDbContext(DbContextOptions<PlanaffeDbContext> option
     public DbSet<AgentMetadataReport> AgentMetadataReports => Set<AgentMetadataReport>();
 
     public DbSet<Token> Tokens => Set<Token>();
+    public DbSet<OneTimeSecret> OneTimeSecrets => Set<OneTimeSecret>();
+    public DbSet<BrowserSession> BrowserSessions => Set<BrowserSession>();
 
     public DbSet<Project> Projects => Set<Project>();
 

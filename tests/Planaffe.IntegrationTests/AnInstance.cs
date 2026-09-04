@@ -71,6 +71,7 @@ internal sealed class AnInstance(
                 ["ConnectionStrings:Postgres"] = connectionString,
                 ["PLANAFFE_BOOTSTRAP_ADMIN"] = administrator ?? string.Empty,
                 ["PLANAFFE_BOOTSTRAP_TOKEN"] = token ?? string.Empty,
+                ["PLANAFFE_BOOTSTRAP_EMAIL"] = "maintainer@example.test",
             };
             if (instanceConfiguration is not null)
             {

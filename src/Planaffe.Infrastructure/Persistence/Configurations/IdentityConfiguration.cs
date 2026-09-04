@@ -28,6 +28,9 @@ public sealed class IdentityConfiguration : IEntityTypeConfiguration<Identity>
             table.HasCheckConstraint(
                 "ck_identity_owner",
                 "kind = 'user' and owner_id is null or kind = 'agent' and owner_id is not null and not administrator");
+            table.HasCheckConstraint(
+                "ck_identity_user",
+                "kind = 'user' and email is not null and normalized_email is not null and user_state in ('invited', 'active', 'deactivated') or kind = 'agent' and email is null and normalized_email is null and user_state is null and password_hash is null and bootstrap_exchanged_at is null");
         });
 
         builder.HasKey(i => i.Id).HasName("pk_identity");
