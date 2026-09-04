@@ -15,23 +15,25 @@ public sealed record LabelShape(string Name, string? Group, string? Description)
 public sealed record LabelChanges(string? Name, bool GroupGiven, string? Group, bool DescriptionGiven, string? Description);
 
 /// <summary>Every live label of a project with its group and description — the project's schema, for an agent.</summary>
-public sealed class ListLabels(IProjects projects, ILabels labels, InstanceSettings settings)
+public sealed class ListLabels(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings)
 {
     public async Task<IReadOnlyList<LabelShape>> ExecuteAsync(string projectKey, CancellationToken cancellationToken)
     {
         var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
 
         return [.. (await labels.ListAsync(project.Id, cancellationToken)).Select(LabelShape.Of)];
     }
 }
 
 /// <summary>Anyone creates a label; labels are the one extensibility the product offers, and agents use it.</summary>
-public sealed class CreateLabel(IProjects projects, ILabels labels, InstanceSettings settings, TimeProvider clock)
+public sealed class CreateLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings, TimeProvider clock)
 {
     public async Task<LabelShape> ExecuteAsync(
         string projectKey, string? name, string? group, string? description, CancellationToken cancellationToken)
     {
         var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
 
         var label = Validated.Field("name", () => Label.Create(project.Id, name!, null, null, clock.GetUtcNow()));
         Validated.Field("group", () => { label.Regroup(group); return true; });
@@ -57,7 +59,7 @@ public sealed class CreateLabel(IProjects projects, ILabels labels, InstanceSett
 /// keys under <c>issues</c>: the alternative is an issue with two of one group,
 /// which the group exists to make impossible.
 /// </summary>
-public sealed class ChangeLabel(IProjects projects, ILabels labels, InstanceSettings settings)
+public sealed class ChangeLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings)
 {
     public async Task<LabelShape> ExecuteAsync(
         string projectKey, string name, LabelChanges changes, CancellationToken cancellationToken)
@@ -65,6 +67,7 @@ public sealed class ChangeLabel(IProjects projects, ILabels labels, InstanceSett
         ArgumentNullException.ThrowIfNull(changes);
 
         var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         var label = await LabelLookup.LiveAsync(labels, project, name, cancellationToken);
 
         if (changes.GroupGiven && changes.Group is not null && changes.Group != label.Group)
@@ -112,11 +115,12 @@ public sealed class ChangeLabel(IProjects projects, ILabels labels, InstanceSett
 }
 
 /// <summary>Soft delete: the label vanishes from every issue; its attachments wait for a restore.</summary>
-public sealed class DeleteLabel(IProjects projects, ILabels labels, InstanceSettings settings, TimeProvider clock)
+public sealed class DeleteLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings, TimeProvider clock)
 {
     public async Task ExecuteAsync(string projectKey, string name, CancellationToken cancellationToken)
     {
         var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         var label = await LabelLookup.LiveAsync(labels, project, name, cancellationToken);
 
         label.Delete(clock.GetUtcNow());
@@ -125,11 +129,12 @@ public sealed class DeleteLabel(IProjects projects, ILabels labels, InstanceSett
 }
 
 /// <summary>Back, with its attachments. A label that is not deleted is <c>transition</c>.</summary>
-public sealed class RestoreLabel(IProjects projects, ILabels labels, InstanceSettings settings)
+public sealed class RestoreLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings)
 {
     public async Task<LabelShape> ExecuteAsync(string projectKey, string name, CancellationToken cancellationToken)
     {
         var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
 
         var label = await labels.FindAsync(project.Id, name, cancellationToken)
             ?? throw new Refusal(RefusalCode.NotFound, $"No label {name} in {project.Key}.");

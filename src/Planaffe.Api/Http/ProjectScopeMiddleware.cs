@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Routing.Patterns;
 using Planaffe.Application.Acts;
 using Planaffe.Application.Ports;
 using Planaffe.Domain;
@@ -10,6 +11,14 @@ namespace Planaffe.Api.Http;
 /// queries; this guard makes every direct-key route indistinguishable from an
 /// unknown key before its handler loads content.
 /// </summary>
+/// <remarks>
+/// The route the endpoint was registered under is what is read here, never the
+/// path the caller typed. Routing matches literal segments without regard to
+/// case, so <c>/Issues/PLAN-1</c> reaches the same handler as
+/// <c>/issues/PLAN-1</c>, and a guard that compared the request path let one of
+/// the two through with no check at all. The pattern is ours and the route
+/// values are the ones routing bound, which is why both are safe to switch on.
+/// </remarks>
 public sealed class ProjectScopeMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(HttpContext http, ProjectScope scope, IProjects projects, IIssues issues)
@@ -22,24 +31,44 @@ public sealed class ProjectScopeMiddleware(RequestDelegate next)
 
     private static Task<Guid>? ProjectId(HttpContext http, IProjects projects, IIssues issues)
     {
-        var segments = http.Request.Path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        if (segments.Length < 2) return null;
+        // No endpoint is no project content: an unrouted path is the SPA's
+        // fallback or a 404, and neither loads a row.
+        if (http.GetEndpoint() is not RouteEndpoint endpoint) return null;
 
-        // Project assignment administration and lifecycle are explicit
-        // administrator surfaces, not project content.
-        if (segments[0] == "projects" && (segments.Length >= 3 && segments[2] == "users"
-            || http.Request.Method == "DELETE" && segments.Length == 2
-            || segments.Length == 3 && segments[2] == "restore")) return null;
+        var route = endpoint.RoutePattern;
+        var values = http.Request.RouteValues;
 
-        if (segments[0] == "projects") return FromProjectKey(projects, segments[1], http.RequestAborted);
-        if (segments[0] == "issues" && IssueKey.TryParse(segments[1], out var issueProject, out _))
-            return FromProjectKey(projects, issueProject, http.RequestAborted);
-        if (segments[0] == "epics" && EpicKey.TryParse(segments[1], out var epicProject, out _))
-            return FromProjectKey(projects, epicProject, http.RequestAborted);
-        if (segments[0] == "questions" && Guid.TryParse(segments[1], out var questionId))
-            return FromQuestion(issues, questionId, http.RequestAborted);
-        return null;
+        switch (Literal(route, 0))
+        {
+            // Project assignment administration and lifecycle are explicit
+            // administrator surfaces, not project content.
+            case "projects" when Literal(route, 2) is "users" or "restore"
+                || http.Request.Method == "DELETE" && route.PathSegments.Count == 2:
+                return null;
+
+            case "projects" when values["key"] is string projectKey:
+                return FromProjectKey(projects, projectKey, http.RequestAborted);
+
+            case "issues" when values["key"] is string issueKey && IssueKey.TryParse(issueKey, out var issueProject, out _):
+                return FromProjectKey(projects, issueProject, http.RequestAborted);
+
+            case "epics" when values["key"] is string epicKey && EpicKey.TryParse(epicKey, out var epicProject, out _):
+                return FromProjectKey(projects, epicProject, http.RequestAborted);
+
+            case "questions" when values["id"] is string question && Guid.TryParse(question, out var questionId):
+                return FromQuestion(issues, questionId, http.RequestAborted);
+
+            default:
+                return null;
+        }
     }
+
+    /// <summary>The literal at <paramref name="index"/>, or null where the segment is a parameter.</summary>
+    private static string? Literal(RoutePattern route, int index) =>
+        index < route.PathSegments.Count && route.PathSegments[index] is { IsSimple: true } segment
+        && segment.Parts[0] is RoutePatternLiteralPart literal
+            ? literal.Content
+            : null;
 
     private static async Task<Guid> FromProjectKey(IProjects projects, string key, CancellationToken cancellationToken) =>
         (await projects.FindByKeyAsync(key.Trim().ToUpperInvariant(), cancellationToken))?.Id ?? Guid.Empty;

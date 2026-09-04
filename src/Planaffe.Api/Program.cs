@@ -183,6 +183,14 @@ app.UseExceptionHandler();
 // Method, path, status and duration — and nothing an agent wrote (VISION 13).
 app.UseSerilogRequestLogging();
 app.UsePlanaffeVersion();
+
+// Explicit, because two middlewares below read what routing decided rather than
+// what the caller typed: the project-scope door reads the endpoint's route
+// pattern, and the CSRF guard its `AllowAnonymous` metadata. A host adds this
+// by itself, at the front, and both would still work — saying it here is what
+// keeps a later reordering from silently moving them in front of it.
+app.UseRouting();
+
 app.UseAuthentication();
 app.UseMiddleware<ProjectScopeMiddleware>();
 app.UseMiddleware<BrowserCsrfMiddleware>();

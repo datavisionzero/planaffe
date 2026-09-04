@@ -119,9 +119,9 @@ public static class EpicLookup
 {
     /// <exception cref="Refusal"><c>not-found</c>, or <c>deleted</c> with <c>restorable_until</c>.</exception>
     public static async Task<(Epic Epic, Project Project)> LiveAsync(
-        this IEpics epics, IProjects projects, string key, InstanceSettings settings, CancellationToken cancellationToken)
+        this IEpics epics, IProjects projects, ProjectScope scope, string key, InstanceSettings settings, CancellationToken cancellationToken)
     {
-        var (epic, project) = await epics.AnyAsync(projects, key, settings, cancellationToken);
+        var (epic, project) = await epics.AnyAsync(projects, scope, key, settings, cancellationToken);
 
         return epic.Deleted
             ? throw new Refusal(
@@ -132,7 +132,7 @@ public static class EpicLookup
     }
 
     public static async Task<(Epic Epic, Project Project)> AnyAsync(
-        this IEpics epics, IProjects projects, string key, InstanceSettings settings, CancellationToken cancellationToken)
+        this IEpics epics, IProjects projects, ProjectScope scope, string key, InstanceSettings settings, CancellationToken cancellationToken)
     {
         if (!EpicKey.TryParse(key, out var projectKey, out var number))
         {
@@ -140,6 +140,7 @@ public static class EpicLookup
         }
 
         var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         var epic = await epics.FindAnyAsync(project.Id, number, cancellationToken)
             ?? throw new Refusal(RefusalCode.NotFound, $"No epic {EpicKey.Of(projectKey, number)}.");
 
@@ -229,11 +230,11 @@ public sealed class ListEpics(IProjects projects, IEpics epics, EpicAssembler as
     }
 }
 
-public sealed class ReadEpic(IProjects projects, IEpics epics, EpicAssembler assembler, InstanceSettings settings)
+public sealed class ReadEpic(IProjects projects, ProjectScope scope, IEpics epics, EpicAssembler assembler, InstanceSettings settings)
 {
     public async Task<EpicShape> ExecuteAsync(string key, CancellationToken cancellationToken)
     {
-        var (epic, _) = await epics.LiveAsync(projects, key, settings, cancellationToken);
+        var (epic, _) = await epics.LiveAsync(projects, scope, key, settings, cancellationToken);
         return await assembler.CompleteAsync(epic, cancellationToken);
     }
 }
@@ -246,6 +247,7 @@ public sealed class ReadEpic(IProjects projects, IEpics epics, EpicAssembler ass
 public sealed class ChangeEpic(
     ICallerIdentity callerIdentity,
     IProjects projects,
+    ProjectScope scope,
     ILabels labels,
     IEpics epics,
     IHistory history,
@@ -259,7 +261,7 @@ public sealed class ChangeEpic(
         ArgumentNullException.ThrowIfNull(changes);
         var caller = callerIdentity.Caller;
 
-        var (before, project) = await epics.LiveAsync(projects, key, settings, cancellationToken);
+        var (before, project) = await epics.LiveAsync(projects, scope, key, settings, cancellationToken);
         var expected = ChangeIssue.Expected(ifMatch);
         var newLabels = changes.Labels is null ? null : await labels.ResolveLabelsAsync(project, changes.Labels, "labels", cancellationToken);
 
@@ -321,6 +323,7 @@ public sealed class ChangeEpic(
 public sealed class MoveEpic(
     ICallerIdentity callerIdentity,
     IProjects projects,
+    ProjectScope scope,
     IEpics epics,
     IHistory history,
     ITransactions transactions,
@@ -354,7 +357,7 @@ public sealed class MoveEpic(
     public async Task DeleteAsync(string key, CancellationToken cancellationToken)
     {
         var caller = callerIdentity.Caller;
-        var (before, _) = await epics.LiveAsync(projects, key, settings, cancellationToken);
+        var (before, _) = await epics.LiveAsync(projects, scope, key, settings, cancellationToken);
 
         await transactions.RunAsync(async () =>
         {
@@ -380,7 +383,7 @@ public sealed class MoveEpic(
 
     public async Task<EpicShape> RestoreAsync(string key, CancellationToken cancellationToken)
     {
-        var (before, _) = await epics.AnyAsync(projects, key, settings, cancellationToken);
+        var (before, _) = await epics.AnyAsync(projects, scope, key, settings, cancellationToken);
         if (!before.Deleted)
         {
             throw new Refusal(RefusalCode.Transition, $"Epic {key} is not deleted.");
@@ -401,7 +404,7 @@ public sealed class MoveEpic(
     private async Task<EpicShape> OnLiveAsync(string key, Func<Epic, Caller, DateTimeOffset, Task> move, CancellationToken cancellationToken)
     {
         var caller = callerIdentity.Caller;
-        var (before, _) = await epics.LiveAsync(projects, key, settings, cancellationToken);
+        var (before, _) = await epics.LiveAsync(projects, scope, key, settings, cancellationToken);
 
         var epic = await transactions.RunAsync(async () =>
         {

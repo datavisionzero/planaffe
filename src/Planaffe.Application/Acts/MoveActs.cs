@@ -50,6 +50,7 @@ public sealed class MoveIssue(
     IProjects projects,
     IIdentities identities,
     IIssues issues,
+    ProjectScope scope,
     IReleases releases,
     IHistory history,
     ITransactions transactions,
@@ -132,6 +133,7 @@ public sealed class MoveIssue(
     {
         var caller = callerIdentity.Caller;
         var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         if (gate)
         {

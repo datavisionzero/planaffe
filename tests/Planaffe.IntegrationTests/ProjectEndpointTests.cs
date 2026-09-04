@@ -178,6 +178,60 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
         await Problem(await user.GetAsync("/issues?project=TWO", Ct), HttpStatusCode.NotFound, "not-found");
     }
 
+    /// <summary>
+    /// Routing matches literal segments without regard to case, so every
+    /// project-content route answers under a spelling the scope guard has to
+    /// recognise as its own. It once compared the request path and let
+    /// <c>/Issues/PLAN-1</c> past with no check at all.
+    /// </summary>
+    [Fact]
+    public async Task Project_scope_holds_when_the_route_is_spelled_in_another_case()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+        await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "Secret work" } } }, Ct);
+        await admin.PostAsJsonAsync("/projects/PLAN/labels", new { name = "secret" }, Ct);
+        using var asked = await admin.PostAsJsonAsync("/issues/PLAN-1/questions", new { question = "Which secret?" }, Ct);
+        var question = (await asked.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetString();
+
+        using var outsider = instance.ClientWith(await instance.AddActiveUserAsync("outsider"));
+        foreach (var (method, path, body) in new (HttpMethod Method, string Path, object? Body)[]
+        {
+            (HttpMethod.Get, "/Projects/PLAN", null),
+            (HttpMethod.Get, "/Projects/PLAN/labels", null),
+            (HttpMethod.Post, "/Projects/PLAN/labels", new { name = "planted" }),
+            (HttpMethod.Delete, "/Projects/PLAN/labels/secret", null),
+            (HttpMethod.Get, "/Projects/PLAN/releases", null),
+            (HttpMethod.Get, "/Projects/PLAN/needs-you", null),
+            (HttpMethod.Get, "/Issues/PLAN-1", null),
+            (HttpMethod.Patch, "/Issues/PLAN-1", new { title = "hijacked" }),
+            (HttpMethod.Get, "/Issues/PLAN-1/history", null),
+            (HttpMethod.Post, "/Issues/PLAN-1/comments", new { body = "hello" }),
+            (HttpMethod.Post, "/Issues/PLAN-1/questions", new { question = "leak?" }),
+            (HttpMethod.Post, "/Issues/PLAN-1/claim", null),
+            (HttpMethod.Get, $"/Questions/{question}", null),
+            (HttpMethod.Post, $"/Questions/{question}/answer", new { answer = "planted" }),
+        })
+        {
+            using var request = new HttpRequestMessage(method, path);
+            if (body is not null) request.Content = JsonContent.Create(body);
+            await Problem(await outsider.SendAsync(request, Ct), HttpStatusCode.NotFound, "not-found");
+        }
+
+        // Nothing the outsider sent was written: the refusal came before the handler.
+        var labels = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/labels", Ct);
+        Assert.Contains("secret", labels.EnumerateArray().Select(label => label.GetProperty("name").GetString()));
+        Assert.DoesNotContain("planted", labels.EnumerateArray().Select(label => label.GetProperty("name").GetString()));
+
+        var issue = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+        Assert.Equal("Secret work", issue.GetProperty("title").GetString());
+        Assert.Equal("todo", issue.GetProperty("status").GetString());
+        Assert.Empty(issue.GetProperty("comments").EnumerateArray());
+        Assert.Single(issue.GetProperty("questions").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, issue.GetProperty("questions")[0].GetProperty("answer").ValueKind);
+    }
+
     internal static async Task<JsonElement> Problem(HttpResponseMessage response, HttpStatusCode status, string code)
     {
         using (response)

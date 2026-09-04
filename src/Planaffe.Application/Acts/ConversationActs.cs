@@ -56,6 +56,7 @@ public sealed class CommentOnIssue(
     ICallerIdentity callerIdentity,
     IIdentities identities,
     IIssues issues,
+    ProjectScope scope,
     ITransactions transactions,
     InstanceSettings settings,
     TimeProvider clock)
@@ -64,6 +65,7 @@ public sealed class CommentOnIssue(
     {
         var caller = callerIdentity.Caller;
         var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         var comment = await transactions.RunAsync(async () =>
         {
@@ -96,6 +98,7 @@ public sealed class AskQuestion(
     ICallerIdentity callerIdentity,
     IIdentities identities,
     IIssues issues,
+    ProjectScope scope,
     ITransactions transactions,
     InstanceSettings settings,
     TimeProvider clock)
@@ -104,6 +107,7 @@ public sealed class AskQuestion(
     {
         var caller = callerIdentity.Caller;
         var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         if (row.Closed)
         {
@@ -138,6 +142,7 @@ public sealed class AnswerQuestion(
     ICallerIdentity callerIdentity,
     IIdentities identities,
     IIssues issues,
+    ProjectScope scope,
     ITransactions transactions,
     InstanceSettings settings,
     TimeProvider clock)
@@ -150,6 +155,7 @@ public sealed class AnswerQuestion(
             ?? throw new Refusal(RefusalCode.NotFound, $"No question {id}.");
         var row = (await issues.FindLiveManyAsync([found.IssueId], cancellationToken)).SingleOrDefault()
             ?? throw new Refusal(RefusalCode.NotFound, $"No question {id}.");
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         var question = await transactions.RunAsync(async () =>
         {
@@ -183,6 +189,7 @@ public sealed class AnswerQuestion(
 public sealed class ReadQuestion(
     IIdentities identities,
     IIssues issues,
+    ProjectScope scope,
     IChanges changes)
 {
     public async Task<QuestionShape> ExecuteAsync(
@@ -237,6 +244,8 @@ public sealed class ReadQuestion(
         {
             throw new Refusal(RefusalCode.NotFound, $"No question {id}.");
         }
+
+        await scope.RequireAsync(issue.ProjectId, cancellationToken);
 
         return question;
     }
@@ -311,11 +320,12 @@ public sealed class ListQuestions(IProjects projects, IIdentities identities, II
 }
 
 /// <summary>The history of an issue: who, when, which field, from what to what, oldest first.</summary>
-public sealed class ReadHistory(IIdentities identities, IIssues issues, IHistory history, InstanceSettings settings)
+public sealed class ReadHistory(IIdentities identities, IIssues issues, ProjectScope scope, IHistory history, InstanceSettings settings)
 {
     public async Task<IReadOnlyList<HistoryEntryShape>> ExecuteAsync(string key, CancellationToken cancellationToken)
     {
         var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
         var entries = await history.ListAsync(row.Id, cancellationToken);
 
         var people = await identities.FindManyAsync(

@@ -6,10 +6,14 @@ using Planaffe.Domain.Projects;
 namespace Planaffe.Application.Acts;
 
 /// <summary>One issue, complete: the context package (ADR 0012).</summary>
-public sealed class ReadIssue(IIssues issues, IssueAssembler assembler, InstanceSettings settings)
+public sealed class ReadIssue(IIssues issues, ProjectScope scope, IssueAssembler assembler, InstanceSettings settings)
 {
-    public async Task<IssueShape> ExecuteAsync(string key, CancellationToken cancellationToken) =>
-        await assembler.CompleteAsync(await issues.LiveAsync(key, settings, cancellationToken), cancellationToken);
+    public async Task<IssueShape> ExecuteAsync(string key, CancellationToken cancellationToken)
+    {
+        var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
+        return await assembler.CompleteAsync(row, cancellationToken);
+    }
 }
 
 /// <summary>The query string of <c>GET /issues</c>, as strings; the act makes sense of them.</summary>

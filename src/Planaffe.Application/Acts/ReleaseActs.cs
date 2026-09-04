@@ -27,32 +27,35 @@ public sealed class ReleaseAssembler(IReleases releases, IIdentities identities,
     private static string DisplayName(Release release) => release.Name ?? "unreleased";
 }
 
-public sealed class ListReleases(IProjects projects, IReleases releases, ReleaseAssembler assembler, InstanceSettings settings)
+public sealed class ListReleases(IProjects projects, ProjectScope scope, IReleases releases, ReleaseAssembler assembler, InstanceSettings settings)
 {
     public async Task<IReadOnlyList<ReleaseSummaryShape>> ExecuteAsync(string projectKey, CancellationToken ct)
     {
         var project = await projects.LiveAsync(projectKey, settings, ct);
+        await scope.RequireAsync(project.Id, ct);
         var result = new List<ReleaseSummaryShape>();
         foreach (var release in await releases.ListAsync(project.Id, ct)) result.Add(await assembler.SummaryAsync(release, ct));
         return result;
     }
 }
 
-public sealed class ReadRelease(IProjects projects, IReleases releases, ReleaseAssembler assembler, InstanceSettings settings)
+public sealed class ReadRelease(IProjects projects, ProjectScope scope, IReleases releases, ReleaseAssembler assembler, InstanceSettings settings)
 {
     public async Task<ReleaseShape> ExecuteAsync(string projectKey, string name, CancellationToken ct)
     {
         var project = await projects.LiveAsync(projectKey, settings, ct);
+        await scope.RequireAsync(project.Id, ct);
         var release = await releases.FindAsync(project.Id, name, ct) ?? throw new Refusal(RefusalCode.NotFound, $"No release {name} in {project.Key}.");
         return await assembler.CompleteAsync(release, ct);
     }
 }
 
-public sealed class ChangeRelease(IProjects projects, IReleases releases, ITransactions transactions, ReleaseAssembler assembler, InstanceSettings settings, TimeProvider clock)
+public sealed class ChangeRelease(IProjects projects, ProjectScope scope, IReleases releases, ITransactions transactions, ReleaseAssembler assembler, InstanceSettings settings, TimeProvider clock)
 {
     public async Task<ReleaseShape> ExecuteAsync(string projectKey, string name, string? description, CancellationToken ct)
     {
         var project = await projects.LiveAsync(projectKey, settings, ct);
+        await scope.RequireAsync(project.Id, ct);
         var changed = await transactions.RunAsync(async () =>
         {
             var release = await releases.LoadForWriteAsync(project.Id, name, ct) ?? throw new Refusal(RefusalCode.NotFound, $"No release {name} in {project.Key}.");
@@ -64,11 +67,12 @@ public sealed class ChangeRelease(IProjects projects, IReleases releases, ITrans
     }
 }
 
-public sealed class PublishRelease(ICallerIdentity callerIdentity, IProjects projects, IReleases releases, ITransactions transactions, ReleaseAssembler assembler, InstanceSettings settings, TimeProvider clock)
+public sealed class PublishRelease(ICallerIdentity callerIdentity, IProjects projects, ProjectScope scope, IReleases releases, ITransactions transactions, ReleaseAssembler assembler, InstanceSettings settings, TimeProvider clock)
 {
     public async Task<ReleaseShape> ExecuteAsync(string projectKey, PublishReleaseRequest request, CancellationToken ct)
     {
         var project = await projects.LiveAsync(projectKey, settings, ct);
+        await scope.RequireAsync(project.Id, ct);
         var name = Validated.Field("name", () => Release.NormalizeName(request.Name!));
         if (await releases.NameTakenAsync(project.Id, name, ct)) throw new Refusal(RefusalCode.ReleaseExists, $"Release {name} already exists.");
         var published = await transactions.RunAsync(async () =>

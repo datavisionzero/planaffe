@@ -22,6 +22,7 @@ public sealed record NextAnswer(IssueShape? Issue, Reasons Reasons);
 public sealed class Next(
     ICallerIdentity callerIdentity,
     IProjects projects,
+    ProjectScope scope,
     ILabels labels,
     IEpics epics,
     IIssues issues,
@@ -140,6 +141,7 @@ public sealed class Next(
     {
         var caller = callerIdentity.Caller;
         var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         var live = (await labels.ListAsync(project.Id, cancellationToken)).ToDictionary(l => l.Name, StringComparer.Ordinal);
 
         Guid? epicId = null;

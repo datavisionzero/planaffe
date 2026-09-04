@@ -115,9 +115,13 @@ header and the one place a refusal becomes a problem document; `Hosting/` the
 services that run before anything is served — the migrations, the bootstrap.
 It also owns browser-session authentication, CSRF and login rate limits, the
 central direct-key project-scope door, the static files of the built SPA and
-SMTP composition around the application's email port. Collection acts carry
-the same scope into their store queries, so search and unfiltered lists cannot
-step around it. The later MCP server will be a second adapter over the same acts and
+SMTP composition around the application's email port. That door reads the route
+pattern an endpoint was registered under rather than the path a caller typed,
+because routing matches literals without regard to case and a guard that
+compared the path let `/Issues/PLAN-1` past unchecked. It is not the only
+check: every act that loads project content asks the same scope itself, and
+collection acts carry it into their store queries, so search and unfiltered
+lists cannot step around it either. The later MCP server will be a second adapter over the same acts and
 not a second way into the data.
 
 ## The CLI is a client, not a layer

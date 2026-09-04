@@ -18,6 +18,7 @@ public sealed record NeedsYouAnswer(NeedsYouPage? Page, string ETag);
 /// <summary>The four groups that provide more work to agents, in human-action order.</summary>
 public sealed class NeedsYou(
     IProjects projects,
+    ProjectScope scope,
     IIssues issues,
     IssueAssembler assembler,
     InstanceSettings settings,
@@ -33,6 +34,7 @@ public sealed class NeedsYou(
         }
 
         var project = await projects.LiveForReadAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         var after = cursor is null ? null : NeedsYouCursor.Decode(cursor, project.Id);
         var page = await issues.NeedsYouAsync(project.Id, project.TriageRequired, after, limit, cancellationToken);
         var rows = (await issues.FindLiveManyAsync(page.Items.Select(item => item.Id), cancellationToken)).ToDictionary(row => row.Id);
@@ -63,6 +65,7 @@ public sealed class NeedsYou(
         }
 
         var project = await projects.LiveForReadAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(wait.Value));
         using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
         string? baseline = ifNoneMatch;

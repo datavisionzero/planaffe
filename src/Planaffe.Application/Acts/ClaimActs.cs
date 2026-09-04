@@ -17,6 +17,7 @@ public sealed class ClaimIssue(
     ICallerIdentity callerIdentity,
     IIdentities identities,
     IIssues issues,
+    ProjectScope scope,
     IHistory history,
     ITransactions transactions,
     IssueAssembler assembler,
@@ -27,6 +28,7 @@ public sealed class ClaimIssue(
     {
         var caller = callerIdentity.Caller;
         var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         try
         {
@@ -109,6 +111,7 @@ public sealed class ReleaseIssue(
     ICallerIdentity callerIdentity,
     IIdentities identities,
     IIssues issues,
+    ProjectScope scope,
     IHistory history,
     ITransactions transactions,
     IssueAssembler assembler,
@@ -119,6 +122,7 @@ public sealed class ReleaseIssue(
     {
         var caller = callerIdentity.Caller;
         var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         await ClaimGate.RefuseIfHeldByAnotherAsync(row, caller, history, identities, cancellationToken);
 
