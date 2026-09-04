@@ -1,6 +1,7 @@
 using Planaffe.Application.Ports;
 using Planaffe.Domain;
 using Planaffe.Domain.Projects;
+using Planaffe.Domain.Releases;
 
 namespace Planaffe.Application.Acts;
 
@@ -79,7 +80,7 @@ public sealed class CreateProject(ICallerIdentity callerIdentity, IProjects proj
         project.RequireTriage(triageRequired, now);
         project.RequireReview(reviewRequired, now);
 
-        await projects.AddAsync(project, Label.Kind(project.Id, now), cancellationToken);
+        await projects.AddAsync(project, Label.Kind(project.Id, now), Release.Open(project.Id, now), cancellationToken);
 
         return ProjectShape.Of(project);
     }

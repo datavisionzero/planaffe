@@ -3628,6 +3628,247 @@
           }
         }
       }
+    },
+    "/projects/{key}/releases": {
+      "get": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Every release of the project: the open one first, then published ones newest first.",
+        "operationId": "ListReleases",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReleaseSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{key}/releases/{name}": {
+      "get": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "One release with the issues that shipped in it.",
+        "operationId": "ReadRelease",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Release"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Annotate the release notes, whether open or published.",
+        "operationId": "ChangeRelease",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeReleaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Release"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{key}/releases/publish": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Name and freeze the open release, then create the next open one.",
+        "operationId": "PublishRelease",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishReleaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Release"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3884,6 +4125,20 @@
             "type": [
               "null",
               "boolean"
+            ]
+          }
+        }
+      },
+      "ChangeReleaseRequest": {
+        "required": [
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }
@@ -4478,6 +4733,7 @@
           "labels",
           "epic",
           "parent",
+          "release",
           "sub_issues",
           "assignee",
           "claim",
@@ -4547,6 +4803,12 @@
               {
                 "$ref": "#/components/schemas/IssueRef"
               }
+            ]
+          },
+          "release": {
+            "type": [
+              "null",
+              "string"
             ]
           },
           "sub_issues": {
@@ -4701,6 +4963,7 @@
           "labels",
           "epic",
           "parent",
+          "release",
           "assignee",
           "claim",
           "blocked_by",
@@ -4746,6 +5009,12 @@
             ]
           },
           "parent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "release": {
             "type": [
               "null",
               "string"
@@ -5363,6 +5632,27 @@
           }
         }
       },
+      "PublishReleaseRequest": {
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "Question": {
         "required": [
           "id",
@@ -5486,6 +5776,101 @@
             "format": "int32"
           },
           "parent_gated": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "Release": {
+        "required": [
+          "name",
+          "status",
+          "description",
+          "published_at",
+          "published_by",
+          "issues"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReleaseStatus"
+          },
+          "description": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "published_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IdentityRef"
+              }
+            ]
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueSummary"
+            }
+          }
+        }
+      },
+      "ReleaseStatus": {
+        "enum": [
+          "open",
+          "published"
+        ],
+        "type": "string"
+      },
+      "ReleaseSummary": {
+        "required": [
+          "name",
+          "status",
+          "description",
+          "published_at",
+          "published_by",
+          "issues"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReleaseStatus"
+          },
+          "description": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "published_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IdentityRef"
+              }
+            ]
+          },
+          "issues": {
             "type": "integer",
             "format": "int32"
           }

@@ -47,7 +47,8 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/issues/{key}/release", "/issues/{key}/reopen", "/issues/{key}/restore", "/issues/{key}/review",
                 "/me",
                 "/projects", "/projects/{key}", "/projects/{key}/labels", "/projects/{key}/labels/{name}",
-                "/projects/{key}/labels/{name}/restore", "/projects/{key}/needs-you", "/projects/{key}/next", "/projects/{key}/restore",
+                "/projects/{key}/labels/{name}/restore", "/projects/{key}/needs-you", "/projects/{key}/next",
+                "/projects/{key}/releases", "/projects/{key}/releases/publish", "/projects/{key}/releases/{name}", "/projects/{key}/restore",
                 "/questions", "/questions/{id}", "/questions/{id}/answer",
                 "/tokens", "/tokens/{id}", "/users", "/version",
             ],
@@ -59,6 +60,7 @@ public sealed class ContractTests(PostgresFixture postgres)
         Assert.Contains("IdentityRef", schemas);
         Assert.Contains("Me", schemas);
         Assert.Contains("NeedsYouPage", schemas);
+        Assert.Contains("Release", schemas);
         Assert.Contains("VersionResponse", schemas);
         Assert.Contains("ProblemDetails", schemas);
     }

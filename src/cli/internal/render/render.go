@@ -26,6 +26,50 @@ func Summaries(w io.Writer, items []api.IssueSummary) {
 	}
 }
 
+func Releases(w io.Writer, items []api.ReleaseSummary) {
+	for _, release := range items {
+		when := ""
+		if release.PublishedAt != nil {
+			when = release.PublishedAt.Format("2006-01-02")
+		}
+		fmt.Fprintf(w, "%-20s %-10s %4d  %s\n", release.Name, release.Status, release.Issues, when)
+	}
+}
+
+func Release(w io.Writer, release api.Release) {
+	fmt.Fprintf(w, "%s  %s\n", release.Name, release.Status)
+	if release.PublishedAt != nil && release.PublishedBy != nil {
+		fmt.Fprintf(w, "published: %s by %s\n", release.PublishedAt.Format("2006-01-02 15:04"), release.PublishedBy.Name)
+	}
+	if release.Description != "" {
+		fmt.Fprintf(w, "\n%s\n", release.Description)
+	}
+	if len(release.Issues) > 0 {
+		fmt.Fprintln(w, "\n## Issues")
+	}
+	releaseIssues(w, release.Issues)
+}
+
+func ReleaseNotes(w io.Writer, release api.Release) {
+	if release.Description != "" {
+		fmt.Fprintln(w, release.Description)
+		if len(release.Issues) > 0 {
+			fmt.Fprintln(w)
+		}
+	}
+	releaseIssues(w, release.Issues)
+}
+
+func releaseIssues(w io.Writer, issues []api.IssueSummary) {
+	for _, issue := range issues {
+		prefix := "- "
+		if issue.Parent != nil {
+			prefix = "  - "
+		}
+		fmt.Fprintf(w, "%s%s %s\n", prefix, issue.Key, strings.TrimSpace(issue.Title))
+	}
+}
+
 // Issue prints the complete issue: the head, the edges, then the epic's
 // description and the issue's own as Markdown, then the conversation.
 func Issue(w io.Writer, issue api.Issue) {
@@ -42,6 +86,9 @@ func Issue(w io.Writer, issue api.Issue) {
 	}
 	if issue.Parent != nil {
 		fmt.Fprintf(w, "  parent: %s", issue.Parent.Key)
+	}
+	if issue.Release != nil {
+		fmt.Fprintf(w, "  release: %s", *issue.Release)
 	}
 	fmt.Fprintln(w)
 	if len(issue.Labels) > 0 {

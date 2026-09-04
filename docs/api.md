@@ -175,10 +175,12 @@ person. Extension members carry what the code needs — the holder on
 | 409 | `claim-held` | the issue is held by somebody else and the act needs the claim, or `claim` was called without `force` |
 | 409 | `claim-lost` | the caller's claim has expired and somebody else holds the issue now |
 | 409 | `idempotency-mismatch` | the `Idempotency-Key` was used for a different request |
+| 409 | `release-exists` | the project already has a release with that case-insensitive name |
 | 412 | `stale` | `If-Match` does not match the object's `updated_at`; the body carries the current object under `current` |
 | 422 | `transition` | the status does not allow the act — closing a closed issue, claiming one in `review` |
 | 422 | `cycle` | the blocker would close a cycle; `path` lists the keys |
 | 422 | `has-issues` | the epic cannot be deleted while issues reference it; `count` says how many |
+| 422 | `in-published-release` | the issue is part of an immutable published release and cannot be deleted |
 | 422 | `unknown-label` | `repo` or a label filter names a label the project does not have |
 | 422 | `wait-too-long` | `wait` exceeds the server's one-hour ceiling; `maximum` is 3600 |
 | 500 | `internal` | a bug; the response carries nothing else |
@@ -199,7 +201,7 @@ can branch without parsing:
 | 2 | usage | bad arguments, `PLANAFFE_URL` or `PLANAFFE_TOKEN` unset, a `.planaffe` file the CLI cannot read |
 | 3 | not found | 404 `not-found`, 404 `deleted` |
 | 4 | refused | 400 `validation`, 422 of every type |
-| 5 | conflict | 409 `claim-held`, 409 `claim-lost`, 409 `idempotency-mismatch` |
+| 5 | conflict | 409 `claim-held`, 409 `claim-lost`, 409 `idempotency-mismatch`, 409 `release-exists` |
 | 6 | stale | 412 `stale` |
 | 7 | denied | 401, 403 |
 | 8 | empty | `next` found nothing; in cut two also a `--wait` that reached its deadline |

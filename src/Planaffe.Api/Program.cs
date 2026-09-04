@@ -103,6 +103,12 @@ builder.Services.AddScoped<ReadEpic>();
 builder.Services.AddScoped<ChangeEpic>();
 builder.Services.AddScoped<MoveEpic>();
 
+builder.Services.AddScoped<ReleaseAssembler>();
+builder.Services.AddScoped<ListReleases>();
+builder.Services.AddScoped<ReadRelease>();
+builder.Services.AddScoped<ChangeRelease>();
+builder.Services.AddScoped<PublishRelease>();
+
 // Deleting is a soft delete with a floor (ADR 0013); the purge runs at the end of every write transaction.
 builder.Services.AddScoped<DeleteIssue>();
 builder.Services.AddScoped<RestoreIssue>();
@@ -158,6 +164,7 @@ app.MapLabels();
 app.MapIssues();
 app.MapConversation();
 app.MapEpics();
+app.MapReleases();
 
 // The web application: built by its own toolchain into wwwroot at image build
 // time (deploy/Dockerfile) or by a local `npm run build`; in development the

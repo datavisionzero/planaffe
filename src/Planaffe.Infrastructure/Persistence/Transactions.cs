@@ -3,6 +3,7 @@ using Planaffe.Application.Ports;
 using Planaffe.Domain.Epics;
 using Planaffe.Domain.Issues;
 using Planaffe.Domain.Projects;
+using Planaffe.Domain.Releases;
 
 namespace Planaffe.Infrastructure.Persistence;
 
@@ -51,6 +52,7 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
                 Epic epic => epic.ProjectId,
                 Label label => label.ProjectId,
                 Project project => project.Id,
+                Release release => release.ProjectId,
                 _ => (Guid?)null,
             })
             .OfType<Guid>()

@@ -12,6 +12,7 @@ namespace Planaffe.Application.Acts;
 public sealed class DeleteIssue(
     ICallerIdentity callerIdentity,
     IIssues issues,
+    IReleases releases,
     IHistory history,
     ITransactions transactions,
     InstanceSettings settings,
@@ -31,6 +32,11 @@ public sealed class DeleteIssue(
         {
             var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)
                 ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
+
+            if (await releases.InPublishedAsync(row.Id, cancellationToken))
+            {
+                throw new Refusal(RefusalCode.InPublishedRelease, $"{row.Key} is in a published release and cannot be deleted.");
+            }
 
             var now = clock.GetUtcNow();
             var holder = issue.Claim?.HolderId;

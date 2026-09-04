@@ -32,11 +32,12 @@ public static class Problems
         RefusalCode.Forbidden or RefusalCode.ReadyRequiresUser or RefusalCode.ClaimProtected =>
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.Deleted => StatusCodes.Status404NotFound,
-        RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch =>
+        RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.ReleaseExists =>
             StatusCodes.Status409Conflict,
         RefusalCode.Stale => StatusCodes.Status412PreconditionFailed,
         RefusalCode.Transition or RefusalCode.Cycle or RefusalCode.HasIssues or RefusalCode.OneLevel
-            or RefusalCode.OtherProject or RefusalCode.EpicInherited or RefusalCode.HasSubIssues or RefusalCode.UnknownLabel =>
+            or RefusalCode.OtherProject or RefusalCode.EpicInherited or RefusalCode.HasSubIssues or RefusalCode.UnknownLabel
+            or RefusalCode.InPublishedRelease =>
             StatusCodes.Status422UnprocessableEntity,
         RefusalCode.WaitTooLong => StatusCodes.Status422UnprocessableEntity,
         RefusalCode.Internal => StatusCodes.Status500InternalServerError,
@@ -65,6 +66,8 @@ public static class Problems
         RefusalCode.OtherProject => "The parent belongs to another project",
         RefusalCode.EpicInherited => "A sub-issue inherits its epic",
         RefusalCode.HasSubIssues => "The issue still has sub-issues",
+        RefusalCode.ReleaseExists => "The project already has a release with that name",
+        RefusalCode.InPublishedRelease => "The issue is in a published release",
         RefusalCode.UnknownLabel => "The project has no such label",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),

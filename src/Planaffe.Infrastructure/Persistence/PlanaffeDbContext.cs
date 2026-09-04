@@ -5,6 +5,7 @@ using Planaffe.Domain.History;
 using Planaffe.Domain.Identities;
 using Planaffe.Domain.Issues;
 using Planaffe.Domain.Projects;
+using Planaffe.Domain.Releases;
 
 namespace Planaffe.Infrastructure.Persistence;
 
@@ -66,6 +67,10 @@ public sealed class PlanaffeDbContext(DbContextOptions<PlanaffeDbContext> option
     public DbSet<Comment> Comments => Set<Comment>();
 
     public DbSet<Question> Questions => Set<Question>();
+
+    public DbSet<Release> Releases => Set<Release>();
+
+    public DbSet<ReleaseIssue> ReleaseIssues => Set<ReleaseIssue>();
 
     public DbSet<HistoryEntry> History => Set<HistoryEntry>();
 

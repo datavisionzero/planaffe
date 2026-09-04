@@ -52,7 +52,7 @@ The table of `docs/api.md`, derived from the status and the problem document:
 | 2 | usage: bad arguments, `PLANAFFE_URL` or `PLANAFFE_TOKEN` unset, a `.planaffe` file `pa` cannot read |
 | 3 | not found, deleted included |
 | 4 | refused: validation, and every 422 |
-| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch` |
+| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `release-exists` |
 | 6 | stale |
 | 7 | denied: 401, 403 |
 | 8 | empty: `next` found nothing, or another waiting command reached its deadline |
@@ -128,6 +128,11 @@ pa epic list [--status open|closed|all] [--label L] · pa epic view PLAN-E2
 pa epic edit PLAN-E2 --description-file - --if-match "<updated_at>"
 pa epic close PLAN-E2 [--cancel-open | --park-open]   # lists what is still open; cancels or parks it on a flag, never interactively
 pa epic reopen PLAN-E2 · pa epic delete PLAN-E2 · pa epic restore PLAN-E2
+
+pa release list
+pa release view unreleased | pa release view v1.2.0
+pa release publish v1.2.0 [--description-file notes.md]
+pa release notes v1.2.0                 # Markdown, with sub-issues indented under their parent
 ```
 
 Identities (ADR 0015) — a secret is printed once, to stdout, and nowhere else:

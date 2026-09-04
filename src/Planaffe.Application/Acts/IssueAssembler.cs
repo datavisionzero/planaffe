@@ -13,7 +13,8 @@ public sealed class IssueAssembler(
     IIdentities identities,
     IEpics epics,
     IProjects projects,
-    ILabels labels)
+    ILabels labels,
+    IReleases releases)
 {
     public async Task<IReadOnlyList<IssueSummaryShape>> SummariesAsync(
         IReadOnlyList<IssueRow> rows, CancellationToken cancellationToken)
@@ -30,6 +31,7 @@ public sealed class IssueAssembler(
         var children = await issues.OpenSubIssueCountsAsync(ids, cancellationToken);
         var parents = (await issues.FindLiveManyAsync(rows.Select(r => r.ParentId).OfType<Guid>(), cancellationToken)).ToDictionary(r => r.Id);
         var epicKeys = await EpicKeysAsync(rows.Select(r => r.EpicId), cancellationToken);
+        var releaseNames = await releases.CurrentNamesAsync(ids, cancellationToken);
         var people = await identities.FindManyAsync(
             rows.SelectMany(r => new[] { r.AssigneeId, r.ClaimedBy, r.DeletedBy }).OfType<Guid>().Distinct(),
             cancellationToken);
@@ -49,6 +51,7 @@ public sealed class IssueAssembler(
                     [.. labelRows.Where(l => l.IssueId == row.Id).Select(l => l.Label.Name).Order(StringComparer.Ordinal)],
                     row.EpicId is { } epicId ? epicKeys.GetValueOrDefault(epicId) : null,
                     row.ParentId is { } parentId && parents.TryGetValue(parentId, out var parent) ? parent.Key : null,
+                    releaseNames.GetValueOrDefault(row.Id),
                     Ref(people, row.AssigneeId),
                     Claim(people, row),
                     [.. blockedBy.Select(b => new BlockerRefShape(b.Key, !b.Closed))],
@@ -78,6 +81,7 @@ public sealed class IssueAssembler(
         var project = await projects.FindByKeyAsync(row.ProjectKey, cancellationToken)
             ?? throw new InvalidOperationException($"Issue {row.Key} has no project row.");
         var projectLabels = await labels.ListAsync(project.Id, cancellationToken);
+        var releaseNames = await releases.CurrentNamesAsync([row.Id], cancellationToken);
 
         var people = await identities.FindManyAsync(
             new[] { row.AuthorId, row.AssigneeId, row.ClaimedBy }
@@ -99,6 +103,7 @@ public sealed class IssueAssembler(
             [.. labelRows.Select(l => LabelShape.Of(l.Label)).OrderBy(l => l.Name, StringComparer.Ordinal)],
             epic is null ? null : new EpicRefShape(EpicKey.Of(row.ProjectKey, epic.Number), epic.Title, epic.Description, epic.Status),
             parent is null ? null : Ref(parent),
+            releaseNames.GetValueOrDefault(row.Id),
             [.. subIssues.Select(Ref)],
             Ref(people, row.AssigneeId),
             Claim(people, row),

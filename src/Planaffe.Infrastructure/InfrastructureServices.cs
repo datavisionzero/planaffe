@@ -44,6 +44,7 @@ public static class InfrastructureServices
         services.AddScoped<ILabels, Labels>();
         services.AddScoped<IEpics, Epics>();
         services.AddScoped<IIssues, Issues>();
+        services.AddScoped<IReleases, Releases>();
         services.AddScoped<IHistory, History>();
         services.AddScoped<ITransactions, Transactions>();
         services.AddScoped<IIdempotency, Idempotency>();

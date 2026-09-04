@@ -76,6 +76,12 @@ public enum RefusalCode
     /// <summary>The issue cannot be deleted while sub-issues, including deleted ones, reference it.</summary>
     HasSubIssues,
 
+    /// <summary>The project already has a release with that name.</summary>
+    ReleaseExists,
+
+    /// <summary>An issue in a published release is part of an immutable record.</summary>
+    InPublishedRelease,
+
     /// <summary><c>repo</c> or a label filter names a label the project does not have.</summary>
     UnknownLabel,
 

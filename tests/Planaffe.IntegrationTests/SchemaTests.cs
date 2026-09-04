@@ -90,7 +90,7 @@ public sealed class SchemaTests(PostgresFixture postgres)
             [
                 "__EFMigrationsHistory",
                 "blocker", "comment", "epic", "epic_label", "history", "idempotency", "identity",
-                "issue", "issue_label", "label", "project", "question", "token",
+                "issue", "issue_label", "label", "project", "question", "release", "release_issue", "token",
             ],
             tables);
     }
@@ -117,8 +117,9 @@ public sealed class SchemaTests(PostgresFixture postgres)
                 "identity_name", "issue_assignee", "issue_claim", "issue_epic", "issue_next",
                 "issue_number", "issue_parent", "issue_updated", "label_name",
                 "pk_blocker", "pk_comment", "pk_epic", "pk_epic_label", "pk_history", "pk_idempotency",
-                "pk_identity", "pk_issue", "pk_issue_label", "pk_label", "pk_project", "pk_question", "pk_token",
-                "project_key", "question_issue", "question_open", "token_agent", "token_secret_hash",
+                "pk_identity", "pk_issue", "pk_issue_label", "pk_label", "pk_project", "pk_question", "pk_release",
+                "pk_release_issue", "pk_token", "project_key", "question_issue", "question_open", "release_issue_issue",
+                "release_name", "release_open", "token_agent", "token_secret_hash",
             ],
             indexes);
 

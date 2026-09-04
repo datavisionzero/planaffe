@@ -50,6 +50,7 @@ public sealed class MoveIssue(
     IProjects projects,
     IIdentities identities,
     IIssues issues,
+    IReleases releases,
     IHistory history,
     ITransactions transactions,
     IssueAssembler assembler,
@@ -69,6 +70,11 @@ public sealed class MoveIssue(
             var hadResult = issue.Result;
             var holder = issue.Claim?.HolderId;
             var landed = issue.Close(target, request.Result, caller.Kind, project.ReviewRequired, now);
+
+            if (landed is IssueStatus.Done)
+            {
+                await releases.AddDoneAsync(issue, cancellationToken);
+            }
 
             History(issue, row.Status, landed, holder, hadResult, caller, now);
         }, cancellationToken);
@@ -90,9 +96,10 @@ public sealed class MoveIssue(
     /// <c>review</c> — pointed out by the CLI when missing, never refused.
     /// </remarks>
     public Task<IssueShape> ReopenAsync(string key, ReopenRequest request, CancellationToken cancellationToken) =>
-        OnAsync(key, (issue, row, caller, now) =>
+        OnAsync(key, async (issue, row, caller, now) =>
         {
             issue.Reopen(now);
+            await releases.RemoveFromOpenAsync(issue.Id, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(request?.Comment))
             {
@@ -100,7 +107,6 @@ public sealed class MoveIssue(
             }
 
             history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, ClaimHistory.SnakeCase(row.Status), ClaimHistory.SnakeCase(IssueStatus.Todo)));
-            return Task.CompletedTask;
         }, cancellationToken, gate: false);
 
     private void History(Issue issue, IssueStatus from, IssueStatus to, Guid? holder, string? hadResult, Caller caller, DateTimeOffset now)
