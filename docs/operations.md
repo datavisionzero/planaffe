@@ -91,6 +91,22 @@ installation deserves, is the whole of operations:
 docker compose -f deploy/docker-compose.yml exec db pg_dump -U planaffe planaffe > planaffe.sql
 ```
 
+That dump is the backup and the exact way back into an instance. For a readable,
+portable copy of one project, use the CLI instead:
+
+```sh
+pa export --project PLAN --json > planaffe-PLAN.json
+```
+
+The document contains the project, labels, complete epics and releases, and
+every non-deleted issue with its comments, questions and history. The CLI reads
+the existing paginated API collections; there is no separate export endpoint.
+There is deliberately no importer. To move work into another system or back
+into planaffe, give the document to an agent and have it create the labels,
+epics and issues through that system's interface or through `pa issue create
+--file`. This preserves the explicit decisions involved in mapping identities,
+statuses and history instead of pretending those concepts are interchangeable.
+
 ## Development
 
 Postgres alone, for `dotnet run`:

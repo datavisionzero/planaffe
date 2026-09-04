@@ -89,7 +89,7 @@ func newRoot(env Env) *cobra.Command {
 		return &config.UsageError{Message: err.Error()}
 	})
 
-	root.AddCommand(newNext(g), newNeedsYou(g), newIssue(g), newQuestion(g), newProject(g), newLabel(g), newEpic(g), newRelease(g))
+	root.AddCommand(newNext(g), newNeedsYou(g), newExport(g), newIssue(g), newQuestion(g), newProject(g), newLabel(g), newEpic(g), newRelease(g))
 	root.AddCommand(identityCommands(g)...)
 	return root
 }
