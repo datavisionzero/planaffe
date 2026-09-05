@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Picker, type Choice } from "./picker";
 
 /** As much of a label as choosing one needs. */
@@ -34,7 +34,7 @@ export function LabelPicker({
    * there.
    */
   onCreate?: (name: string) => Promise<PickableLabel>;
-  error?: string;
+  error?: ReactNode;
   className?: string;
 }) {
   const groupOf = useMemo(() => {

@@ -7,9 +7,9 @@ import { LabelsView } from "./LabelsView";
 
 afterEach(() => vi.unstubAllGlobals());
 
-it("creates a label from the form", async () => {
+it("creates a label, its group chosen from the ones the project has", async () => {
   const instance = installInstance({
-    "GET /projects/PLAN/labels": [],
+    "GET /projects/PLAN/labels": [{ name: "api", group: "area", description: "The HTTP surface" }],
     "POST /projects/PLAN/labels": {
       status: 201,
       body: { name: "web", group: "area", description: "Browser application" },
@@ -19,22 +19,46 @@ it("creates a label from the form", async () => {
   const user = userEvent.setup();
 
   await screen.findByRole("button", { name: "Create" });
-  await user.type(screen.getByLabelText("Label name"), "web");
-  await user.type(screen.getByLabelText("Label group"), "area");
-  await user.type(screen.getByLabelText("Label description"), "Browser application");
+  await user.type(screen.getByLabelText("Name"), "web");
+  await user.click(screen.getByRole("combobox", { name: "Group" }));
+  await user.click(screen.getByRole("option", { name: /^area/ }));
+  await user.type(screen.getByLabelText("Description"), "Browser application");
   await user.click(screen.getByRole("button", { name: "Create" }));
 
   expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "POST"))).toBe(true);
   const request = instance.calls.find((call) => call.method === "POST")!;
   expect(await request.json()).toEqual({ name: "web", group: "area", description: "Browser application" });
-  expect(screen.getByLabelText("Label name")).toHaveValue("");
+  expect(screen.getByLabelText("Name")).toHaveValue("");
 });
 
-it("edits a label through an in-page dialog", async () => {
+// A typo used to become a new group in silence, and the group is what carries
+// the exclusion two labels were supposed to have.
+it("names a new group only as a step of its own", async () => {
+  const instance = installInstance({
+    "GET /projects/PLAN/labels": [{ name: "api", group: "area", description: null }],
+    "POST /projects/PLAN/labels": { status: 201, body: { name: "web", group: "surface", description: null } },
+  });
+  renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.type(await screen.findByLabelText("Name"), "web");
+  await user.type(screen.getByRole("combobox", { name: "Group" }), "surface");
+  await user.click(screen.getByRole("option", { name: "New group surface" }));
+  await user.click(screen.getByRole("button", { name: "Create" }));
+
+  expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "POST"))).toBe(true);
+  expect(await instance.calls.find((call) => call.method === "POST")!.json()).toEqual({
+    name: "web", group: "surface", description: null,
+  });
+});
+
+// The name is not the key — a label has its own id, and `PATCH` takes all
+// three fields — so a name typed once was never a reason to keep it forever.
+it("edits the name, the group and the description in one dialog", async () => {
   const label = { name: "web", group: "area", description: "Browser application" };
   const instance = installInstance({
     "GET /projects/PLAN/labels": [label],
-    "PATCH /projects/PLAN/labels/web": { body: { ...label, description: "Web application" } },
+    "PATCH /projects/PLAN/labels/web": { body: { name: "browser", group: null, description: "Web application" } },
   });
   renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
   const user = userEvent.setup();
@@ -42,13 +66,72 @@ it("edits a label through an in-page dialog", async () => {
   const row = (await screen.findByText("web")).closest("li")!;
   await user.click(within(row).getByRole("button", { name: "Edit" }));
   const dialog = screen.getByRole("dialog", { name: "Edit web" });
+  await user.clear(within(dialog).getByLabelText("Name"));
+  await user.type(within(dialog).getByLabelText("Name"), "browser");
+  await user.click(within(dialog).getByRole("combobox", { name: "Group" }));
+  await user.click(within(dialog).getByRole("option", { name: /No group/ }));
   await user.clear(within(dialog).getByLabelText("Description"));
   await user.type(within(dialog).getByLabelText("Description"), "Web application");
   await user.click(within(dialog).getByRole("button", { name: "Save label" }));
 
   expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "PATCH"))).toBe(true);
   const request = instance.calls.find((call) => call.method === "PATCH")!;
-  expect(await request.json()).toEqual({ name: null, group: "area", description: "Web application" });
+  expect(await request.json()).toEqual({ name: "browser", group: null, description: "Web application" });
+});
+
+// The server names the issues that stand in the way; reading them is not the
+// same as being able to go and look.
+it("shows the group refusal at the group, with the issues in the way as links", async () => {
+  installInstance({
+    "GET /projects/PLAN/labels": [
+      { name: "web", group: "area", description: null },
+      { name: "api", group: "surface", description: null },
+    ],
+    "PATCH /projects/PLAN/labels/web": {
+      status: 400,
+      body: {
+        type: "/problems/validation", title: "refused", status: 400,
+        detail: "1 issue(s) would carry two labels of the group surface: PLAN-4.",
+        errors: { group: ["1 issue(s) would carry two labels of this group."] },
+        issues: ["PLAN-4"],
+      },
+    },
+  });
+  renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
+  const user = userEvent.setup();
+
+  const row = (await screen.findByText("web")).closest("li")!;
+  await user.click(within(row).getByRole("button", { name: "Edit" }));
+  const dialog = screen.getByRole("dialog", { name: "Edit web" });
+  await user.click(within(dialog).getByRole("combobox", { name: "Group" }));
+  await user.click(within(dialog).getByRole("option", { name: /^surface/ }));
+  await user.click(within(dialog).getByRole("button", { name: "Save label" }));
+
+  const said = await within(dialog).findByRole("alert");
+  expect(said).toHaveTextContent("1 issue(s) would carry two labels of this group.");
+  expect(within(said).getByRole("link", { name: "PLAN-4" })).toHaveAttribute("href", "/PLAN/issues/4");
+  expect(within(dialog).getByRole("combobox", { name: "Group" })).toHaveAttribute("aria-invalid", "true");
+});
+
+// The group is a string on each label, so dissolving one is a row of writes
+// rather than one — and it says how far it got.
+it("dissolves a group by writing every label in it, and says what did not go through", async () => {
+  const instance = installInstance({
+    "GET /projects/PLAN/labels": [
+      { name: "web", group: "area", description: null },
+      { name: "api", group: "area", description: null },
+    ],
+    "PATCH /projects/PLAN/labels/web": { body: { name: "web", group: null, description: null } },
+    "PATCH /projects/PLAN/labels/api": { status: 400, body: { detail: "The label api is in the way." } },
+  });
+  renderAt("/PLAN/labels", <Routes><Route path="/:project/labels" element={<LabelsView />} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Dissolve group" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Dissolve area?" })).getByRole("button", { name: "Dissolve group" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("1 of 2 labels moved. api: The label api is in the way.");
+  expect(instance.calls.filter((call) => call.method === "PATCH")).toHaveLength(2);
 });
 
 it("requires in-page confirmation before deleting a label", async () => {

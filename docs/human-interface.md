@@ -27,6 +27,7 @@ available in the browser.
 | `/:project/epics/:number` | Epic | Markdown description, progress and issue list | one column |
 | `/:project/releases` | Releases | `unreleased`, then published releases newest first | stacked summaries |
 | `/:project/releases/:name` | Release | notes, exact issue membership and publish/copy actions | one column |
+| `/:project/labels` | Labels | the project's set, grouped where its labels exclude one another, with the create line above it | the row stacks: the name and what it means above the two acts |
 | `/settings` | Personal settings | profile, email, password, sessions, user tokens and agents | section navigation becomes a menu |
 | `/:project/settings` | Project settings | name, switches, labels, members and project lifecycle | one column |
 | `/admin` | Instance administration | users, roles, project access, deleted projects and SMTP status | tabular data becomes labelled rows |
@@ -53,8 +54,8 @@ command palette, and an entry in the account menu — because a list of shortcut
 reachable only by a shortcut does not help the reader who has not found one yet.
 It draws `⌘` on a Mac and `Ctrl` elsewhere, and it is generated from the one
 list the handlers themselves read, so a key that changes changes there.
-The Labels navigation entry required by ADR 0006 opens the labels section of
-project settings; labels do not need a second management screen.
+The Labels navigation entry required by ADR 0006 opens the project's labels
+screen; there is no second place labels are managed from.
 
 ## Issue list and detail
 
@@ -123,7 +124,7 @@ breakpoint and carries the rest.
 | Issue | list, search, filter, open, inspect history | create, edit fields and relationships, set or clear `ready`, comment, answer, close, hand in for review, reopen, claim, release, delete, restore |
 | Epic | list, open, inspect progress and filtered issues | create, edit Markdown and labels, close, reopen, delete, restore |
 | Release | list, open, preview exact membership, copy as Markdown | edit notes, publish |
-| Label | list and inspect use | create, edit, delete, restore |
+| Label | list and inspect use | create, edit name, group and description, rename or dissolve a group, delete, restore |
 | Project | switch and inspect settings/members | create; edit name and switches; delete or restore when administrator |
 | Identity | inspect own profile, sessions, tokens and agents | change own name, verified email and password; revoke sessions/tokens; create or revoke own tokens and agents |
 | Administration | inspect all users, project assignments, deleted projects and SMTP status | invite/resend, deactivate/reactivate, change administrator role, assign projects, send test email |

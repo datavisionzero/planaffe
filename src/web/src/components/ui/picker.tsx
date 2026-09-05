@@ -70,7 +70,7 @@ export function Picker({
   createLabel?: (name: string) => string;
   placeholder?: string;
   /** A refusal that belongs to this field rather than over the form. */
-  error?: string;
+  error?: ReactNode;
   /** An answer from the instance is on its way. */
   busy?: boolean;
   /** What an empty list says. */
@@ -201,7 +201,7 @@ export function Picker({
         <div
           className={cn(
             "flex min-h-8 w-full flex-wrap items-center gap-1 rounded-lg border border-input bg-transparent px-1.5 py-1 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
-            said !== undefined && "border-destructive",
+            said != null && "border-destructive",
           )}
         >
           {chosen.map((choice) => (
@@ -227,7 +227,7 @@ export function Picker({
             aria-expanded={open}
             aria-controls={listId}
             aria-autocomplete="list"
-            aria-invalid={said !== undefined || undefined}
+            aria-invalid={said != null || undefined}
             aria-activedescendant={open && options.length > 0 ? `${id}-option-${cursor}` : undefined}
             autoComplete="off"
             className="h-6 min-w-24 flex-1 bg-transparent px-1 text-base font-normal outline-none placeholder:text-muted-foreground md:text-sm"
@@ -273,7 +273,7 @@ export function Picker({
           </ul>
         )}
       </div>
-      {said !== undefined && (
+      {said != null && (
         <p role="alert" className="text-xs font-normal text-destructive">
           {said}
         </p>
