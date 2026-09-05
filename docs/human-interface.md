@@ -28,7 +28,7 @@ read, so nothing has to be known about Markdown to write one
 | `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs | one column; metadata as chips under the title |
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
 | `/:project/epics/new` | Create epic | title, Markdown description and the label choice | one column; the same form the epic screen edits in place |
-| `/:project/epics/:number` | Epic | Markdown description, progress and issue list | one column |
+| `/:project/epics/:number` | Epic | Markdown description, progress and issue list; editing it is guarded and a conflict is shown, not lost | one column |
 | `/:project/releases` | Releases | `unreleased`, then published releases newest first | stacked summaries |
 | `/:project/releases/:name` | Release | notes, exact issue membership and publish/copy actions; on the open release each row can be taken out, on the newest publication rename and take back | one column |
 | `/:project/labels` | Labels | the project's set, grouped where its labels exclude one another, with the create line above it | the row stacks: the name and what it means above the two acts |
@@ -87,6 +87,13 @@ still work and lead to the first area of each. On a narrow screen the list
 folds above the area rather than beside it. What the instance answered stands
 at the act that asked rather than at the foot of the page, and a row's acts
 live in the row's own menu.
+
+The epic's description is a living document a human and an agent both edit, so
+the form sends `If-Match` with the version it opened with. A refusal is not a
+dead end: the typed text stays in the field, the version the instance handed
+back is adopted for the next attempt, and the other version's description is
+shown so it can be merged by hand. Saving again is then a decision to overwrite
+it rather than a request that can only fail.
 
 ## Issue list and detail
 

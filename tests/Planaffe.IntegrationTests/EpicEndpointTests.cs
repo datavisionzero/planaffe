@@ -91,13 +91,20 @@ public sealed class EpicEndpointTests(PostgresFixture postgres)
         var problem = await ProjectEndpointTests.Problem(await admin.SendAsync(staleRequest, Ct), HttpStatusCode.PreconditionFailed, "stale");
         Assert.Equal("v2", problem.GetProperty("current").GetProperty("description").GetString());
 
+        // Without the header the write goes through, as everywhere: the guard is
+        // offered, never imposed (`docs/api.md`, Concurrency on text fields).
+        using var unguarded = await admin.PatchAsJsonAsync("/epics/PLAN-E1", new { description = "v3" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, unguarded.StatusCode);
+        Assert.Equal("v3", (await unguarded.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("description").GetString());
+
         await ProjectEndpointTests.Problem(await admin.PatchAsJsonAsync("/epics/PLAN-E1", new { labels = new[] { "bug", "feature" } }, Ct), HttpStatusCode.BadRequest, "validation");
         await ProjectEndpointTests.Problem(await admin.GetAsync("/epics/PLAN-E9", Ct), HttpStatusCode.NotFound, "not-found");
 
         await using var reader = Migrated.ContextFor(instance.ConnectionString);
         var fields = await reader.History.Where(h => h.EpicId != null).OrderBy(h => h.Id).Select(h => h.Field).ToListAsync(Ct);
-        Assert.Equal(["created", "title", "description", "label"], fields);
-        Assert.Null((await reader.History.SingleAsync(h => h.Field == "description", Ct)).NewValue);
+        Assert.Equal(["created", "title", "description", "label", "description"], fields);
+        // The history records that the document changed, not how.
+        Assert.All(await reader.History.Where(h => h.Field == "description").ToListAsync(Ct), entry => Assert.Null(entry.NewValue));
     }
 
     [Fact]

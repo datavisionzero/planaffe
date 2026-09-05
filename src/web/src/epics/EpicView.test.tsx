@@ -88,6 +88,48 @@ it("edits the living document under If-Match", async () => {
   expect(await screen.findByText("Rewritten.")).toBeInTheDocument();
 });
 
+/**
+ * `docs/api.md` has the `stale` refusal carry the current object so that a
+ * conflict is a way forward and not a dead end. Before this the form kept the
+ * version it had opened with, so every further save was refused too and the
+ * only way out was to throw away what had been typed.
+ */
+it("keeps the typed text on a stale refusal and lets the next save through", async () => {
+  const current = { ...epic, description: "Somebody else wrote this.", updated_at: "2026-08-03T09:00:00Z" };
+  let patched = 0;
+  const instance = renderEpic({
+    "PATCH /epics/PLAN-E4": () =>
+      ++patched === 1
+        ? { status: 412, body: { type: "/problems/stale", detail: "PLAN-E4 changed at …", current } }
+        : { body: { ...current, description: "Mine." } },
+  });
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Edit" }));
+  await user.clear(screen.getByLabelText("Description"));
+  await user.type(screen.getByLabelText("Description"), "Mine.");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  const conflict = await screen.findByRole("alert");
+  expect(conflict).toHaveTextContent("PLAN-E4 was changed while you were editing it.");
+  expect(conflict).toHaveTextContent("Somebody else wrote this.");
+  // What was typed is still in the field, and the refusal's own sentence does
+  // not stand beside a notice that already says it.
+  expect(screen.getByLabelText("Description")).toHaveValue("Mine.");
+  expect(conflict).not.toHaveTextContent("PLAN-E4 changed at");
+
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  // The second write is guarded with the version the refusal handed back.
+  const second = await vi.waitFor(() => {
+    const calls = instance.calls.filter((call) => call.method === "PATCH");
+    if (calls.length < 2) throw new Error("no second PATCH yet");
+    return calls[1]!;
+  });
+  expect(second.headers.get("If-Match")).toBe("2026-08-03T09:00:00Z");
+  expect(await screen.findByText("Mine.")).toBeInTheDocument();
+});
+
 it("says why an epic its issues still reference cannot be deleted", async () => {
   renderEpic({ "DELETE /epics/PLAN-E4": { status: 422, body: { detail: "2 issues still reference PLAN-E4." } } });
   const user = userEvent.setup();

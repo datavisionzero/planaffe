@@ -98,6 +98,31 @@ func TestProjectLabelAndEpicVerbsHitTheirEndpoints(t *testing.T) {
 		}
 	}
 
+	// The guard on the living document (`docs/api.md`, Concurrency on text
+	// fields): the header is sent quoted, and a `stale` refusal is exit 6, so
+	// that a script can branch on it rather than parse a sentence.
+	var guarded *http.Request
+	for _, r := range f.requests {
+		if r.Method == http.MethodPatch && r.URL.Path == "/epics/PLAN-E2" {
+			guarded = r
+		}
+	}
+	if guarded == nil || guarded.Header.Get("If-Match") != `"2026-09-02T14:00:00.000000Z"` {
+		t.Errorf("epic edit --if-match sends no quoted header: %v", guarded)
+	}
+
+	stale := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
+		if r.Method == http.MethodPatch {
+			return 412, `{"type":"/problems/stale","title":"stale","status":412,"detail":"PLAN-E2 changed.","current":` + epic + `}`
+		}
+		return 200, epic
+	}}
+	staleServer := httptest.NewServer(stale.handler())
+	defer staleServer.Close()
+	if code, _, errOut := run(t, staleServer, dir, "epic", "edit", "PLAN-E2", "--title", "x", "--if-match", "2026-09-02T14:00:00.000000Z"); code != exit.Stale {
+		t.Errorf("stale epic edit: code %d, want %d; stderr %q", code, exit.Stale, errOut)
+	}
+
 	// Deleting a project without the key typed again is a usage mistake, before any request.
 	before := len(f.requests)
 	code, _, errOut := run(t, server, dir, "project", "delete", "PLAN")

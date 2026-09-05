@@ -315,20 +315,37 @@ function EpicAction({ label, path, epic, onChanged }: { label: string; path: Act
 }
 
 function EditEpicForm({ epic, onSaved, onCancel }: { epic: Epic; onSaved: (epic: Epic) => void; onCancel: () => void }) {
+  // The version the next write is guarded with, and the epic a refusal handed
+  // back. Adopting both is what turns the refusal into a way forward: the typed
+  // text stays in the form, the other version is there to merge from, and
+  // saving again is a decision rather than a request that can only fail.
+  const [version, setVersion] = useState(epic.updated_at);
+  const [conflict, setConflict] = useState<Epic>();
+
   return (
     <EpicForm
       initial={epic}
       submit="Save changes"
       onCancel={onCancel}
+      notice={conflict === undefined ? undefined : <Conflict epic={conflict} />}
       // `If-Match` with the `updated_at` last read: the description is a living
       // document, and two people keeping it current must not overwrite silently.
-      write={(draft) =>
-        api.PATCH("/epics/{key}", {
+      write={async (draft) => {
+        setConflict(undefined);
+        const answer = await api.PATCH("/epics/{key}", {
           params: { path: { key: epic.key } },
-          headers: { "If-Match": epic.updated_at },
+          headers: { "If-Match": version },
           body: draft,
-        })
-      }
+        });
+
+        const current = stale(answer);
+        if (current !== undefined) {
+          setConflict(current);
+          setVersion(current.updated_at);
+        }
+
+        return answer;
+      }}
       onWritten={onSaved}
     />
   );
@@ -355,12 +372,49 @@ export function NewEpicView() {
 type Draft = { title: string; description: string; labels: string[] };
 type Written = { data?: Epic; error?: unknown; response: Response };
 
-function EpicForm({ initial, submit, write, onWritten, onCancel }: {
+/**
+ * The epic a `stale` refusal carries, or nothing. `docs/api.md` ("Concurrency
+ * on text fields") has the refusal hand the current object back for exactly
+ * this: without it the only way out of a conflict is to throw away what was
+ * typed.
+ */
+function stale(answer: Written): Epic | undefined {
+  if (answer.response.status !== 412) {
+    return undefined;
+  }
+
+  const current = (answer.error as { current?: Epic } | undefined)?.current;
+  return current?.updated_at === undefined ? undefined : current;
+}
+
+/**
+ * What a stale refusal means, in the words it means it. The typed text is
+ * still in the fields above; this says what the other version holds, so it can
+ * be merged by hand, and that the next save is now an overwrite of it.
+ */
+function Conflict({ epic }: { epic: Epic }) {
+  return (
+    <div role="alert" className="grid gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+      <p>
+        <span className="font-medium">{epic.key} was changed while you were editing it.</span>{" "}
+        Your text is kept. Saving now writes it over the version below.
+      </p>
+      <details className="text-xs">
+        <summary className="cursor-pointer text-muted-foreground">The description as it stands, saved {date(epic.updated_at)}</summary>
+        <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-muted p-2 font-mono whitespace-pre-wrap">{epic.description}</pre>
+      </details>
+    </div>
+  );
+}
+
+function EpicForm({ initial, submit, write, onWritten, onCancel, notice }: {
   initial?: Epic;
   submit: string;
   write: (draft: Draft) => Promise<Written>;
   onWritten: (epic: Epic) => void;
   onCancel: () => void;
+  /** What stands between the fields and the buttons — the conflict, where there is one. */
+  notice?: ReactNode;
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -406,7 +460,9 @@ function EpicForm({ initial, submit, write, onWritten, onCancel }: {
       </label>
       <MarkdownField label="Description" value={description} onChange={setDescription} />
       <LabelPicker label="Labels" labels={known.labels} value={labels} onChange={setLabels} onCreate={known.create} />
-      {why !== undefined && <p role="alert" className="text-sm text-destructive">{why}</p>}
+      {/* A conflict says everything the refusal's own sentence says, and says
+          what to do about it, so it stands in its place rather than beside it. */}
+      {notice ?? (why !== undefined && <p role="alert" className="text-sm text-destructive">{why}</p>)}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={leave}>Cancel</Button>
         <Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button>
