@@ -276,6 +276,31 @@ func EpicSummaries(w io.Writer, items []api.EpicSummary) {
 	}
 }
 
+// Page prints the head — where it lives, what it is called, when it last moved
+// — and then the Markdown exactly as it is stored, so that the output can be
+// piped straight back into `--body-file -`.
+func Page(w io.Writer, p api.Page) {
+	fmt.Fprintf(w, "%s/%s  %s\n", p.Project, p.Slug, p.Title)
+	fmt.Fprintf(w, "updated: %s by %s  author: %s\n", p.UpdatedAt.Format(time.RFC3339), p.UpdatedBy.Name, p.Author.Name)
+	if len(p.Labels) > 0 {
+		names := make([]string, 0, len(p.Labels))
+		for _, l := range p.Labels {
+			names = append(names, l.Name)
+		}
+		fmt.Fprintf(w, "labels: %s\n", strings.Join(names, ", "))
+	}
+	if p.Body != "" {
+		fmt.Fprintf(w, "\n%s\n", p.Body)
+	}
+}
+
+// PageSummaries prints the flat wiki: the address, when it last moved, the title.
+func PageSummaries(w io.Writer, items []api.PageSummary) {
+	for _, p := range items {
+		fmt.Fprintf(w, "%-24s %-10s %s\n", p.Slug, p.UpdatedAt.Format("2006-01-02"), p.Title)
+	}
+}
+
 // progress spells the counts the way VISION 7 does: `5 of 7 closed · 4 done · 1 canceled`.
 func progress(p api.Progress) string {
 	return fmt.Sprintf("%d of %d closed · %d done · %d canceled", p.Closed, p.Total, p.Done, p.Canceled)

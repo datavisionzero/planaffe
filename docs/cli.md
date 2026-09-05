@@ -134,7 +134,7 @@ pa question list [--answered | --all] [--issue PLAN-42] [-q "serializable"]
 pa question answer <id> "…" | --file -
 ```
 
-Projects, labels and epics:
+Projects, labels, epics, pages and releases:
 
 ```
 pa project create PLAN "planaffe" [--triage-required] [--review-required]
@@ -151,6 +151,13 @@ pa epic list [--status open|closed|all] [--label L] · pa epic view PLAN-E2
 pa epic edit PLAN-E2 --description-file - --if-match "<updated_at>"
 pa epic close PLAN-E2 [--cancel-open | --park-open]   # lists what is still open; cancels or parks it on a flag, never interactively
 pa epic reopen PLAN-E2 · pa epic delete PLAN-E2 · pa epic restore PLAN-E2
+
+pa page list [--label reference]           # the flat wiki: slug, when it last moved, title
+pa page view architecture                  # the head, then the Markdown exactly as it is stored
+pa page create architecture --title "Architecture" --body-file - --label reference
+pa page edit architecture --body-file - --if-match "<updated_at>"
+pa page rename architecture betriebshandbuch   # the old slug leads nowhere afterwards (ADR 0021)
+pa page delete architecture · pa page restore architecture
 
 pa release list
 pa release view unreleased | pa release view v1.2.0
@@ -180,6 +187,13 @@ pa agent create [--name NAME]              # users only; the agent's one token, 
 pa agent list · pa agent view <id> · pa agent rename <id> --name NAME · pa agent revoke <id>
 pa token create · pa token list · pa token revoke <id>
 ```
+
+A page is addressed by its slug, which is given and never derived from the
+title. Renaming is its own verb rather than a flag on `edit`, because moving an
+address is not the same kind of act as editing a text: nothing forwards, and
+every reference written to the old slug stops working. `pa page view` prints
+the head and then the body unchanged, so that the output pipes straight back
+into `--body-file -`.
 
 Descriptions, results, comments, questions and answers come from an argument, a
 file or stdin (`-`), never an editor. The whole agent cycle of VISION 6.1 is
