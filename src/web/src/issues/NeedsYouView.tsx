@@ -4,6 +4,7 @@ import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/shared/PageHeader";
+import { stale } from "@/shared/stale";
 import { useAttention } from "@/shell/useAttention";
 import { keyPath } from "@/shell/views";
 import { StatusDot } from "./status";
@@ -209,15 +210,21 @@ function Row({ item, onResolved }: { item: Item; onResolved: () => void }) {
 function SetReady({ issue, onDone }: { issue: IssueSummary; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<string>();
+  // What a refusal handed back, against the row it was refused for. Nothing is
+  // typed here, so there is nothing to merge — but pressing again has to be
+  // able to work, and it cannot while the row keeps sending the version the
+  // list was read at. A row that has since been read again invalidates it.
+  const [adopted, setAdopted] = useState<{ from: string; version: string }>();
+  const version = adopted?.from === issue.updated_at ? adopted.version : issue.updated_at;
 
   async function run() {
     setBusy(true);
     setWhy(undefined);
 
     try {
-      const { data, error, response } = await api.PATCH("/issues/{key}", {
+      const answer = await api.PATCH("/issues/{key}", {
         params: { path: { key: issue.key } },
-        headers: { "If-Match": issue.updated_at },
+        headers: { "If-Match": version },
         // Every field of the change is required and `null` leaves it alone;
         // only `ready` is written here.
         body: {
@@ -226,8 +233,15 @@ function SetReady({ issue, onDone }: { issue: IssueSummary; onDone: () => void }
         },
       });
 
-      if (data === undefined) {
-        setWhy(describe(error, response.status));
+      const current = stale<{ updated_at: string }>(answer);
+      if (current !== undefined) {
+        setAdopted({ from: issue.updated_at, version: current.updated_at });
+        setWhy("It changed since this list was read. Set it again.");
+        return;
+      }
+
+      if (answer.data === undefined) {
+        setWhy(describe(answer.error, answer.response.status));
         return;
       }
 

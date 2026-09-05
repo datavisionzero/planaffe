@@ -94,6 +94,61 @@ it("shows a status it cannot park and sends no status with the fields", async ()
   expect(sent).not.toHaveProperty("status");
 });
 
+/**
+ * `docs/api.md` ("Concurrency on text fields") has the `stale` refusal carry
+ * the current object so a conflict is a way forward and not a dead end. The
+ * mask kept the version it had opened with, so every further save was refused
+ * for the same reason and the only way out was to throw away what was typed.
+ */
+it("keeps the typed text on a stale refusal and lets the next save through", async () => {
+  const person = { id: "0199a000-0000-7000-8000-000000000001", kind: "user" as const, name: "maintainer" };
+  const issue: Issue = {
+    key: "PLAN-10", project: "PLAN", title: "Before", description: "Mine to rewrite.", result: null,
+    status: "todo", ready: false, priority: 1, labels: [], epic: null, parent: null, release: null,
+    sub_issues: [], assignee: null, claim: null, author: person, blocked_by: [], blocks: [],
+    open_questions: 0, open_blockers: 0, open_sub_issues: 0, comments: [], questions: [],
+    project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: false, labels: [] },
+    created_at: "2026-09-02T10:00:00Z", updated_at: "2026-09-02T10:00:00Z", closed_at: null,
+  };
+  // Somebody else rewrote the description and raised the priority meanwhile.
+  const current: Issue = { ...issue, description: "Somebody else wrote this.", priority: 0, updated_at: "2026-09-02T11:00:00Z" };
+  let patched = 0;
+  const instance = installInstance({
+    "PATCH /issues/PLAN-10": () =>
+      ++patched === 1
+        ? { status: 412, body: { type: "/problems/stale", detail: "PLAN-10 changed at …", current } }
+        : { body: { ...current, description: "My version." } },
+  });
+  const saved = vi.fn();
+  renderAt("/", <EditIssueForm issue={issue} onSaved={saved} onCancel={vi.fn()} />);
+  const user = userEvent.setup();
+
+  await user.clear(screen.getByLabelText("Description"));
+  await user.type(screen.getByLabelText("Description"), "My version.");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  const conflict = await screen.findByRole("alert");
+  expect(conflict).toHaveTextContent("PLAN-10 was changed while you were editing it.");
+  expect(conflict).toHaveTextContent("Somebody else wrote this.");
+  // The fields that are not typed into are named rather than shown, because
+  // saving overwrites them too and nobody can merge what they cannot see.
+  expect(conflict).toHaveTextContent("Changed there as well, and overwritten too: priority.");
+  // What was typed is still in the field, and the refusal's own sentence does
+  // not stand beside a notice that already says it.
+  expect(screen.getByLabelText("Description")).toHaveValue("My version.");
+  expect(conflict).not.toHaveTextContent("PLAN-10 changed at");
+
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  const second = await vi.waitFor(() => {
+    const calls = instance.calls.filter((call) => call.method === "PATCH");
+    if (calls.length < 2) throw new Error("no second PATCH yet");
+    return calls[1]!;
+  });
+  expect(second.headers.get("If-Match")).toBe("2026-09-02T11:00:00Z");
+  await vi.waitFor(() => expect(saved).toHaveBeenCalledWith(expect.objectContaining({ description: "My version." })));
+});
+
 const closedEpic = {
   key: "PLAN-E1", project: "PLAN", title: "The first cut", description: "", status: "closed",
   author: { id: "0199a000-0000-7000-8000-000000000001", name: "maintainer" },

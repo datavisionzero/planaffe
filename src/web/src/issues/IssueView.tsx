@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "@/shared/Markdown";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
+import { stale } from "@/shared/stale";
 import { keyPath, pathKey } from "@/shell/views";
 import { PriorityMark } from "./priority";
 import { StatusDot } from "./status";
@@ -136,7 +137,16 @@ function ActionBar({ issue, onEdit, onChanged, onDeleted }: { issue: Issue; onEd
 
   const close = (status: "done" | "canceled") => () => run(() => issueRequest("/issues/{key}/close", issue, { status, result: issue.result }));
   const hand = () => run(() => issueRequest("/issues/{key}/review", issue, { result: issue.result }));
-  const ready = () => run(async () => { const result = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: { ready: !issue.ready } as never }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return result.data; });
+  // Nothing is typed here, so a stale refusal has nothing to merge — but it
+  // still may not be a dead end. The screen takes the version the refusal
+  // carried, says what happened, and the same press writes against that one.
+  const ready = () => run(async () => {
+    const result = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: { ready: !issue.ready } as never });
+    const current = stale<Issue>(result);
+    if (current !== undefined) { onChanged(current); throw new Error(`${issue.key} changed while it was open. It is shown as it is now; set it again to write against that version.`); }
+    if (!result.data) throw new Error(describe(result.error, result.response.status));
+    return result.data;
+  });
   // "Moving a ticket by hand still works — a ticket that has not shipped yet
   // simply does not belong" (VISION 7). The act is the release's; the answer is
   // the release, so the issue is read again.

@@ -130,6 +130,37 @@ it("reads the list again when the frame's wake pulse says it changed", async () 
   expect(screen.getByText("Asked something")).toBeInTheDocument();
 });
 
+// The row types nothing, so a stale refusal has nothing to lose — but it still
+// may not be a dead end: without the version the refusal carried, every further
+// press sends the version the list was read at and is refused for the same
+// reason (PLAN-35).
+it("takes the version a stale triage refusal carried and lets the next press through", async () => {
+  const current = { ...anIssue("PLAN-3", "Never triaged"), updated_at: "2026-08-04T10:00:00Z" };
+  let patched = 0;
+  const instance = installInstance({
+    "GET /projects/PLAN/needs-you": fourReasons,
+    "PATCH /issues/PLAN-3": () =>
+      ++patched === 1
+        ? { status: 412, body: { type: "/problems/stale", detail: "PLAN-3 changed at …", current } }
+        : { body: { ...current, ready: true } },
+  });
+  renderNeedsYou();
+  const user = userEvent.setup();
+
+  const row = (await screen.findByText("Never triaged")).closest("li")!;
+  await user.click(within(row).getByRole("button", { name: "Set ready" }));
+
+  expect(await within(row).findByRole("alert")).toHaveTextContent("It changed since this list was read.");
+  await user.click(within(row).getByRole("button", { name: "Set ready" }));
+
+  const second = await vi.waitFor(() => {
+    const calls = instance.calls.filter((call) => call.method === "PATCH");
+    if (calls.length < 2) throw new Error("no second PATCH yet");
+    return calls[1]!;
+  });
+  expect(second.headers.get("If-Match")).toBe("2026-08-04T10:00:00Z");
+});
+
 it("says why a refused triage did not happen and leaves the row where it is", async () => {
   installInstance({
     "GET /projects/PLAN/needs-you": fourReasons,

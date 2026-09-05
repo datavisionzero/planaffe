@@ -133,6 +133,39 @@ describe("the human-first issue detail", () => {
     expect(within(menu).getByRole("menuitem", { name: "Delete issue" })).toBeInTheDocument();
   });
 
+  // Nothing is typed at this button, so a stale refusal has nothing to merge —
+  // but the version it carries is still what makes the next press possible.
+  it("shows the version a stale refusal carried and lets the same press work", async () => {
+    const current = { ...free, ready: false, priority: 0, updated_at: "2026-09-05T12:00:00Z" };
+    let patched = 0;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "PATCH /issues/PLAN-9": () =>
+        ++patched === 1
+          ? { status: 412, body: { type: "/problems/stale", detail: "PLAN-9 changed at …", current } }
+          : { body: { ...current, ready: true } },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Clear ready" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("PLAN-9 changed while it was open.");
+    // The screen took the version the refusal carried, so the same press is a
+    // press that can work rather than one that is refused for ever.
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Set ready" }));
+
+    const second = await vi.waitFor(() => {
+      const calls = instance.calls.filter((call) => call.method === "PATCH");
+      if (calls.length < 2) throw new Error("no second PATCH yet");
+      return calls[1]!;
+    });
+    expect(second.headers.get("If-Match")).toBe("2026-09-05T12:00:00Z");
+  });
+
   // An always-open comment box invites the comment nobody needed, and it sat
   // under the actions rather than under the thread it belongs to.
   it("opens the comment field on a button, inside the conversation", async () => {

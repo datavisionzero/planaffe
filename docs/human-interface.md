@@ -25,7 +25,7 @@ read, so nothing has to be known about Markdown to write one
 | `/:project/needs-you` | Needs you | question, review, unready and stuck reasons, and a line where no agent could pick work up | reason and next action stay visible |
 | `/:project/issues` | All issues | shared issue list, all URL filters, and the four sorts — by epic it groups | filters open as a dismissible sheet |
 | `/:project/issues/new` | Create issue | title, Markdown description, priority, status, `ready`, and the five choices — labels, epic, parent, assignee, blockers | one column throughout; the pairs of fields stack, chips wrap, each suggestion list opens below its field |
-| `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs | one column; metadata as chips under the title |
+| `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs; editing it is guarded and a conflict is shown, not lost | one column; metadata as chips under the title |
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
 | `/:project/epics/new` | Create epic | title, Markdown description and the label choice | one column; the same form the epic screen edits in place |
 | `/:project/epics/:number` | Epic | Markdown description, progress and issue list; editing it is guarded and a conflict is shown, not lost | one column |
@@ -112,6 +112,19 @@ shown so it can be merged by hand. Saving again is then a decision to overwrite
 it rather than a request that can only fail. The page editor is the same
 mechanism on the same reasoning, and for the same reason: a wiki is the text two
 people are most likely to be in at once.
+
+**Everywhere `If-Match` is sent, what comes back is taken.** That is the whole
+of what the refusal is for (`docs/api.md`, "Concurrency on text fields"), and a
+screen that drops it turns the guard into a trap. The issue mask does what the
+epic's does, with one difference that belongs to the issue: beside the title and
+the description it writes seven fields chosen from lists, and saving writes all
+of them. So the other version's title and description are shown to be merged
+from, and the fields that also differ are named — priority, status, ready,
+labels, epic, parent, assignee — because whoever is about to overwrite somebody
+else's label has to know they are. Where nothing is typed there is nothing to
+merge and nothing to show: the ready switch on the issue and the triage button
+on "Needs you" take the version, say that it changed, and let the same press
+work the second time.
 
 ## Pages
 
