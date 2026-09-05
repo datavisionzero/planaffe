@@ -34,6 +34,7 @@ planaffe/
 │  ├─ human-interface.md      the screens, browser actions and permission matrix
 │  ├─ operations.md           running, upgrading, the variables, backups
 │  ├─ cli.md                  pa: configuration, exit codes, verbs
+│  ├─ agents-md.md            the AGENTS.md block a user copies into their own repository
 │  └─ api/openapi.json        the HTTP contract, checked in
 ├─ deploy/                    the Dockerfile, Compose (production and development), and nothing else
 ├─ src/

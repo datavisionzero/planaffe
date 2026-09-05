@@ -167,6 +167,10 @@ than the server's one-hour limit into rounds. `pa issue ask --wait` stops no
 later than the expiry of the caller's claim; `pa needs-you --wait` first reads
 the current page and then uses its ETag for the long poll. A deadline is exit 8.
 
+That cycle is also written out as a paragraph to copy: [`agents-md.md`](./agents-md.md)
+is the block a user pastes into the `AGENTS.md` of their own repository, so that
+nobody has to explain to every project again how tickets work here.
+
 ## Working on it
 
 ```sh
