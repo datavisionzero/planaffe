@@ -1,0 +1,102 @@
+import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Route, Routes } from "react-router";
+import { afterEach, expect, it, vi } from "vitest";
+import { installInstance, renderAt } from "@/shared/testing";
+import { views } from "@/shell/views";
+import { IssueListView } from "./IssueListView";
+
+afterEach(() => vi.unstubAllGlobals());
+
+const all = views.find((view) => view.id === "all")!;
+
+function anIssue(key: string, title: string, extra: Record<string, unknown> = {}) {
+  return {
+    key, project: "PLAN", title, status: "todo", ready: false, priority: 2, labels: [], epic: null, parent: null,
+    release: null, assignee: null, claim: null, blocked_by: [], open_questions: 0, open_blockers: 0,
+    open_sub_issues: 0, created_at: "2026-08-01T10:00:00Z", updated_at: "2026-08-02T10:00:00Z",
+    closed_at: null, deleted_at: null, deleted_by: null, ...extra,
+  };
+}
+
+const onePage = { items: [anIssue("PLAN-1", "The first one")], total: 1, has_more: false, next_cursor: null };
+
+const anAgent = {
+  id: "0199a000-0000-7000-8000-000000000009",
+  kind: "agent", name: "builder", owner: { id: "u", kind: "user", name: "maintainer" },
+  created_at: "2026-09-02T10:00:00Z", token: { prefix: "pa_wxyz", created_at: "2026-09-02T10:00:00Z" },
+  metadata: null, metadata_reported_at: null,
+};
+
+function renderList(routes: Record<string, unknown> = {}) {
+  const instance = installInstance({
+    "GET /issues": onePage,
+    "GET /projects/PLAN/labels": [],
+    "GET /epics": { items: [{ key: "PLAN-E1", project: "PLAN", title: "The shell", status: "open" }], total: 1, has_more: false, next_cursor: null },
+    "GET /projects/PLAN/users": [{ id: "u", kind: "user", name: "maintainer", administrator: true, email: "maintainer@example.test" }],
+    "GET /agents": [anAgent],
+    ...routes,
+  });
+
+  renderAt(`/PLAN/${all.path}`, <Routes><Route path="/:project/:view" element={<IssueListView view={all} />} /></Routes>);
+
+  return instance;
+}
+
+/** The filter bar, open, with the answers of the instance already in it. */
+async function openFilters() {
+  const user = userEvent.setup();
+  renderList();
+
+  await screen.findByText("The first one");
+  await user.click(screen.getByRole("button", { name: "Filters" }));
+
+  return { user, filters: screen.getByRole("group", { name: "Issue filters" }) };
+}
+
+/**
+ * The three filters that were text fields: what exists already is chosen, and
+ * the values the contract knows beside a name — Any, `me`, `none` — are rows of
+ * the list rather than words to guess at.
+ */
+it("chooses the epic instead of typing it, and offers no epic as a row", async () => {
+  const { user, filters } = await openFilters();
+
+  for (const name of ["Epic", "Assignee", "Author"]) {
+    expect(within(filters).getByRole("combobox", { name })).toBeInTheDocument();
+  }
+
+  await user.click(within(filters).getByRole("combobox", { name: "Epic" }));
+
+  const epics = await screen.findByRole("listbox", { name: "Epic" });
+  expect(within(epics).getByText("PLAN-E1")).toBeInTheDocument();
+  expect(within(epics).getByText("No epic")).toBeInTheDocument();
+
+  await user.click(within(epics).getByText("PLAN-E1"));
+  expect(within(filters).getByText("PLAN-E1")).toBeInTheDocument();
+});
+
+/** The assignee filter narrows; it does not assign. Hence Any, not Nobody. */
+it("offers Any, me and none where the contract does", async () => {
+  const { user, filters } = await openFilters();
+
+  await user.click(within(filters).getByRole("combobox", { name: "Assignee" }));
+
+  const assignees = await screen.findByRole("listbox", { name: "Assignee" });
+  expect(within(assignees).getByText("Any")).toBeInTheDocument();
+  expect(within(assignees).getByText("Me")).toBeInTheDocument();
+  expect(within(assignees).getByText("Nobody")).toBeInTheDocument();
+  expect(within(assignees).getByText("maintainer")).toBeInTheDocument();
+});
+
+/** An author can be an agent, so the agents of the instance are offered too. */
+it("offers users and agents as authors, and no nobody", async () => {
+  const { user, filters } = await openFilters();
+
+  await user.click(within(filters).getByRole("combobox", { name: "Author" }));
+
+  const authors = await screen.findByRole("listbox", { name: "Author" });
+  expect(within(authors).getByText("maintainer")).toBeInTheDocument();
+  expect(within(authors).getByText("builder")).toBeInTheDocument();
+  expect(within(authors).queryByText("Nobody")).not.toBeInTheDocument();
+});

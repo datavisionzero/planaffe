@@ -19,23 +19,28 @@ helpdesk work are not what this is for.
 ## Status
 
 **Pre-release, nothing published yet.** The product is being built in three cuts
-([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)), and the first
-cut is the backend:
+([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)), and all three
+are standing:
 
-- The HTTP API of cut one exists and is tested against a real Postgres: users,
+- **Cut one, the backend**, exists and is tested against a real Postgres: users,
   agents and tokens; projects and labels; issues with their bulk create, the
   two shapes, the guarded change and the edges; the claim, its expiry and its
   takeover; `next`; close, review, reopen and parking; comments, questions and
   the history; epics; soft deletion with the purge; the `Idempotency-Key`.
-- The CLI (`pa`) covers the whole of cut one — `next`, the issue verbs and the
-  acts, questions, projects, labels, epics, identities — and the container image
-  and the Compose file exist.
-- Cut two has started: sub-issues and the paginated `needs-you` list exist in
-  the API and the CLI, including the recursive blocker-chain rule.
-- The web application is a shell: navigation over the seven views, project
-  switcher, account menu, command palette, one route per view with the filter
-  in the URL, a drawer on a phone, and Markdown rendered in the browser. The
-  screens behind the views arrive one ticket at a time.
+- **Cut two, unattended operation**: sub-issues and the recursive blocker-chain
+  rule, `--wait` on `LISTEN`/`NOTIFY` for `next`, for a question's answer and
+  for the paginated `needs-you` list, releases, full-text search, the agent
+  metadata back channel, bulk changes, and `pa export --json`. The CLI (`pa`)
+  covers all of it, and so do the container image and the Compose file.
+- **Cut three, the interface for humans**: every screen of the matrix in
+  [`docs/human-interface.md`](docs/human-interface.md) is built — the shell with
+  its project switcher, command palette and shortcuts, the shared issue list
+  with its filters in the URL, the issue, epic and release screens, needs-you,
+  labels, and the three administration areas. Bulk changes, export and the
+  waiting operations stay with the CLI on purpose.
+
+What is left is not a missing area but the polish inside one: the screens are
+sharpened ticket by ticket until 1.0 is worth publishing.
 
 The contract is [`docs/api/openapi.json`](docs/api/openapi.json), captured from
 a running instance and checked in; [`docs/api.md`](docs/api.md) describes it in

@@ -105,9 +105,17 @@ save; a name the project does not have offers itself as one to create, with its
 group and description left to the labels screen), the epics of the project
 (with the title beside the key, and a closed one saying so on its row, since
 attaching to it reopens it), the members of the project plus nobody as a row of
-its own, and a search across issues by key or title for a parent and for
-blockers. Labels are chosen on the issue form, the epic form and the list
-filter, where several of them become several `label` values in the address.
+its own, the agents of the instance for an author, and a search across issues by
+key or title for a parent and for blockers. Labels are chosen on the issue form,
+the epic form and the list filter, where several of them become several `label`
+values in the address.
+
+The list filter chooses the same things, in the flavour a filter needs: nothing
+chosen is *any* rather than *nobody*, *me* is a row of its own, and so is *no
+epic* or *nobody* where the filter admits one. The author is the one choice the
+filter has that no form does; it offers the project's members and the instance's
+agents, revoked ones included, because a token that no longer works wrote issues
+that are still there to be found.
 
 A refusal that names a field is shown at that field, not over the form.
 
