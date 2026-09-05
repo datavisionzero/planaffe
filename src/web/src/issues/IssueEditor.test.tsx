@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
@@ -225,4 +225,60 @@ it("shows a refusal that names a field at that field", async () => {
 
   expect(await screen.findByRole("alert")).toHaveTextContent("PLAN-2 is a sub-issue already.");
   expect(screen.getByRole("combobox", { name: "Parent issue" })).toHaveAttribute("aria-invalid", "true");
+});
+
+const quietInstance = { "GET /epics": { items: [], total: 0, next_cursor: null }, "GET /issues": { items: [], total: 0, next_cursor: null }, "GET /projects/PLAN/users": [] };
+
+it("leaves an untouched form at once, by the button and by Escape alike", async () => {
+  installInstance(quietInstance);
+  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /><Route path="/:project/issues" element={<p>The list</p>} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.keyboard("{Escape}");
+  expect(await screen.findByText("The list")).toBeInTheDocument();
+});
+
+// The epic screen leads here with its own key in the address; cancelling
+// belongs back there and not at the issue list.
+it("goes back to the epic it was started from", async () => {
+  installInstance(quietInstance);
+  renderAt("/PLAN/issues/new?epic=PLAN-E1", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /><Route path="/:project/epics/:number" element={<p>The epic</p>} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(await screen.findByText("The epic")).toBeInTheDocument();
+});
+
+it("asks before throwing away what was written, and stays when told to", async () => {
+  installInstance(quietInstance);
+  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /><Route path="/:project/issues" element={<p>The list</p>} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.type(screen.getByLabelText("Title"), "Human action");
+  await user.keyboard("{Escape}");
+
+  const asking = await screen.findByRole("dialog", { name: "Discard what you wrote?" });
+  await user.click(within(asking).getByRole("button", { name: "Keep writing" }));
+  expect(screen.getByLabelText("Title")).toHaveValue("Human action");
+
+  // The button is the same act as the key, not a second behaviour beside it.
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  await user.click(within(await screen.findByRole("dialog", { name: "Discard what you wrote?" })).getByRole("button", { name: "Discard" }));
+  expect(await screen.findByText("The list")).toBeInTheDocument();
+});
+
+// Escape belongs to whatever is nearest the keyboard: an open list of
+// suggestions closes before the form it stands in does.
+it("lets a picker's list have Escape before the form does", async () => {
+  installInstance({ ...quietInstance, "GET /projects/PLAN/labels": [{ name: "web", group: null, description: null }] });
+  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /><Route path="/:project/issues" element={<p>The list</p>} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("combobox", { name: "Labels" }));
+  const list = await screen.findByRole("listbox", { name: "Labels" });
+  expect(within(list).getByRole("option", { name: /web/ })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+
+  expect(screen.queryByRole("listbox", { name: "Labels" })).not.toBeInTheDocument();
+  expect(screen.queryByText("The list")).not.toBeInTheDocument();
 });

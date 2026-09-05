@@ -10,7 +10,7 @@
  */
 
 /** The contexts the overview groups the keys into, in the order it shows them. */
-export const groups = ["Global", "Issue lists", "Command palette"] as const;
+export const groups = ["Global", "Issue lists", "Forms", "Command palette"] as const;
 
 export type Group = (typeof groups)[number];
 
@@ -25,6 +25,7 @@ export type ShortcutId =
   | "list:open"
   | "list:search"
   | "list:close"
+  | "form:cancel"
   | "palette:next"
   | "palette:previous"
   | "palette:run"
@@ -63,6 +64,9 @@ export const shortcuts: Shortcut[] = [
   { id: "list:open", key: "Enter", what: "Open the active issue", group: "Issue lists" },
   { id: "list:search", key: "/", what: "Search this list", group: "Issue lists" },
   { id: "list:close", key: "Escape", what: "Close the filters", group: "Issue lists" },
+
+  // The same key the button beside it is: one behaviour, two ways to it.
+  { id: "form:cancel", key: "Escape", what: "Leave the form, asking first if anything was written", group: "Forms" },
 
   { id: "palette:next", key: "ArrowDown", what: "Next result", group: "Command palette" },
   { id: "palette:previous", key: "ArrowUp", what: "Previous result", group: "Command palette" },

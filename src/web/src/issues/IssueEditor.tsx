@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { api, codeOf, describe, type Issue, type Problem, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { LabelPicker } from "@/components/ui/label-picker";
 import { useEpics } from "@/epics/useEpics";
 import { useLabels } from "@/projects/useLabels";
 import { Markdown } from "@/shared/Markdown";
+import { useAbandon } from "@/shared/abandon";
 import { PageHeader } from "@/shared/PageHeader";
 import { keyPath } from "@/shell/views";
 import { AssigneePicker, EpicPicker, IssuePicker } from "./pickers";
@@ -18,6 +19,7 @@ type NewIssue = Schemas["NewIssue"];
 export function NewIssueView() {
   const { project } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   // The epic screen leads here with its own key in the address, so the bracket
   // an issue is started under is not typed a second time.
   const [search] = useSearchParams();
@@ -34,7 +36,17 @@ export function NewIssueView() {
     } catch { setRefused({ fields: {} , why: "The instance did not answer." }); } finally { setSaving(false); }
   }
 
-  return <><PageHeader title="Create issue" /><IssueForm epic={search.get("epic") ?? undefined} submit="Create issue" saving={saving} refused={refused} onSubmit={save} /></>;
+  // Back where the form was opened from — the list `c` was pressed on, or the
+  // epic whose key came along in the address — rather than at the issue list
+  // whatever the way in was. A form opened by its own link has nothing behind
+  // it, and falls back to the epic it names, or to the list.
+  function cancel() {
+    if (location.key !== "default") { void navigate(-1); return; }
+    const epic = search.get("epic");
+    void navigate(epic === null ? `/${project}/issues` : keyPath(epic));
+  }
+
+  return <><PageHeader title="Create issue" /><IssueForm epic={search.get("epic") ?? undefined} submit="Create issue" saving={saving} refused={refused} onSubmit={save} onCancel={cancel} /></>;
 }
 
 export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSaved: (issue: Issue) => void; onCancel: () => void }) {
@@ -95,8 +107,15 @@ function refusal(problem: Problem | undefined, status: number): Refusal {
   return { fields, why: rest.length > 0 || Object.keys(fields).length === 0 ? describe(problem, status) : undefined };
 }
 
-function IssueForm({ initial, epic, submit, saving, refused, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; onSubmit: (draft: IssueDraft) => void; onCancel?: () => void }) {
-  const [draft, setDraft] = useState<IssueDraft>({ title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name) ?? [], epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []) ?? [], status: initial?.status === "backlog" ? "backlog" : "todo" });
+/** The form as it starts out, and what "changed" is measured against. */
+function startingDraft(initial: Issue | undefined, epic: string | undefined): IssueDraft {
+  return { title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name) ?? [], epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []) ?? [], status: initial?.status === "backlog" ? "backlog" : "todo" };
+}
+
+function IssueForm({ initial, epic, submit, saving, refused, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; onSubmit: (draft: IssueDraft) => void; onCancel: () => void }) {
+  const [start] = useState(() => startingDraft(initial, epic));
+  const [draft, setDraft] = useState<IssueDraft>(start);
+  const { leave, dialog } = useAbandon(JSON.stringify(draft) !== JSON.stringify(start), onCancel);
   const set = <K extends keyof IssueDraft>(key: K, value: IssueDraft[K]) => setDraft((old) => ({ ...old, [key]: value }));
   const { project } = useParams();
   const { labels, create } = useLabels(project);
@@ -120,7 +139,8 @@ function IssueForm({ initial, epic, submit, saving, refused, onSubmit, onCancel 
     <div className="grid gap-3 sm:grid-cols-2"><EpicPicker epics={epics} value={draft.epic} onChange={(key) => set("epic", key)} error={at.epic} /><IssuePicker label="Parent issue" project={project} exclude={initial ? [initial.key] : []} value={draft.parent === "" ? [] : [draft.parent]} onChange={(keys) => set("parent", keys[0] ?? "")} error={at.parent} /><AssigneePicker project={project} value={draft.assignee} onChange={(name) => set("assignee", name)} error={at.assignee} />{!initial && <IssuePicker label="Blocked by" project={project} multiple value={draft.blockedBy} onChange={(keys) => set("blockedBy", keys)} error={at.blocked_by} />}</div>
     {reopens && <p role="status" className="text-sm text-brand">{reopens}</p>}
     {refused?.why && <p role="alert" className="text-sm text-destructive">{refused.why}</p>}
-    <div className="flex justify-end gap-2">{onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}<Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button></div>
+    <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={leave}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button></div>
+    {dialog}
   </form>;
 }
 

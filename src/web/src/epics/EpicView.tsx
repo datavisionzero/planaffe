@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownField } from "@/issues/IssueEditor";
 import { StatusDot } from "@/issues/status";
 import { useLabels } from "@/projects/useLabels";
+import { useAbandon } from "@/shared/abandon";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
@@ -368,6 +369,8 @@ function EpicForm({ initial, submit, write, onWritten, onCancel }: {
   const [why, setWhy] = useState<string>();
   const { project } = useParams();
   const known = useLabels(project);
+  const start = { title: initial?.title ?? "", description: initial?.description ?? "", labels: initial?.labels.map((label) => label.name) ?? [] };
+  const { leave, dialog } = useAbandon(JSON.stringify({ title, description, labels }) !== JSON.stringify(start), onCancel);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -404,9 +407,10 @@ function EpicForm({ initial, submit, write, onWritten, onCancel }: {
       <LabelPicker label="Labels" labels={known.labels} value={labels} onChange={setLabels} onCreate={known.create} />
       {why !== undefined && <p role="alert" className="text-sm text-destructive">{why}</p>}
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button type="button" variant="outline" onClick={leave}>Cancel</Button>
         <Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button>
       </div>
+      {dialog}
     </form>
   );
 }

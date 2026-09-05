@@ -92,6 +92,15 @@ filter, where several of them become several `label` values in the address.
 
 A refusal that names a field is shown at that field, not over the form.
 
+Every form offers the way out it asked for: a Cancel button and `Escape`, one
+behaviour reached two ways. An untouched form is left at once; a form that was
+written in asks whether to discard first, with Discard and Keep writing.
+Leaving goes back where the form was opened from — the list a create was
+started on, the epic whose key came along in the address — and falls back to
+the epic or the issue list where nothing stands behind it. `Escape` belongs to
+whatever is nearest the keyboard: an open suggestion list or dialog closes
+before the form does.
+
 Creating is never the key alone. The header of every list that can be added to
 carries the act as a button — New issue on the issue lists and on Needs you,
 New epic on the epics — the epic screen offers one that arrives at the form with
