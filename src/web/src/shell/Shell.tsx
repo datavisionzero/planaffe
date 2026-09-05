@@ -149,7 +149,7 @@ export function Shell() {
         <Routes>
           <Route path="/" element={<Landing projects={projects} />} />
           <Route path="/settings/*" element={<SettingsView />} />
-          <Route path="/admin" element={<AdminView />} />
+          <Route path="/admin/*" element={<AdminView />} />
           <Route path="/projects/new" element={<NewProjectView />} />
           <Route path="/:project">
             <Route index element={<Navigate to="ready" replace />} />
@@ -167,7 +167,7 @@ export function Shell() {
             <Route path="releases" element={<ReleasesView />} />
             <Route path="releases/:name" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ReleaseView /></Suspense>} />
             <Route path="labels" element={<LabelsView />} />
-            <Route path="settings" element={<ProjectSettingsView />} />
+            <Route path="settings/*" element={<ProjectSettingsView />} />
           </Route>
         </Routes>
       </SidebarInset>

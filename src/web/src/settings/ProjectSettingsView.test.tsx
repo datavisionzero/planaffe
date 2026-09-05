@@ -15,7 +15,7 @@ it("submits the project name and workflow switches", async () => {
     "GET /projects/PLAN/users": [],
     "PATCH /projects/PLAN": changed,
   });
-  renderAt("/PLAN/settings", <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/:project/settings" element={<ProjectSettingsView />} /></Routes></SessionProvider>);
+  renderAt("/PLAN/settings/general", <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/:project/settings/*" element={<ProjectSettingsView />} /></Routes></SessionProvider>);
   const user = userEvent.setup();
 
   const name = await screen.findByLabelText("Name");

@@ -78,7 +78,11 @@ export function ActionDialog({ trigger, open: controlled, onOpenChange, title, d
 }
 
 type TextActionDialogProps = {
-  trigger: ReactElement;
+  /** Absent for a dialog opened from a menu; the menu closes on the click and
+   *  would take its own trigger down with it, so the caller keeps the state. */
+  trigger?: ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   title: string;
   description?: string;
   label: string;
@@ -89,17 +93,19 @@ type TextActionDialogProps = {
 };
 
 /** An in-page replacement for single-value browser prompt dialogs. */
-export function TextActionDialog({ trigger, title, description, label, initialValue, required = true, submitLabel, onSubmit }: TextActionDialogProps) {
-  const [open, setOpen] = useState(false);
+export function TextActionDialog({ trigger, open: controlled, onOpenChange, title, description, label, initialValue, required = true, submitLabel, onSubmit }: TextActionDialogProps) {
+  const [uncontrolled, setUncontrolled] = useState(false);
   const [value, setValue] = useState(initialValue);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const open = controlled ?? uncontrolled;
 
   function changeOpen(next: boolean) {
     if (busy) return;
     if (next) setValue(initialValue);
     setError(undefined);
-    setOpen(next);
+    if (controlled === undefined) setUncontrolled(next);
+    onOpenChange?.(next);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -110,7 +116,7 @@ export function TextActionDialog({ trigger, title, description, label, initialVa
     setError(undefined);
     try {
       await onSubmit(next);
-      setOpen(false);
+      changeOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The instance did not answer.");
     } finally {
@@ -120,7 +126,7 @@ export function TextActionDialog({ trigger, title, description, label, initialVa
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogTrigger render={trigger} />
+      {trigger !== undefined && <DialogTrigger render={trigger} />}
       <DialogContent>
         <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
           <DialogHeader>

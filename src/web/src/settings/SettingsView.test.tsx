@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/session/Session";
 import { aUser, installInstance, renderAt } from "@/shared/testing";
@@ -13,7 +14,7 @@ const anAgent = {
   token: { prefix: "pa_wxyz", created_at: "2026-09-02T10:00:00Z", revoked_at: null },
 };
 
-function settings(routes: Parameters<typeof installInstance>[0] = {}) {
+function settings(routes: Parameters<typeof installInstance>[0] = {}, at = "/settings") {
   const instance = installInstance({
     "GET /sessions": [],
     "GET /tokens": [],
@@ -21,7 +22,7 @@ function settings(routes: Parameters<typeof installInstance>[0] = {}) {
     ...routes,
   });
 
-  renderAt("/settings", <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><SettingsView /></SessionProvider>);
+  renderAt(at, <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/settings/*" element={<SettingsView />} /></Routes></SessionProvider>);
   return instance;
 }
 
@@ -29,7 +30,7 @@ function settings(routes: Parameters<typeof installInstance>[0] = {}) {
 // event has been dispatched: reading it back after the await threw, and the
 // `TypeError` was reported where "Saved." belonged.
 it("reports a changed password as saved and clears the fields", async () => {
-  settings({ "POST /me/password": { status: 204 } });
+  settings({ "POST /me/password": { status: 204 } }, "/settings/security");
   const user = userEvent.setup();
 
   await user.type(await screen.findByLabelText("Current password"), "a long first password");
@@ -42,7 +43,7 @@ it("reports a changed password as saved and clears the fields", async () => {
 });
 
 it("reports a created agent as saved, shows its secret once and clears the name", async () => {
-  settings({ "POST /agents": { status: 201, body: { ...anAgent, token: { ...anAgent.token, secret: "pa_thesecret" } } } });
+  settings({ "POST /agents": { status: 201, body: { ...anAgent, token: { ...anAgent.token, secret: "pa_thesecret" } } } }, "/settings/agents");
   const user = userEvent.setup();
 
   await user.type(await screen.findByLabelText("Agent name"), "one");
@@ -62,7 +63,7 @@ it("says why a token could not be revoked", async () => {
   settings({
     "GET /tokens": [aToken],
     [`DELETE /tokens/${aToken.id}`]: refusal(409, "The token was already revoked."),
-  });
+  }, "/settings/tokens");
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Revoke" }));
@@ -75,11 +76,27 @@ it("reports a revoked token and reloads the list", async () => {
   settings({
     "GET /tokens": () => (revoked ? [{ ...aToken, revoked_at: "2026-09-04T10:00:00Z" }] : [aToken]),
     [`DELETE /tokens/${aToken.id}`]: () => { revoked = true; return { status: 204 }; },
-  });
+  }, "/settings/tokens");
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Revoke" }));
 
   expect(await screen.findByRole("status")).toHaveTextContent("Token revoked.");
   expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+});
+
+// `/settings` was one address for five subjects; it is now the way in to the
+// first of them, and still a link that works.
+it("lands on the first area when no area is named", async () => {
+  settings();
+
+  expect(await screen.findByRole("heading", { name: "Profile" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
+});
+
+it("gives each area an address of its own", async () => {
+  settings({}, "/settings/tokens");
+
+  expect(await screen.findByRole("heading", { name: "User tokens" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Profile" })).not.toBeInTheDocument();
 });

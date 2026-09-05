@@ -28,9 +28,16 @@ available in the browser.
 | `/:project/releases` | Releases | `unreleased`, then published releases newest first | stacked summaries |
 | `/:project/releases/:name` | Release | notes, exact issue membership and publish/copy actions | one column |
 | `/:project/labels` | Labels | the project's set, grouped where its labels exclude one another, with the create line above it | the row stacks: the name and what it means above the two acts |
-| `/settings` | Personal settings | profile, email, password, sessions, user tokens and agents | section navigation becomes a menu |
-| `/:project/settings` | Project settings | name, switches, labels, members and project lifecycle | one column |
-| `/admin` | Instance administration | users, roles, project access, deleted projects and SMTP status | tabular data becomes labelled rows |
+| `/settings/profile` | Personal settings · Profile | name and email address | area list folds above the area |
+| `/settings/security` | Personal settings · Security | password and browser sessions | area list folds above the area |
+| `/settings/tokens` | Personal settings · User tokens | the tokens, and the secret of a new one, once | area list folds above the area |
+| `/settings/agents` | Personal settings · Agents | the agents and their tokens | area list folds above the area |
+| `/:project/settings/general` | Project settings · General | name, the two switches and project deletion | area list folds above the area |
+| `/:project/settings/members` | Project settings · Members | who has access to the project | area list folds above the area |
+| `/admin/users` | Administration · Users | invite, role and lifecycle, each row's acts in its menu | area list folds above the area |
+| `/admin/projects` | Administration · Projects | every project of the instance, deleted ones included | area list folds above the area |
+| `/admin/projects/:key` | Administration · One project | who has access to it, and granting or removing it | area list folds above the area |
+| `/admin/email` | Administration · Transactional email | the SMTP status and a test message | area list folds above the area |
 
 `:number` is the part of a key after its project prefix ([`CONTEXT.md`](../CONTEXT.md)):
 `PLAN-42` is at `/PLAN/issues/42`, `PLAN-E3` at `/PLAN/epics/E3`. A link to an
@@ -55,7 +62,17 @@ reachable only by a shortcut does not help the reader who has not found one yet.
 It draws `⌘` on a Mac and `Ctrl` elsewhere, and it is generated from the one
 list the handlers themselves read, so a key that changes changes there.
 The Labels navigation entry required by ADR 0006 opens the project's labels
-screen; there is no second place labels are managed from.
+screen; there is no second place labels are managed from, and no section of
+project settings pretending to be one.
+
+The three administration screens — personal settings, project settings and
+instance administration — are one shell: a list of areas beside the area being
+looked at, each area with an address of its own, so that one can be linked to
+and a reload comes back to it. `/settings`, `/:project/settings` and `/admin`
+still work and lead to the first area of each. On a narrow screen the list
+folds above the area rather than beside it. What the instance answered stands
+at the act that asked rather than at the foot of the page, and a row's acts
+live in the row's own menu.
 
 ## Issue list and detail
 
