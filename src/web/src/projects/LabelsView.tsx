@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ActionDialog, TextActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
+import { forgetLabels } from "./useLabels";
 
 type Label = Schemas["Label"];
 type Loaded = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; labels: Label[] };
@@ -23,6 +24,9 @@ export function LabelsView() {
   // and a reload that cannot reach the instance would otherwise be reported as
   // the write having failed.
   async function reload() {
+    // Every caller reloads after a write, which is also the moment the set the
+    // pickers share stopped being what the project has.
+    forgetLabels(project);
     try {
       const { data, error, response } = await api.GET("/projects/{key}/labels", { params: { path: { key: project! } } });
       setKnown({ of: project, loaded: data ? { at: "known", labels: data } : { at: "failed", why: describe(error, response.status) } });

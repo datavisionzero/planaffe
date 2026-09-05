@@ -6,10 +6,12 @@ import { api, describe, type IssueSummary } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LabelPicker, type PickableLabel } from "@/components/ui/label-picker";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { useLabels } from "@/projects/useLabels";
 import { PageHeader } from "@/shared/PageHeader";
 import { is, typing } from "@/shell/shortcuts";
 import { keyPath, type View } from "@/shell/views";
@@ -42,6 +44,7 @@ export function IssueListView({ view }: { view: View }) {
   // where the focus goes back to when they close.
   const filtersButton = useRef<HTMLButtonElement>(null);
   const narrow = useIsMobile();
+  const { labels } = useLabels(project);
   const query = useMemo(() => readQuery(project, search, view), [project, search, view]);
   const fingerprint = JSON.stringify(query);
   const [loaded, setLoaded] = useState<{ of: string; page: PageState } | null>(null);
@@ -121,6 +124,12 @@ export function IssueListView({ view }: { view: View }) {
     if (value) next.set(name, value);
     setSearch(next, { replace: true });
   }
+  /** A filter the query carries several times over, `label` being the one. */
+  function changeAll(name: string, values: string[]) {
+    const next = new URLSearchParams(search); next.delete(name);
+    for (const value of values) next.append(name, value);
+    setSearch(next, { replace: true });
+  }
   let explicit = false;
   search.forEach((_value, key) => { if (!["sort", "order"].includes(key)) explicit = true; });
 
@@ -140,14 +149,14 @@ export function IssueListView({ view }: { view: View }) {
     {/* Wide: the bar stays in place above the list. Narrow: the same controls
         arrive as a sheet that dismisses itself and hands the focus back
         (`docs/human-interface.md`, the screen matrix). */}
-    {filtersOpen && !narrow && <FilterBar search={search} change={change} clear={() => setSearch(new URLSearchParams(), { replace: true })} />}
+    {filtersOpen && !narrow && <FilterBar search={search} change={change} changeAll={changeAll} labels={labels} clear={() => setSearch(new URLSearchParams(), { replace: true })} />}
     {narrow && <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
       <SheetContent side="bottom" finalFocus={filtersButton} className="max-h-[85svh] overflow-y-auto pb-4">
         <SheetHeader className="pb-0">
           <SheetTitle>Filters</SheetTitle>
           <SheetDescription>What you choose is carried by the address of this list.</SheetDescription>
         </SheetHeader>
-        <FilterBar search={search} change={change} clear={() => setSearch(new URLSearchParams(), { replace: true })} className="border-b-0 bg-transparent px-4 pt-0" />
+        <FilterBar search={search} change={change} changeAll={changeAll} labels={labels} clear={() => setSearch(new URLSearchParams(), { replace: true })} className="border-b-0 bg-transparent px-4 pt-0" />
       </SheetContent>
     </Sheet>}
     {page.at === "asking" && !page.items.length && <Loading />}
@@ -160,11 +169,14 @@ export function IssueListView({ view }: { view: View }) {
   </div>;
 }
 
-function FilterBar({ search, change, clear, className }: { search: URLSearchParams; change: (name: string, value?: string) => void; clear: () => void; className?: string }) {
+function FilterBar({ search, change, changeAll, labels, clear, className }: { search: URLSearchParams; change: (name: string, value?: string) => void; changeAll: (name: string, values: string[]) => void; labels: PickableLabel[]; clear: () => void; className?: string }) {
   return <div className={cn("flex flex-wrap items-end gap-2 border-b bg-muted/30 p-2", className)} role="group" aria-label="Issue filters">
     <Filter label="Status" name="status" value={search.get("status") ?? ""} change={change}><option value="">Any</option>{["backlog", "todo", "in_progress", "review", "done", "canceled"].map((value) => <option key={value}>{value}</option>)}</Filter>
     <Filter label="Priority" name="priority" value={search.get("priority") ?? ""} change={change}><option value="">Any</option>{[0, 1, 2, 3, 4].map((value) => <option key={value} value={value}>{priorityLabel(value)}</option>)}</Filter>
-    {[["Label", "label"], ["Epic", "epic"], ["Assignee", "assignee"], ["Author", "author"]].map(([label, name]) => <label key={name} className="grid gap-1 text-xs text-muted-foreground">{label}<Input value={search.get(name) ?? ""} onChange={(event) => change(name, event.target.value)} className="w-32 text-foreground" /></label>)}
+    {/* Several labels at once: the query has carried repeated `label` values
+        all along, and one text field could only ever say one of them. */}
+    <LabelPicker label="Label" labels={labels} value={search.getAll("label")} onChange={(names) => changeAll("label", names)} className="w-56 text-xs font-normal text-muted-foreground" />
+    {[["Epic", "epic"], ["Assignee", "assignee"], ["Author", "author"]].map(([label, name]) => <label key={name} className="grid gap-1 text-xs text-muted-foreground">{label}<Input value={search.get(name) ?? ""} onChange={(event) => change(name, event.target.value)} className="w-32 text-foreground" /></label>)}
     <Filter label="Claim" name="claimed" value={search.get("claimed") ?? ""} change={change}><option value="">Any</option><option value="true">Claimed</option><option value="false">Unclaimed</option><option value="me">Mine</option></Filter>
     {/* The one read that sees deleted rows (ADR 0013). It was reachable only
         by typing the query parameter. */}

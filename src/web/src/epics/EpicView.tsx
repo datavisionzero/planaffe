@@ -4,9 +4,11 @@ import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LabelPicker } from "@/components/ui/label-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownField } from "@/issues/IssueEditor";
 import { StatusDot } from "@/issues/status";
+import { useLabels } from "@/projects/useLabels";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
@@ -361,9 +363,11 @@ function EpicForm({ initial, submit, write, onWritten, onCancel }: {
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [labels, setLabels] = useState(initial?.labels.map((label) => label.name).join(", ") ?? "");
+  const [labels, setLabels] = useState(initial?.labels.map((label) => label.name) ?? []);
   const [saving, setSaving] = useState(false);
   const [why, setWhy] = useState<string>();
+  const { project } = useParams();
+  const known = useLabels(project);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -374,7 +378,7 @@ function EpicForm({ initial, submit, write, onWritten, onCancel }: {
       const { data, error, response } = await write({
         title,
         description,
-        labels: labels.split(",").map((label) => label.trim()).filter(Boolean),
+        labels,
       });
 
       if (data === undefined) {
@@ -397,11 +401,7 @@ function EpicForm({ initial, submit, write, onWritten, onCancel }: {
         <Input required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
       <MarkdownField label="Description" value={description} onChange={setDescription} />
-      <label className="grid gap-1 text-sm font-medium">
-        Labels
-        <span className="text-xs font-normal text-muted-foreground">Comma separated</span>
-        <Input value={labels} onChange={(event) => setLabels(event.target.value)} />
-      </label>
+      <LabelPicker label="Labels" labels={known.labels} value={labels} onChange={setLabels} onCreate={known.create} />
       {why !== undefined && <p role="alert" className="text-sm text-destructive">{why}</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>

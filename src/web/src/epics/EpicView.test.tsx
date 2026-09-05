@@ -119,7 +119,10 @@ it("says what it could not read, and offers the way back to the list", async () 
 });
 
 it("creates an epic and opens it", async () => {
-  const instance = installInstance({ "POST /epics": { status: 201, body: epic } });
+  const instance = installInstance({
+    "GET /projects/PLAN/labels": [{ name: "cut-3", group: null, description: null }],
+    "POST /epics": { status: 201, body: epic },
+  });
   renderAt(
     "/PLAN/epics/new",
     <Routes>
@@ -131,7 +134,7 @@ it("creates an epic and opens it", async () => {
 
   await user.type(screen.getByLabelText("Title"), "The web application");
   await user.type(screen.getByLabelText("Description"), "React on its own toolchain.");
-  await user.type(screen.getByLabelText("Labels", { exact: false }), "cut-3");
+  await user.type(await screen.findByRole("combobox", { name: "Labels" }), "cut-3{Enter}");
   await user.click(screen.getByRole("button", { name: "Create epic" }));
 
   expect(await screen.findByText("The epic itself")).toBeInTheDocument();

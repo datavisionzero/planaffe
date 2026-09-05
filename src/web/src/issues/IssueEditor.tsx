@@ -3,6 +3,8 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { api, describe, type Issue, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LabelPicker } from "@/components/ui/label-picker";
+import { useLabels } from "@/projects/useLabels";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
 import { keyPath } from "@/shell/views";
@@ -23,7 +25,7 @@ export function NewIssueView() {
   async function save(draft: IssueDraft) {
     setSaving(true); setError(undefined);
     try {
-      const item: NewIssue = { ref: null, title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: words(draft.labels), epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), blocked_by: words(draft.blockedBy), blocks: [], status: draft.status };
+      const item: NewIssue = { ref: null, title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: draft.labels, epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), blocked_by: words(draft.blockedBy), blocks: [], status: draft.status };
       const { data, error: problem, response } = await api.POST("/issues", { body: { project: project!, issues: [item] } });
       if (!data) { setError(describe(problem, response.status)); return; }
       void navigate(keyPath(data.items[0].key), { replace: true });
@@ -38,7 +40,7 @@ export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSa
   const [error, setError] = useState<string>();
   async function save(draft: IssueDraft) {
     setSaving(true); setError(undefined);
-    const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: words(draft.labels), epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), ...(parkable(issue) && draft.status !== issue.status ? { status: draft.status } : {}) };
+    const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: draft.labels, epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), ...(parkable(issue) && draft.status !== issue.status ? { status: draft.status } : {}) };
     try {
       const { data, error: problem, response } = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: body as never });
       if (!data) { setError(describe(problem, response.status)); return; }
@@ -59,12 +61,14 @@ function parkable(issue: Issue | undefined): boolean {
   return issue === undefined || ((issue.status === "todo" || issue.status === "backlog") && issue.claim === null);
 }
 
-type IssueDraft = { title: string; description: string; priority: number; ready: boolean; labels: string; epic: string; parent: string; assignee: string; blockedBy: string; status: "backlog" | "todo" };
+type IssueDraft = { title: string; description: string; priority: number; ready: boolean; labels: string[]; epic: string; parent: string; assignee: string; blockedBy: string; status: "backlog" | "todo" };
 
 function IssueForm({ initial, epic, submit, saving, error, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; error?: string; onSubmit: (draft: IssueDraft) => void; onCancel?: () => void }) {
-  const [draft, setDraft] = useState<IssueDraft>({ title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name).join(", ") ?? "", epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []).join(", ") ?? "", status: initial?.status === "backlog" ? "backlog" : "todo" });
+  const [draft, setDraft] = useState<IssueDraft>({ title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name) ?? [], epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []).join(", ") ?? "", status: initial?.status === "backlog" ? "backlog" : "todo" });
   const set = <K extends keyof IssueDraft>(key: K, value: IssueDraft[K]) => setDraft((old) => ({ ...old, [key]: value }));
   const [reopens, setReopens] = useState<string>();
+  const { project } = useParams();
+  const { labels, create } = useLabels(project);
 
   // Attaching an issue to a closed epic reopens the epic, silently as far as
   // the HTTP call goes. The human interface asks for the warning, so the epic
@@ -89,7 +93,8 @@ function IssueForm({ initial, epic, submit, saving, error, onSubmit, onCancel }:
     <label className="grid gap-1 text-sm font-medium">Title<Input required autoFocus value={draft.title} onChange={(e) => set("title", e.target.value)} /></label>
     <MarkdownField label="Description" value={draft.description} onChange={(value) => set("description", value)} />
     <div className="grid gap-3 sm:grid-cols-3"><Select label="Priority" value={draft.priority} onChange={(value) => set("priority", Number(value))}>{[0,1,2,3,4].map((x) => <option key={x} value={x}>{priorityLabel(x)}</option>)}</Select>{parkable(initial) ? <Select label="Status" value={draft.status} onChange={(value) => set("status", value as "backlog" | "todo")}><option value="todo">Todo</option><option value="backlog">Backlog</option></Select> : <Select label="Status" hint="Changed through the issue's own actions" value={initial!.status} disabled onChange={() => undefined}><option value={initial!.status}>{statusLabel(initial!.status)}</option></Select>}<label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={draft.ready} onChange={(e) => set("ready", e.target.checked)} /> Ready</label></div>
-    <div className="grid gap-3 sm:grid-cols-2"><Text label="Labels" hint="Comma separated" value={draft.labels} change={(v) => set("labels", v)} /><Text label="Epic" value={draft.epic} change={(v) => set("epic", v)} leave={(v) => void askAboutEpic(v)} /><Text label="Parent issue" value={draft.parent} change={(v) => set("parent", v)} /><Text label="Assignee" value={draft.assignee} change={(v) => set("assignee", v)} />{!initial && <Text label="Blocked by" hint="Comma separated issue keys" value={draft.blockedBy} change={(v) => set("blockedBy", v)} />}</div>
+    <LabelPicker label="Labels" labels={labels} value={draft.labels} onChange={(names) => set("labels", names)} onCreate={create} />
+    <div className="grid gap-3 sm:grid-cols-2"><Text label="Epic" value={draft.epic} change={(v) => set("epic", v)} leave={(v) => void askAboutEpic(v)} /><Text label="Parent issue" value={draft.parent} change={(v) => set("parent", v)} /><Text label="Assignee" value={draft.assignee} change={(v) => set("assignee", v)} />{!initial && <Text label="Blocked by" hint="Comma separated issue keys" value={draft.blockedBy} change={(v) => set("blockedBy", v)} />}</div>
     {reopens && <p role="status" className="text-sm text-brand">{reopens}</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <div className="flex justify-end gap-2">{onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}<Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button></div>

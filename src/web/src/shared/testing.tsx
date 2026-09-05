@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { vi } from "vitest";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { forgetLabels } from "@/projects/useLabels";
 
 /**
  * An instance to stand in front of the generated client: a route table of
@@ -15,6 +16,10 @@ export type Route = Answer | ((request: Request) => Answer);
 
 export function installInstance(routes: Record<string, Route>) {
   const calls: Request[] = [];
+
+  // A new instance is a new label set; the shared one outlives a test
+  // otherwise, and the next one reads answers this one gave.
+  forgetLabels();
 
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
