@@ -424,6 +424,35 @@ describe("the shell (ADR 0006)", () => {
     expect(screen.getByRole("button", { name: "Switch project" })).toHaveTextContent("the new one");
   });
 
+  // The field drew what was typed in upper case and sent it as typed, so a key
+  // typed in lower case looked accepted and came back refused: "a project key
+  // is upper case" — about the very thing the screen had just drawn correctly.
+  it("sends the project key the way it draws it: upper case", async () => {
+    const created = { ...aProject, key: "NEW", name: "the new one" };
+    const instance = installInstance({
+      "GET /projects": [aProject],
+      "POST /projects": { status: 201, body: created },
+      "GET /issues": { items: [], total: 0, has_more: false, next_cursor: null },
+      "GET /projects/NEW/labels": [],
+    });
+    renderAt(
+      "/projects/new",
+      <SessionProvider value={{ me: aUser, signOut: vi.fn() }}>
+        <Shell />
+      </SessionProvider>,
+    );
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByLabelText("Key"), "new");
+    expect(screen.getByLabelText("Key")).toHaveValue("NEW");
+
+    await user.type(screen.getByLabelText("Name"), "the new one");
+    await user.click(screen.getByRole("button", { name: "Create project" }));
+
+    const post = await vi.waitFor(() => instance.calls.find((call) => call.method === "POST")!);
+    expect(await post.json()).toMatchObject({ key: "NEW", name: "the new one" });
+  });
+
   it("shows who is signed in, top right", async () => {
     shell("/PLAN/ready");
     const user = userEvent.setup();
