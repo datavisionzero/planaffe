@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Planaffe.Application.Ports;
 using Planaffe.Domain.Epics;
 using Planaffe.Domain.Issues;
+using Planaffe.Domain.Pages;
 using Planaffe.Domain.Projects;
 using Planaffe.Domain.Releases;
 
@@ -19,7 +20,7 @@ namespace Planaffe.Infrastructure.Persistence;
 /// <para>
 /// <strong>The purge is opportunistic.</strong> Before the commit, for every
 /// project a written row belongs to, up to twenty of that project's deleted
-/// issues, epics and labels whose grace period has passed are removed — the
+/// issues, epics, pages and labels whose grace period has passed are removed — the
 /// cascades taking comments, questions, history and edges with them — plus up
 /// to twenty idempotency rows older than a day, and up to twenty deleted
 /// projects past their grace period, instance-wide. The batch is small so that
@@ -62,6 +63,7 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
                 Issue issue => issue.ProjectId,
                 Epic epic => epic.ProjectId,
                 Label label => label.ProjectId,
+                Page page => page.ProjectId,
                 Project project => project.Id,
                 Release release => release.ProjectId,
                 _ => (Guid?)null,
@@ -91,6 +93,16 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
                     select e.id from epic e
                      where e.project_id = {0} and e.deleted_at is not null and e.deleted_at <= now() - {1}::interval
                        and not exists (select 1 from issue i where i.epic_id = e.id)
+                     limit {2})
+                """,
+                [projectId, grace, Batch], cancellationToken);
+
+            // A page holds nothing else up: its slug comes free with the row.
+            await context.Database.ExecuteSqlRawAsync(
+                """
+                delete from page where id in (
+                    select id from page
+                     where project_id = {0} and deleted_at is not null and deleted_at <= now() - {1}::interval
                      limit {2})
                 """,
                 [projectId, grace, Batch], cancellationToken);

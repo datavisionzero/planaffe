@@ -6,20 +6,21 @@ namespace Planaffe.Domain.History;
 /// dies only with its subject (ADR 0013).
 /// </summary>
 /// <remarks>
-/// An issue's history and an epic's live in one table because they are one
-/// concept and the epic's is tiny; every row points at exactly one of the two,
-/// and the table's check constraint holds that too.
+/// An issue's history, an epic's and a page's live in one table because they
+/// are one concept and the two smaller ones are tiny; every row points at
+/// exactly one of the three, and the table's check constraint holds that too.
 /// </remarks>
 public sealed class HistoryEntry
 {
     private HistoryEntry()
     {
-        // EF Core materializes through this; every other route goes through OnIssue or OnEpic.
+        // EF Core materializes through this; every other route goes through OnIssue, OnEpic or OnPage.
     }
 
     private HistoryEntry(
         Guid? issueId,
         Guid? epicId,
+        Guid? pageId,
         Guid actorId,
         DateTimeOffset at,
         string field,
@@ -29,6 +30,7 @@ public sealed class HistoryEntry
     {
         IssueId = issueId;
         EpicId = epicId;
+        PageId = pageId;
         ActorId = actorId;
         At = at;
         Field = field;
@@ -43,6 +45,8 @@ public sealed class HistoryEntry
     public Guid? IssueId { get; private init; }
 
     public Guid? EpicId { get; private init; }
+
+    public Guid? PageId { get; private init; }
 
     public Guid ActorId { get; private init; }
 
@@ -66,7 +70,7 @@ public sealed class HistoryEntry
         string? oldValue = null,
         string? newValue = null,
         string? note = null) =>
-        new(issueId, null, actorId, at, Named(field), oldValue, newValue, note);
+        new(issueId, null, null, actorId, at, Named(field), oldValue, newValue, note);
 
     public static HistoryEntry OnEpic(
         Guid epicId,
@@ -76,7 +80,17 @@ public sealed class HistoryEntry
         string? oldValue = null,
         string? newValue = null,
         string? note = null) =>
-        new(null, epicId, actorId, at, Named(field), oldValue, newValue, note);
+        new(null, epicId, null, actorId, at, Named(field), oldValue, newValue, note);
+
+    public static HistoryEntry OnPage(
+        Guid pageId,
+        Guid actorId,
+        DateTimeOffset at,
+        string field,
+        string? oldValue = null,
+        string? newValue = null,
+        string? note = null) =>
+        new(null, null, pageId, actorId, at, Named(field), oldValue, newValue, note);
 
     private static string Named(string field) =>
         string.IsNullOrWhiteSpace(field)

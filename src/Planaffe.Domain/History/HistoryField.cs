@@ -17,6 +17,12 @@ public static class HistoryField
     /// <inheritdoc cref="Description"/>
     public const string Result = "result";
 
+    /// <summary>A page's Markdown. <inheritdoc cref="Description"/></summary>
+    public const string Body = "body";
+
+    /// <summary>A page's address, renamed: the old slug and the new one (ADR 0021).</summary>
+    public const string Slug = "slug";
+
     public const string Status = "status";
 
     public const string Ready = "ready";

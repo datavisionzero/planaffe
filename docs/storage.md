@@ -446,6 +446,7 @@ create table history (
     id         bigint      not null generated always as identity primary key,
     issue_id   uuid        references issue (id) on delete cascade,
     epic_id    uuid        references epic (id)  on delete cascade,
+    page_id    uuid        references page (id)  on delete cascade,
     actor_id   uuid        not null references identity (id),
     at         timestamptz not null,
     field      text        not null,
@@ -453,23 +454,27 @@ create table history (
     new_value  text,
     note       text,
 
-    check (num_nonnulls(issue_id, epic_id) = 1)
+    check (num_nonnulls(issue_id, epic_id, page_id) = 1)
 );
 
 create index history_issue on history (issue_id, id);
 create index history_epic  on history (epic_id, id);
+create index history_page  on history (page_id, id);
 ```
 
 One row per change: who, when, which field, from what to what (VISION 7). An
-issue's history and an epic's live in one table because they are one concept
-and the epic's is tiny; the check keeps every row pointing at exactly one
-subject.
+issue's history, an epic's and a page's live in one table because they are one
+concept and the two smaller ones are tiny; the check keeps every row pointing
+at exactly one subject.
+
+`page_id` arrives with the pages below, and the check grows with it rather than
+gaining a fourth column of its own.
 
 `field` is the name of the column or edge that changed, spelled as the API
 spells it: `title`, `description`, `result`, `status`, `ready`, `priority`,
 `assignee`, `claim`, `epic`, `label`, `blocked_by`, `deleted` — plus `created`
-for the row's birth, with no values. For `description` and `result` the values
-are null: the entry records *that* the text changed, not how. For an edge
+for the row's birth, with no values, and `body` and `slug` on a page. For
+`description`, `result` and `body` the values are null: the entry records *that* the text changed, not how. For an edge
 (`label`, `blocked_by`) an addition has the new value and a removal the old.
 Identities in `assignee` and `claim` are stored as their ids; the API renders
 names.
@@ -503,16 +508,16 @@ replay from a reuse of the key for a different request, which is refused.
 
 ## Deletion and the purge
 
-An issue, an epic, a label or a project is deleted by setting `deleted_at` and
-`deleted_by`. Deleting an issue also lets go of its claim — the columns are
+An issue, an epic, a page, a label or a project is deleted by setting
+`deleted_at` and `deleted_by`. Deleting an issue also lets go of its claim — the columns are
 cleared and, if it was `in_progress`, the status becomes `todo`, because the
 invariant above allows nothing else and ADR 0013 says the claim does not come
 back on restore. Restoring clears the two columns and nothing else.
 
 **The purge is opportunistic** (ADR 0013). At the end of every write transaction
 that touches a project, the store removes up to twenty of that project's rows
-whose grace period has passed — issues, then epics, then labels, the cascades
-taking their comments, questions, history and edges with them — and up to twenty
+whose grace period has passed — issues, then epics, then pages, then labels,
+the cascades taking their comments, questions, history and edges with them — and up to twenty
 idempotency rows older than 24 hours, instance-wide. A deleted project is purged
 the same way by the next write anywhere. The batch is small so that no request
 pays for a backlog; the floor is a floor, and a project nobody writes to keeps
@@ -799,6 +804,59 @@ in-memory store. They are deliberately not durable product data: a restart
 forgiving attempts is safer than making authentication depend on a cleanup table
 or another service. Deployments with several application replicas are outside
 the MVP topology.
+
+## Pages
+
+```sql
+create table page (
+    id          uuid        not null primary key,
+    project_id  uuid        not null references project (id) on delete cascade,
+    slug        text        not null,
+    title       text        not null,
+    body        text        not null default '',
+    created_by  uuid        not null references identity (id),
+    created_at  timestamptz not null,
+    updated_by  uuid        not null references identity (id),
+    updated_at  timestamptz not null,
+    deleted_at  timestamptz,
+    deleted_by  uuid        references identity (id)
+);
+
+create unique index page_slug on page (project_id, slug);
+
+create table page_label (
+    page_id  uuid not null references page  (id) on delete cascade,
+    label_id uuid not null references label (id) on delete cascade,
+    primary key (page_id, label_id)
+);
+```
+
+The project's flat wiki (VISION 7): Markdown addressed by a slug, with no
+hierarchy, no comments and no attachments. There is no `key` and no `number`
+column, because a page is the one object addressed by a name
+([ADR 0021](./adr/0021-a-pages-address-is-its-slug-not-a-key.md)); the slug is
+what the URL carries in both directions.
+
+**The unique index covers deleted rows on purpose.** A soft-deleted page keeps
+its slug until the purge takes it, so that restoring one never lands on a name
+somebody else has taken in the meantime — the same reasoning that keeps a
+deleted label's name spent. A create against a spent slug is refused, and the
+refusal says the page is deleted and restorable rather than pretending the name
+is in use.
+
+**Renaming is an ordinary update of `slug`.** Nothing forwards the old one and
+there is no redirect table; ADR 0021 has the argument. The rename stands in the
+history as a `slug` entry with both values, which is the one place the old
+address survives.
+
+**`updated_at` is the version**, as at the issue and the epic, so a page
+inherits the guarded write of `api.md` ("Concurrency on text fields") without a
+mechanism of its own. `updated_by` is beside it because a wiki's list is read
+for who touched what last, and reading that out of the history for every row of
+the list would be a join for a fact the row can carry.
+
+Labels are the ordinary ones through `page_label`, under the same group rule
+and through the same code as the issue's and the epic's.
 
 ## Bootstrap
 

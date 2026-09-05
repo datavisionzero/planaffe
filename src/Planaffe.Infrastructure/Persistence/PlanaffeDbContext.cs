@@ -4,6 +4,7 @@ using Planaffe.Domain.Epics;
 using Planaffe.Domain.History;
 using Planaffe.Domain.Identities;
 using Planaffe.Domain.Issues;
+using Planaffe.Domain.Pages;
 using Planaffe.Domain.Projects;
 using Planaffe.Domain.Releases;
 
@@ -73,6 +74,11 @@ public sealed class PlanaffeDbContext(DbContextOptions<PlanaffeDbContext> option
     public DbSet<Comment> Comments => Set<Comment>();
 
     public DbSet<Question> Questions => Set<Question>();
+
+    /// <summary>The project's flat wiki (VISION 7, ADR 0021).</summary>
+    public DbSet<Page> Pages => Set<Page>();
+
+    public DbSet<PageLabel> PageLabels => Set<PageLabel>();
 
     public DbSet<Release> Releases => Set<Release>();
 
