@@ -203,9 +203,17 @@ function Issues({ loaded, project, epic }: { loaded: Load<IssueSummary[]>; proje
     <Section
       title="Issues"
       action={
-        <Link className="text-xs text-brand hover:underline" to={`/${project}/issues?epic=${epic.key}`}>
-          In the issue list
-        </Link>
+        <span className="flex items-center gap-3">
+          <Link className="text-xs text-brand hover:underline" to={`/${project}/issues?epic=${epic.key}`}>
+            In the issue list
+          </Link>
+          {/* The bracket is where somebody decides that something else hangs
+              under it, so the way to add it starts here and arrives at the
+              form with the epic already filled in. */}
+          <Link className="text-xs text-brand hover:underline" to={`/${project}/issues/new?epic=${epic.key}`}>
+            New issue
+          </Link>
+        </span>
       }
     >
       {loaded.at === "asking" && <Skeleton className="h-16 w-full" />}

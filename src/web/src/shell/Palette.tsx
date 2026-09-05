@@ -169,6 +169,17 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
       }
     }
 
+    // The palette is the other way to everything the screens offer, so the
+    // three things that can be created are reachable from it too.
+    if (current !== undefined) {
+      list.push(
+        { id: "create:issue", label: "Create issue", hint: current.key, group: "Create", run: go(`/${current.key}/issues/new`) },
+        { id: "create:epic", label: "Create epic", hint: current.key, group: "Create", run: go(`/${current.key}/epics/new`) },
+      );
+    }
+
+    list.push({ id: "create:project", label: "Create project", group: "Create", run: go("/projects/new") });
+
     for (const project of projects) {
       if (project.key !== current?.key) {
         list.push({

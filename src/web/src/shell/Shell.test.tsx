@@ -224,6 +224,45 @@ describe("the shell (ADR 0006)", () => {
     expect(await screen.findByRole("heading", { name: "Create project" })).toBeInTheDocument();
   });
 
+  // `c` creates from a list, and nothing on the screen said so. The epic list
+  // has had its button all along; the issue lists say it the same way now.
+  it("offers issue creation from the header of every issue list", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.click(screen.getByRole("link", { name: "New issue" }));
+
+    expect(await screen.findByRole("heading", { name: "Create issue" })).toBeInTheDocument();
+  });
+
+  it("offers issue creation from Needs you, which is a list of issues too", async () => {
+    shell("/PLAN/needs-you");
+    const user = userEvent.setup();
+    await screen.findByRole("heading", { name: "In review · 1", level: 2 });
+
+    await user.click(screen.getByRole("link", { name: "New issue" }));
+
+    expect(await screen.findByRole("heading", { name: "Create issue" })).toBeInTheDocument();
+  });
+
+  it("offers the three things that can be created from the palette", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    await user.type(await screen.findByRole("combobox", { name: /command/i }), "create");
+
+    for (const what of ["Create issue", "Create epic", "Create project"]) {
+      expect(await screen.findByRole("option", { name: new RegExp(what) })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("option", { name: /Create epic/ }));
+
+    expect(await screen.findByRole("heading", { name: "Create epic" })).toBeInTheDocument();
+  });
+
   it("renders the sidebar controls as focusable links", async () => {
     shell("/PLAN/ready");
 

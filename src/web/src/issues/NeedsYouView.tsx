@@ -110,7 +110,9 @@ export function NeedsYouView() {
 
   return (
     <>
-      <PageHeader title="Needs you" meta={meta} />
+      <PageHeader title="Needs you" meta={meta}>
+        <Button size="sm" render={<Link to={`/${project}/issues/new`} />}>New issue</Button>
+      </PageHeader>
       {page.at === "asking" && (
         <div className="space-y-3 p-4">
           <Skeleton className="h-4 w-24" />

@@ -45,6 +45,9 @@ it("opens the epic itself: the living document, the progress and its issues", as
   expect(screen.getByText("1 of 3 closed")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "PLAN-43" })).toHaveAttribute("href", "/PLAN/issues/43");
   expect(screen.getByRole("link", { name: "In the issue list" })).toHaveAttribute("href", "/PLAN/issues?epic=PLAN-E4");
+  // Deciding that something hangs under this bracket starts here, and the
+  // form is reached with the bracket already filled in.
+  expect(screen.getByRole("link", { name: "New issue" })).toHaveAttribute("href", "/PLAN/issues/new?epic=PLAN-E4");
 
   const list = instance.calls.find((call) => new URL(call.url).pathname === "/issues")!;
   expect(new URL(list.url).searchParams.get("epic")).toBe("PLAN-E4");

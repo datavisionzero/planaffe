@@ -1,5 +1,5 @@
-import { useId, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useEffect, useId, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { api, describe, type Issue, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,9 @@ type NewIssue = Schemas["NewIssue"];
 export function NewIssueView() {
   const { project } = useParams();
   const navigate = useNavigate();
+  // The epic screen leads here with its own key in the address, so the bracket
+  // an issue is started under is not typed a second time.
+  const [search] = useSearchParams();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -27,7 +30,7 @@ export function NewIssueView() {
     } catch { setError("The instance did not answer."); } finally { setSaving(false); }
   }
 
-  return <><PageHeader title="Create issue" /><IssueForm submit="Create issue" saving={saving} error={error} onSubmit={save} /></>;
+  return <><PageHeader title="Create issue" /><IssueForm epic={search.get("epic") ?? undefined} submit="Create issue" saving={saving} error={error} onSubmit={save} /></>;
 }
 
 export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSaved: (issue: Issue) => void; onCancel: () => void }) {
@@ -58,8 +61,8 @@ function parkable(issue: Issue | undefined): boolean {
 
 type IssueDraft = { title: string; description: string; priority: number; ready: boolean; labels: string; epic: string; parent: string; assignee: string; blockedBy: string; status: "backlog" | "todo" };
 
-function IssueForm({ initial, submit, saving, error, onSubmit, onCancel }: { initial?: Issue; submit: string; saving: boolean; error?: string; onSubmit: (draft: IssueDraft) => void; onCancel?: () => void }) {
-  const [draft, setDraft] = useState<IssueDraft>({ title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name).join(", ") ?? "", epic: initial?.epic?.key ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []).join(", ") ?? "", status: initial?.status === "backlog" ? "backlog" : "todo" });
+function IssueForm({ initial, epic, submit, saving, error, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; error?: string; onSubmit: (draft: IssueDraft) => void; onCancel?: () => void }) {
+  const [draft, setDraft] = useState<IssueDraft>({ title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name).join(", ") ?? "", epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []).join(", ") ?? "", status: initial?.status === "backlog" ? "backlog" : "todo" });
   const set = <K extends keyof IssueDraft>(key: K, value: IssueDraft[K]) => setDraft((old) => ({ ...old, [key]: value }));
   const [reopens, setReopens] = useState<string>();
 
@@ -70,9 +73,18 @@ function IssueForm({ initial, submit, saving, error, onSubmit, onCancel }: { ini
     const key = value.trim();
     setReopens(undefined);
     if (key === "" || key.toUpperCase() === (initial?.epic?.key ?? "").toUpperCase()) return;
-    const { data } = await api.GET("/epics/{key}", { params: { path: { key } } });
-    if (data?.status === "closed") setReopens(`${data.key} is closed. Saving attaches this issue and reopens the epic.`);
+    setReopens(await warnAboutEpic(key));
   }
+
+  // An epic that arrived in the address was never typed, so nothing ever
+  // leaves the field and the warning would first appear as a reopened epic.
+  useEffect(() => {
+    if (epic === undefined) return;
+    let current = true;
+    void warnAboutEpic(epic).then((warning) => { if (current) setReopens(warning); });
+    return () => { current = false; };
+  }, [epic]);
+
   return <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => { event.preventDefault(); void onSubmit(draft); }}>
     <label className="grid gap-1 text-sm font-medium">Title<Input required autoFocus value={draft.title} onChange={(e) => set("title", e.target.value)} /></label>
     <MarkdownField label="Description" value={draft.description} onChange={(value) => set("description", value)} />
@@ -92,5 +104,11 @@ export function MarkdownField({ label, value, onChange, required }: { label: str
 
 function Text({ label, hint, value, change, leave }: { label: string; hint?: string; value: string; change: (value: string) => void; leave?: (value: string) => void }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<Input value={value} onChange={(e) => change(e.target.value)} onBlur={leave && ((e) => leave(e.target.value))} /></label>; }
 function Select({ label, hint, value, disabled, onChange, children }: { label: string; hint?: string; value: string | number; disabled?: boolean; onChange: (value: string) => void; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<select className="h-8 rounded-lg border bg-background px-2 disabled:text-muted-foreground" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>{children}</select></label>; }
+/** What saving an issue into that epic would also do, if anything. */
+async function warnAboutEpic(key: string): Promise<string | undefined> {
+  const { data } = await api.GET("/epics/{key}", { params: { path: { key } } });
+  return data?.status === "closed" ? `${data.key} is closed. Saving attaches this issue and reopens the epic.` : undefined;
+}
+
 function blank(value: string) { return value.trim() || null; }
 function words(value: string) { return value.split(",").map((x) => x.trim()).filter(Boolean); }

@@ -68,6 +68,12 @@ shows. Focus and the active
 row remain visible. Returning from a detail screen restores filters and scroll
 position.
 
+Creating is never the key alone. The header of every list that can be added to
+carries the act as a button — New issue on the issue lists and on Needs you,
+New epic on the epics — the epic screen offers one that arrives at the form with
+its own key already filled in, and the command palette carries all three:
+issue, epic and project.
+
 The detail screen first presents what the issue needs now: an answer field for
 an open question; the result and `done`, `canceled`, or reopen for review; open
 blockers when blocked; the holder and age when claimed. A long description is

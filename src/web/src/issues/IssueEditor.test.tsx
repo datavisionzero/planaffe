@@ -88,25 +88,36 @@ it("shows a status it cannot park and sends no status with the fields", async ()
   expect(sent).not.toHaveProperty("status");
 });
 
+const closedEpic = {
+  key: "PLAN-E1", project: "PLAN", title: "The first cut", description: "", status: "closed",
+  author: { id: "0199a000-0000-7000-8000-000000000001", name: "maintainer" },
+  labels: [], progress: { total: 4, closed: 4, done: 4, canceled: 0 },
+  created_at: "2026-08-01T10:00:00Z", updated_at: "2026-08-02T10:00:00Z", closed_at: "2026-08-02T10:00:00Z",
+};
+
 // The matrix: adding an issue to a closed epic warns that the epic reopens.
 // The instance does reopen it, and says nothing about it in the answer.
 it("warns that a closed epic reopens when an issue is attached to it", async () => {
-  installInstance({
-    "GET /epics/PLAN-E1": {
-      body: {
-        key: "PLAN-E1", project: "PLAN", title: "The first cut", description: "", status: "closed",
-        author: { id: "0199a000-0000-7000-8000-000000000001", name: "maintainer" },
-        labels: [], progress: { total: 4, closed: 4, done: 4, canceled: 0 },
-        created_at: "2026-08-01T10:00:00Z", updated_at: "2026-08-02T10:00:00Z", closed_at: "2026-08-02T10:00:00Z",
-      },
-    },
-  });
+  installInstance({ "GET /epics/PLAN-E1": { body: closedEpic } });
   renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /></Routes>);
   const user = userEvent.setup();
 
   await user.type(screen.getByLabelText("Epic"), "PLAN-E1");
   await user.tab();
 
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "PLAN-E1 is closed. Saving attaches this issue and reopens the epic.",
+  );
+});
+
+// The epic screen leads here with the bracket already decided. Nothing is
+// typed into the field, so nothing ever leaves it, and the warning the matrix
+// asks for would have arrived as a reopened epic.
+it("takes the epic from the address and warns about it unasked", async () => {
+  installInstance({ "GET /epics/PLAN-E1": { body: closedEpic } });
+  renderAt("/PLAN/issues/new?epic=PLAN-E1", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /></Routes>);
+
+  expect(screen.getByLabelText("Epic")).toHaveValue("PLAN-E1");
   expect(await screen.findByRole("status")).toHaveTextContent(
     "PLAN-E1 is closed. Saving attaches this issue and reopens the epic.",
   );

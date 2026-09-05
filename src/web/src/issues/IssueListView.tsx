@@ -126,6 +126,10 @@ export function IssueListView({ view }: { view: View }) {
   return <div className="flex min-h-0 flex-1 flex-col">
     <PageHeader title={view.label} meta={page.total === undefined ? "…" : `${page.total} ${page.total === 1 ? "issue" : "issues"}`}>
       <Button ref={filtersButton} variant={filtersOpen || explicit ? "secondary" : "outline"} size="sm" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><SlidersHorizontalIcon /> Filters</Button>
+      {/* The `c` of this list, as a control: a key nobody has met yet is not
+          an entry point, and the epic list has said it with a button all
+          along. */}
+      <Button size="sm" render={<Link to={`/${project}/issues/new`} />}>New issue</Button>
     </PageHeader>
     <div className="flex flex-wrap items-center gap-2 border-b p-2">
       <div className="relative min-w-48 flex-1 sm:max-w-sm"><SearchIcon className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" /><Input data-issue-search aria-label="Search issues" placeholder="Search issues…" value={search.get("q") ?? ""} onChange={(event) => change("q", event.target.value)} className="pl-8" /></div>
