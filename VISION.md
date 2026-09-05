@@ -485,6 +485,8 @@ The question belongs in a fixed place for humans as well:
 
 "Needs you" is not only a screen. It is a list of the API like every other (ADR 0012), and `pa needs-you --wait` holds the connection until something new lands in it — the held outgoing connection of 15.9, pointed at the human. With that, an event notification is a one-liner the user writes around `pa`, not a feature the product ships: no event mail, no webhook, no reachable address, and none of the delivery state 15.9 declines. General notifications stay on the roadmap (15.1); transactional identity email is a separate capability (ADR 0018).
 
+The web interface is the second reader of that same list. Its navigation carries a count on "Needs you" and one on "In progress", read from the lists themselves and kept current on that very wake channel rather than on a mechanism of their own. **A count is not a notification**: nothing is sent, there is no address, no recipient and no delivery state, so it takes nothing out of 14. and anticipates nothing of 15.1. A bell over a list of events was considered and put aside — such a list needs a read state per person, and with it an entity, a migration and a cleanup, for what is today a single source. The day there are several sources that no view maps onto, the bell is a question again.
+
 ## 11. Claiming — the Core Feature for Agent Operation
 
 Several agents work in parallel. It must not happen that two touch the same issue at the same time.
