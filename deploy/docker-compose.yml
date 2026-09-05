@@ -14,10 +14,10 @@ name: planaffe
 
 services:
   planaffe:
-    # `:main` follows the trunk while there is no release; once one exists this
-    # becomes `:latest`, which will move on a stable tag and never on a
-    # prerelease. An installation that wants to stay on a build names it.
-    image: ${PLANAFFE_IMAGE:-ghcr.io/datavisionzero/planaffe:main}
+    # `:latest` moves on a stable release and never on a prerelease. An
+    # installation that would rather follow the trunk names `:main`, and one
+    # that wants to stand still names a `sha-<commit>` or a version.
+    image: ${PLANAFFE_IMAGE:-ghcr.io/datavisionzero/planaffe:latest}
     restart: unless-stopped
     depends_on:
       db:

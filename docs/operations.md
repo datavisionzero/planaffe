@@ -21,6 +21,11 @@ The image carries `linux/amd64` and `linux/arm64`, so `docker compose pull`
 resolves the right one on an ARM machine without anybody naming it — a
 Raspberry Pi, an ARM VPS and a Mac on Apple Silicon all run it natively.
 
+By default that is `:latest`, which moves on a stable release and never on a
+prerelease. `docker compose pull` therefore upgrades between releases and not
+with every commit; set `PLANAFFE_IMAGE` to `:main` to follow the trunk instead,
+or to a version or a `sha-<commit>` to stand still.
+
 Two services come up: the instance and its Postgres. The instance applies its
 migrations, creates the first administrator and their token from the three
 bootstrap variables, and listens on port 8080. `GET /version` answers without
@@ -93,7 +98,7 @@ Set in `deploy/.env`; read once, at start.
 | `PLANAFFE_LOG_TOKEN` | no | | the ingest token of the logaffe project the entries belong to |
 | `PLANAFFE_LOG_LEVEL` | no | `Information` | the floor: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal` |
 | `PLANAFFE_PORT` | no | `8080` | the host port the instance is published on; it is the whole left half of the published port, so `127.0.0.1:8080` binds on loopback alone |
-| `PLANAFFE_IMAGE` | no | `ghcr.io/datavisionzero/planaffe:main` | the image; name a `sha-<commit>` tag to pin an installation |
+| `PLANAFFE_IMAGE` | no | `ghcr.io/datavisionzero/planaffe:latest` | the image: `:latest` is the newest stable release, `:1.2` the newest patch of a minor, `:main` the trunk, and a `:1.2.3` or `:sha-<commit>` pins an installation to one build |
 
 The three bootstrap variables are ignored on every start after the first — the
 instance already has identities, and a bootstrap happens once. Changing the

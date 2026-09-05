@@ -106,10 +106,26 @@ curl -sf http://localhost:8080/version
 once the migrations and the bootstrap have run.
 **Stop if:** it does not answer within a minute of the containers being healthy.
 
-## Step 6 — Build the client
+## Step 6 — Get the client
 
-The CLI is not published as a binary yet, so it is built from the clone you
-already have. It needs Go; the version is in `src/cli/go.mod`.
+`pa` is published with every release, one static binary per platform. Take the
+one for this machine:
+
+```sh
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+arch=$(uname -m); [ "$arch" = "x86_64" ] && arch=amd64; [ "$arch" = "aarch64" ] && arch=arm64
+curl -fsSL -o pa "https://github.com/datavisionzero/planaffe/releases/latest/download/pa_${os}_${arch}"
+chmod +x pa && sudo mv pa /usr/local/bin/pa
+```
+
+On Windows the asset is `pa_windows_amd64.exe`. Every release also carries a
+`checksums.txt`; verify against it if the download did not come over a
+connection you trust.
+
+**Expected:** `pa --version` prints a version.
+**Stop if:** the download 404s. That means there is no release yet for this
+platform — build it from the clone you already have instead, which needs Go at
+the version in `src/cli/go.mod`:
 
 ```sh
 cd src/cli
@@ -118,9 +134,8 @@ go install ./cmd/pa
 cd ../..
 ```
 
-**Expected:** `pa --version` prints a version. If it is not found, `~/go/bin` is
-not on the `PATH`; either add it or call the binary by its full path.
-**Stop if:** Go is not installed. That is the person's to install, like Docker.
+That puts it in `~/go/bin`; if `pa` is then not found, that directory is not on
+the `PATH`. Go is the person's to install, like Docker.
 
 ## Step 7 — Put the two variables in the environment
 

@@ -221,8 +221,9 @@ is the only thing standing between a mistake and the trunk: unit tests,
 integration tests on Testcontainers, the web build, the CLI build, and the
 contract check that fails when the installation serves a document other than the
 one checked in. A trunk commit that passes all of them publishes the image to
-`ghcr.io/datavisionzero/planaffe` under `:main` and under the commit; a pull
-request builds it and pushes nothing.
+`ghcr.io/datavisionzero/planaffe` under `:main` and under the commit, and never
+under `:latest` — a stranger's installation upgrades into that, and the trunk
+has no claim on it. A pull request builds the image and pushes nothing.
 
 The jobs whose subject does not exist yet **skip rather than fail** — the
 workflow was written whole before the four toolchains were, and a first job asks
@@ -238,6 +239,15 @@ Whatever else stands in that directory is not a gate and blocks no commit.
 be pinned to, and the rule it applies is `.github/scripts/prune-registry.py`,
 which is a file rather than a step so that it can be read and run against the
 live registry without starting a workflow.
+
+`release.yml` runs on a `v*` tag, and a tag is the only thing that makes a
+version: it is the one place `Directory.Build.props` and
+`internal/version.Version` are told something other than `0.0.0-dev`
+([ADR 0011](./adr/0011-the-api-carries-no-version-and-migrations-only-run-forward.md)).
+It refuses a tag that is not semver, refuses a commit the gate never passed,
+publishes the image under `:1.2.3`, `:1.2` and `:latest` — the last two only
+for a stable release, never a prerelease — cuts `pa` for five platforms with
+their checksums, and creates the GitHub release those hang on.
 
 ## What is deliberately not here
 
