@@ -109,7 +109,8 @@ export function IssueListView({ view }: { view: View }) {
         const next = Math.max(0, Math.min(page.items.length - 1, active + (is("list:next", event) ? 1 : -1)));
         setActive(next); virtualizer.scrollToIndex(next, { align: "auto" });
       } else if (!editing && is("list:open", event) && page.items[active]) void navigate(keyPath(page.items[active].key));
-      else if (!editing && is("list:create", event)) { event.preventDefault(); void navigate(`/${project}/issues/new`); }
+      // `c` is the frame's, not this list's: it creates in the project from
+      // every screen of it.
       else if (is("list:close", event) && filtersOpen) { setFiltersOpen(false); filtersButton.current?.focus(); }
     }
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
@@ -126,7 +127,7 @@ export function IssueListView({ view }: { view: View }) {
   return <div className="flex min-h-0 flex-1 flex-col">
     <PageHeader title={view.label} meta={page.total === undefined ? "…" : `${page.total} ${page.total === 1 ? "issue" : "issues"}`}>
       <Button ref={filtersButton} variant={filtersOpen || explicit ? "secondary" : "outline"} size="sm" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen}><SlidersHorizontalIcon /> Filters</Button>
-      {/* The `c` of this list, as a control: a key nobody has met yet is not
+      {/* The `c` of the frame, as a control: a key nobody has met yet is not
           an entry point, and the epic list has said it with a button all
           along. */}
       <Button size="sm" render={<Link to={`/${project}/issues/new`} />}>New issue</Button>

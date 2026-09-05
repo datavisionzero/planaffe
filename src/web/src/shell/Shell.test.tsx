@@ -263,6 +263,39 @@ describe("the shell (ADR 0006)", () => {
     expect(await screen.findByRole("heading", { name: "Create epic" })).toBeInTheDocument();
   });
 
+  // `c` used to belong to the issue list component, so it answered on three
+  // screens of seven and did nothing on the epics, the releases, the labels or
+  // an issue itself. Creating belongs to the project.
+  it("creates from every screen of the project, not only from an issue list", async () => {
+    shell("/PLAN/epics");
+    const user = userEvent.setup();
+    await screen.findByRole("heading", { name: "Epics" });
+
+    await user.keyboard("c");
+
+    expect(await screen.findByRole("heading", { name: "Create issue" })).toBeInTheDocument();
+  });
+
+  it("leaves c alone where the frame stands in no project", async () => {
+    shell("/settings");
+    const user = userEvent.setup();
+    await screen.findByRole("heading", { name: "Personal settings" });
+
+    await user.keyboard("c");
+
+    expect(screen.queryByRole("heading", { name: "Create issue" })).not.toBeInTheDocument();
+  });
+
+  it("leaves c alone while something is being typed", async () => {
+    shell("/PLAN/issues");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.type(screen.getByRole("textbox", { name: "Search issues" }), "class");
+
+    expect(screen.queryByRole("heading", { name: "Create issue" })).not.toBeInTheDocument();
+  });
+
   it("renders the sidebar controls as focusable links", async () => {
     shell("/PLAN/ready");
 

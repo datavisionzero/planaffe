@@ -1,6 +1,6 @@
 import { CommandIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { matchPath, Navigate, Route, Routes, useLocation } from "react-router";
+import { matchPath, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -39,6 +39,7 @@ const ReleaseView = lazy(() => import("@/releases/ReleaseView").then((module) =>
  */
 export function Shell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const list = useProjects();
   const projects = list.projects;
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -61,10 +62,10 @@ export function Shell() {
   }, [current]);
 
   // The keys the frame itself owns, read from `shortcuts.ts` so that this
-  // handler and the overview it feeds cannot come apart. `p` and `?` are bare
-  // keys on purpose: ⌘P is the browser's print, and taking printing away from
-  // an issue tracker costs more than the switcher gains. Bare keys are what
-  // the lists already use — `j`, `k`, `c`, `/` — so both join that alphabet
+  // handler and the overview it feeds cannot come apart. `p`, `?` and `c` are
+  // bare keys on purpose: ⌘P is the browser's print, and taking printing away
+  // from an issue tracker costs more than the switcher gains. Bare keys are
+  // what the lists already use — `j`, `k`, `/` — so they join that alphabet
   // instead of fighting the browser for a modifier.
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
@@ -89,12 +90,17 @@ export function Shell() {
       } else if (is("global:shortcuts", event)) {
         event.preventDefault();
         setShortcutsOpen(true);
+      } else if (is("global:create", event) && current !== undefined) {
+        // The project the frame is standing in, not the one in the address:
+        // `/settings` matches `/:project/*` too, and nothing is created there.
+        event.preventDefault();
+        void navigate(`/${current.key}/issues/new`);
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [current, navigate]);
 
   const known = projects.at === "known" ? projects.projects : [];
 
