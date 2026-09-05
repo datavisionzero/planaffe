@@ -45,7 +45,7 @@ function renderNeedsYou() {
     woken = setPulse;
 
     return (
-      <AttentionContext.Provider value={{ needsYou: null, pulse }}>
+      <AttentionContext.Provider value={{ needsYou: null, inProgress: null, pulse }}>
         <Routes><Route path="/:project/needs-you" element={<NeedsYouView />} /></Routes>
       </AttentionContext.Provider>
     );

@@ -157,3 +157,20 @@ export function pagePath(project: string, slug: string): string {
 export function pathKey(project: string, number: string): string {
   return `${project.toUpperCase()}-${number.toUpperCase()}`;
 }
+
+/**
+ * The navigation's own entry of that id. It is here for whoever needs a view's
+ * filter somewhere other than the screen — the count on a link asks the same
+ * question the link leads to, and taking the filter from here is what keeps
+ * the two from drifting apart. An unknown id is a mistake in the code, not a
+ * state to render.
+ */
+export function viewOf(id: string): View {
+  const found = views.find((view) => view.id === id);
+
+  if (found === undefined) {
+    throw new Error(`No view named ${id}.`);
+  }
+
+  return found;
+}

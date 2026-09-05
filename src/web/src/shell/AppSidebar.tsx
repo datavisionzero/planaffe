@@ -16,6 +16,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useSession } from "@/session/useSession";
+import type { Attention } from "./attention";
 import { useAttention } from "./useAttention";
 import { viewPath, views } from "./views";
 
@@ -55,7 +56,7 @@ export function AppSidebar({ project }: { project: Project | undefined }) {
                   .filter((view) => view.group === group.id)
                   .map((view) => {
                     const path = project === undefined ? "" : viewPath(project.key, view);
-                    const count = view.id === "needs-you" ? drawn(attention.needsYou) : null;
+                    const count = drawn(counted(view.id, attention));
                     return <SidebarMenuItem key={view.id}>
                       {project === undefined ? (
                         <SidebarMenuButton disabled>
@@ -98,6 +99,20 @@ export function AppSidebar({ project }: { project: Project | undefined }) {
       </SidebarFooter>
     </Sidebar>
   );
+}
+
+/**
+ * Which of the frame's numbers a link carries, if any. "Needs you" is the
+ * request and "In progress" the observation; the other links carry none —
+ * a number that is always there and barely moves is decoration, and it would
+ * take the attention away from the two that mean something.
+ */
+function counted(id: string, attention: Attention): number | null {
+  if (id === "needs-you") {
+    return attention.needsYou;
+  }
+
+  return id === "in-progress" ? attention.inProgress : null;
 }
 
 /**

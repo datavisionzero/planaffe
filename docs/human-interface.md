@@ -66,24 +66,33 @@ worth printing. Creating belongs to the project rather than to a list of it, so
 issue lists. Non-administrators do not see the admin entry,
 but hiding navigation is never the authorization check.
 
-"Needs you" in that navigation carries a count of what is waiting for a human,
-so that a reader standing on another view knows where to look. It is a number on
-a link and not a notification: nothing is sent, nothing is addressed at anybody,
-and there is no read state. At zero there is no badge, because a counter showing
-zero is not a signal; past ninety-nine it says `99+`; and where the instance did
-not answer there is no badge either — the navigation is the frame and carries no
-error. The count is read from the "Needs you" list itself rather than from a
-counter of its own, and it belongs to the name of the link, so a screen reader
-says "Needs you, 3" instead of reading two fragments in a row.
+"Needs you" and "In progress" in that navigation carry counts — what is waiting
+for a human, and what is being worked on — so that a reader standing on another
+view knows where to look. They are numbers on links and not notifications:
+nothing is sent, nothing is addressed at anybody, and there is no read state.
+At zero there is no badge, because a counter showing zero is not a signal; past
+ninety-nine it says `99+`; and where the instance did not answer there is no
+badge either — the navigation is the frame and carries no error. Each count is
+read from the list it stands on rather than from a counter of its own, and it
+belongs to the name of the link, so a screen reader says "Needs you, 3" instead
+of reading two fragments in a row.
 
-It stays current without anybody reloading the page. The frame holds one read
-against the wake channel `pa needs-you --wait` uses (`docs/api.md`, Waiting) —
-one connection per project and tab, which the "Needs you" screen shares rather
-than opening a second, and which is given up while the tab is in the background
-and taken up again the moment it is looked at. Where the instance stops
-answering, the number stays as it last was and the loop tries again with a
-growing pause: a navigation that flickered at every hiccup would be worse than
-one that is a few seconds behind.
+The other two views carry none. "All issues" would show a number that is always
+there and barely moves, which is decoration and takes the attention away from
+the two that mean something, and the count of what is ready belongs to the
+agent, which reads it through `pa next` and not through a navigation. The two
+badges also look alike: "Needs you" is the request and "In progress" the
+observation, and which of them is the more pressing is what the screen says,
+not a second colour in the frame.
+
+They stay current without anybody reloading the page. The frame holds one read
+per list against the wake channel `pa needs-you --wait` uses (`docs/api.md`,
+Waiting) — one connection per list and tab, which the "Needs you" screen shares
+rather than opening a second, and which is given up while the tab is in the
+background and taken up again the moment it is looked at. Where the instance
+stops answering, the number stays as it last was and the loop tries again with
+a growing pause: a navigation that flickered at every hiccup would be worse
+than one that is a few seconds behind.
 
 The overview is a dialog rather than a screen, so that a key can be looked up
 without leaving the list it is about. It is reached three ways — `?`, the
