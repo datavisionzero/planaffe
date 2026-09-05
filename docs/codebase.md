@@ -25,7 +25,9 @@ carries two of them.
 
 ```
 planaffe/
-├─ .github/workflows/         ci on every push, release on every tag
+├─ .github/
+│  ├─ workflows/              ci on every push, release on every tag, the registry on a clock
+│  └─ scripts/                what a workflow step is too long to be
 ├─ docs/                      the product, the decisions, and this
 │  ├─ adr/
 │  ├─ research/
@@ -226,6 +228,16 @@ The jobs whose subject does not exist yet **skip rather than fail** — the
 workflow was written whole before the four toolchains were, and a first job asks
 for the one file each subject cannot exist without. Nothing has to come back and
 enable them: `src/cli/go.mod` arriving with the CLI is what starts the Go job.
+
+The image is built on two native runners, one per architecture, and a third job
+merges their digests into the manifest index that carries the tags — so a pull
+on an ARM machine gets the ARM image without anybody naming a platform.
+
+Whatever else stands in that directory is not a gate and blocks no commit.
+`registry.yml` runs on a clock and takes away the `sha-` tags nobody can still
+be pinned to, and the rule it applies is `.github/scripts/prune-registry.py`,
+which is a file rather than a step so that it can be read and run against the
+live registry without starting a workflow.
 
 ## What is deliberately not here
 
