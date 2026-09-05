@@ -22,8 +22,10 @@ available in the browser.
 | `/:project/in-progress` | In progress | shared issue list filtered to active claims | two-line rows, no horizontal scroll |
 | `/:project/needs-you` | Needs you | question, review, unready and stuck reasons | reason and next action stay visible |
 | `/:project/issues` | All issues | shared issue list and all URL filters | filters open as a dismissible sheet |
+| `/:project/issues/new` | Create issue | title, Markdown description, priority, status, `ready`, and the five choices — labels, epic, parent, assignee, blockers | one column throughout; the pairs of fields stack, chips wrap, each suggestion list opens below its field |
 | `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs | one column; metadata as chips under the title |
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
+| `/:project/epics/new` | Create epic | title, Markdown description and the label choice | one column; the same form the epic screen edits in place |
 | `/:project/epics/:number` | Epic | Markdown description, progress and issue list | one column |
 | `/:project/releases` | Releases | `unreleased`, then published releases newest first | stacked summaries |
 | `/:project/releases/:name` | Release | notes, exact issue membership and publish/copy actions; on the open release each row can be taken out, on the newest publication rename and take back | one column |
