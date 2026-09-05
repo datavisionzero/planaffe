@@ -139,3 +139,51 @@ it("lights as many bars as the step is high, and colours only urgent", async () 
     expect(bars.some((bar) => bar.className.includes("bg-destructive"))).toBe(priority === 4);
   }
 });
+
+/**
+ * `sort=epic` makes the epic the first sort key, so a group is one unbroken run
+ * of the answer and stays one across page boundaries (PLAN-19). The screen
+ * draws the heads and does not re-sort: what comes back in that order is shown
+ * in it.
+ */
+it("groups by epic when the epic is the sort key, and names the group without one", async () => {
+  const grouped = {
+    items: [
+      anIssue("PLAN-3", "Under the shell", { epic: "PLAN-E1", priority: 4 }),
+      anIssue("PLAN-1", "Also under the shell", { epic: "PLAN-E1", priority: 1 }),
+      anIssue("PLAN-2", "Under nothing"),
+    ],
+    total: 3, has_more: false, next_cursor: null,
+  };
+  const instance = installInstance({
+    "GET /issues": grouped,
+    "GET /projects/PLAN/labels": [],
+    "GET /epics": { items: [{ key: "PLAN-E1", project: "PLAN", title: "The shell", status: "open" }], total: 1, has_more: false, next_cursor: null },
+  });
+  renderAt("/PLAN/issues?sort=epic", <Routes><Route path="/:project/:view" element={<IssueListView view={all} />} /></Routes>);
+
+  await screen.findByText("Under the shell");
+
+  expect(new URL(instance.calls.find((call) => new URL(call.url).pathname === "/issues")!.url).searchParams.get("sort")).toBe("epic");
+  // The head carries the key and the epic's own title, and the run that hangs
+  // under no epic says so rather than trailing off the end of the list.
+  expect(screen.getByText("PLAN-E1")).toBeInTheDocument();
+  expect(screen.getByText("The shell")).toBeInTheDocument();
+  expect(screen.getByText("No epic")).toBeInTheDocument();
+  // Heads are not options: the listbox still holds only the three issues.
+  expect(within(screen.getByRole("listbox", { name: "All issues issues" })).getAllByRole("option")).toHaveLength(3);
+});
+
+it("draws no group heads under any other sort", async () => {
+  installInstance({
+    "GET /issues": { items: [anIssue("PLAN-1", "Under the shell", { epic: "PLAN-E1" })], total: 1, has_more: false, next_cursor: null },
+    "GET /projects/PLAN/labels": [],
+    "GET /epics": { items: [], total: 0, has_more: false, next_cursor: null },
+  });
+  renderAt("/PLAN/issues", <Routes><Route path="/:project/:view" element={<IssueListView view={all} />} /></Routes>);
+
+  await screen.findByText("Under the shell");
+
+  expect(screen.queryByText("PLAN-E1")).not.toBeInTheDocument();
+  expect(screen.queryByText("No epic")).not.toBeInTheDocument();
+});

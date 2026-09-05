@@ -176,9 +176,20 @@ same filters and sort it was issued for; the server refuses a cursor that does
 not fit. `total` counts everything the filters match, `has_more` says whether a
 next page exists, and `next_cursor` is `null` on the last page.
 
-Collections of issues sort by `sort=updated|created|priority` with
+Collections of issues sort by `sort=updated|created|priority|epic` with
 `order=asc|desc`, default `updated desc`; `priority` sorts `priority desc,
 created_at asc` regardless of `order`, which is the order `next` uses.
+
+`epic` makes the epic the first sort key, so that a group opens exactly once
+and never a second time on the next page — a list that groups by epic groups by
+sorting, not by cutting up the page it happens to hold. The chain is the epic
+key ascending in the two halves it is made of, the project's key and then the
+epic's number, so that `PLAN-E9` comes before `PLAN-E10`; the issues under no
+epic are one group at the end. Within a group it is `priority desc, number
+asc` — within a theme the question is what is up next, the same question `next`
+answers. Like `priority`, `epic` ignores `order`. The secondary sort is named
+here so that it is read as a decision rather than as an accident of the
+implementation.
 
 ## Errors
 
@@ -755,5 +766,5 @@ row reason.
 
 The default issue order for the Ready preset is the business order used by
 `next`; other issue lists default to most recently updated. Alternative sorts
-are updated, created and priority. A cursor binds every filter and ordering
-choice, so changing URL state starts a new page sequence.
+are updated, created, priority and epic. A cursor binds every filter and
+ordering choice, so changing URL state starts a new page sequence.

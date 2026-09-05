@@ -77,13 +77,26 @@ export function IssueListView({ view }: { view: View }) {
   }, [fingerprint, query]);
 
   useEffect(() => { void requestPage(); }, [requestPage]);
+  // `sort=epic` makes the epic the first sort key, so a group is one unbroken
+  // run of the list and stays one across page boundaries (`docs/api.md`). The
+  // heads are rows of the same virtual window, of a height of their own.
+  const rows = useMemo(() => {
+    if (query.sort !== "epic") return page.items.map((_issue, index) => ({ head: null, index }));
+    let open: string | null | undefined;
+    return page.items.flatMap((issue, index) => {
+      const opens = index === 0 || issue.epic !== open;
+      open = issue.epic;
+      return opens ? [{ head: issue.epic, index: -1 }, { head: null, index }] : [{ head: null, index }];
+    });
+  }, [page.items, query.sort]);
+
   // TanStack Virtual deliberately returns an imperative object; React Compiler
   // cannot memoize this hook, while the component itself remains safe.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
-    count: page.items.length,
+    count: rows.length,
     getScrollElement: () => scrollElement.current,
-    estimateSize: () => 44,
+    estimateSize: (index) => rows[index]?.index === -1 ? 30 : 44,
     // Also gives server rendering and layout-less DOM tests a useful first
     // window; ResizeObserver replaces it with the real viewport immediately.
     initialRect: { width: 800, height: 600 },
@@ -92,12 +105,16 @@ export function IssueListView({ view }: { view: View }) {
   const virtualItems = virtualizer.getVirtualItems();
   const visibleItems = virtualItems.length > 0
     ? virtualItems
-    : page.items.slice(0, 14).map((_item, index) => ({ index, key: index, start: index * 44, end: (index + 1) * 44, size: 44, lane: 0 }));
+    : rows.slice(0, 14).map((row, index) => {
+        const size = row.index === -1 ? 30 : 44;
+        const start = rows.slice(0, index).reduce((total, before) => total + (before.index === -1 ? 30 : 44), 0);
+        return { index, key: index, start, end: start + size, size, lane: 0 };
+      });
 
   useEffect(() => {
     const last = virtualItems.at(-1)?.index;
-    if (last !== undefined && last >= page.items.length - 8 && page.at === "known" && page.nextCursor !== null) void requestPage(page.nextCursor);
-  }, [page, requestPage, virtualItems]);
+    if (last !== undefined && last >= rows.length - 8 && page.at === "known" && page.nextCursor !== null) void requestPage(page.nextCursor);
+  }, [page, requestPage, rows.length, virtualItems]);
 
   const storageKey = `planaffe.issue-list:${location.pathname}${location.search}`;
   useEffect(() => {
@@ -116,14 +133,14 @@ export function IssueListView({ view }: { view: View }) {
       else if (!editing && (is("list:next", event) || is("list:previous", event))) {
         event.preventDefault();
         const next = Math.max(0, Math.min(page.items.length - 1, active + (is("list:next", event) ? 1 : -1)));
-        setActive(next); virtualizer.scrollToIndex(next, { align: "auto" });
+        setActive(next); virtualizer.scrollToIndex(rows.findIndex((row) => row.index === next), { align: "auto" });
       } else if (!editing && is("list:open", event) && page.items[active]) void navigate(keyPath(page.items[active].key));
       // `c` is the frame's, not this list's: it creates in the project from
       // every screen of it.
       else if (is("list:close", event) && filtersOpen) { setFiltersOpen(false); filtersButton.current?.focus(); }
     }
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, filtersOpen, navigate, page.items, project, virtualizer]);
+  }, [active, filtersOpen, navigate, page.items, project, rows, virtualizer]);
 
   function change(name: string, value?: string) {
     const next = new URLSearchParams(search); next.delete(name);
@@ -149,7 +166,7 @@ export function IssueListView({ view }: { view: View }) {
     </PageHeader>
     <div className="flex flex-wrap items-center gap-2 border-b p-2">
       <div className="relative min-w-48 flex-1 sm:max-w-sm"><SearchIcon className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" /><Input id={searchId} data-issue-search aria-label="Search issues" placeholder="Search issues…" value={search.get("q") ?? ""} onChange={(event) => change("q", event.target.value)} className="pl-8" /></div>
-      <select id={sortId} aria-label="Sort issues" value={search.get("sort") ?? "updated"} onChange={(event) => change("sort", event.target.value === "updated" ? undefined : event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="priority">Priority</option></select>
+      <select id={sortId} aria-label="Sort issues" value={search.get("sort") ?? "updated"} onChange={(event) => change("sort", event.target.value === "updated" ? undefined : event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="priority">Priority</option><option value="epic">Epic</option></select>
       <Button variant="ghost" size="sm" onClick={() => change("order", (search.get("order") ?? "desc") === "desc" ? "asc" : undefined)} aria-label="Reverse sort order">{(search.get("order") ?? "desc") === "desc" ? "Descending" : "Ascending"}</Button>
     </div>
     {/* Wide: the bar stays in place above the list. Narrow: the same controls
@@ -169,7 +186,13 @@ export function IssueListView({ view }: { view: View }) {
     {page.at === "failed" && !page.items.length && <p className="p-4 text-sm text-destructive">{page.why}</p>}
     {page.at === "known" && !page.items.length && <div className="flex flex-1 flex-col items-center justify-center gap-1 p-8 text-center"><p className="text-sm">{explicit ? "No issues match these filters." : "No issues yet."}</p><p className="text-xs text-muted-foreground">{view.hint}</p></div>}
     {!!page.items.length && <div ref={scrollElement} onScroll={(event) => sessionStorage.setItem(storageKey, String(event.currentTarget.scrollTop))} className="min-h-0 flex-1 overflow-auto" role="listbox" aria-label={`${view.label} issues`} aria-busy={page.at === "asking"}>
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>{visibleItems.map((row) => <IssueRow key={page.items[row.index].key} issue={page.items[row.index]} active={row.index === active} onActive={() => setActive(row.index)} style={{ transform: `translateY(${row.start}px)`, height: row.size }} />)}</div>
+      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>{visibleItems.map((virtual) => {
+        const row = rows[virtual.index];
+        const style = { transform: `translateY(${virtual.start}px)`, height: virtual.size };
+        return row.index === -1
+          ? <GroupHead key={`epic:${row.head ?? "none"}`} epic={row.head} epics={epics} style={style} />
+          : <IssueRow key={page.items[row.index].key} issue={page.items[row.index]} active={row.index === active} onActive={() => setActive(row.index)} style={style} />;
+      })}</div>
       {page.at === "failed" && <p className="border-t p-3 text-center text-xs text-destructive">{page.why} <button className="underline" onClick={() => void requestPage()}>Try again</button></p>}
     </div>}
   </div>;
@@ -210,6 +233,20 @@ function Filter({ label, name, value, change, children }: { label: string; name:
 
 function IssueRow({ issue, active, onActive, style }: { issue: IssueSummary; active: boolean; onActive: () => void; style: React.CSSProperties }) {
   return <div role="option" aria-selected={active} className="absolute left-0 top-0 w-full border-b" style={style} onMouseMove={onActive}><Link to={keyPath(issue.key)} className={`grid h-full grid-cols-[auto_4.5rem_1fr_auto] items-center gap-x-2 px-3 hover:bg-accent focus-visible:bg-accent focus-visible:outline-hidden sm:grid-cols-[auto_5rem_minmax(8rem,1fr)_auto_auto_auto] ${active ? "bg-accent/70" : ""}`}><StatusDot status={issue.status} /><span className="font-mono text-xs text-muted-foreground">{issue.key}</span><span className="min-w-0 truncate"><span>{issue.title}</span>{issue.deleted_at != null && <span className="text-muted-foreground"> · deleted</span>}<span className="mt-0.5 block truncate text-xs text-muted-foreground sm:hidden">{issue.claim?.holder.name ?? issue.labels.join(" · ")}</span></span><span className="hidden items-center gap-1 md:flex">{issue.labels.slice(0, 3).map((name) => <Badge key={name} variant="secondary" className="font-normal">{name}</Badge>)}</span><span className="hidden max-w-32 truncate text-xs text-muted-foreground sm:inline">{issue.claim?.holder.name ?? issue.assignee?.name}</span><span className="flex w-6 justify-end"><PriorityMark priority={issue.priority} /></span></Link></div>;
+}
+
+/**
+ * The head of an epic's group. It is `presentation` inside the listbox, which
+ * takes only options: the run below it is the ordering the instance answered
+ * with, and every row still says which issue it is.
+ */
+function GroupHead({ epic, epics, style }: { epic: string | null; epics: Schemas["EpicSummary"][]; style: React.CSSProperties }) {
+  const title = epics.find((candidate) => candidate.key === epic)?.title;
+  return <div role="presentation" className="absolute left-0 top-0 flex w-full items-center gap-2 border-b bg-muted/40 px-3 text-xs text-muted-foreground" style={style}>
+    {epic === null
+      ? <span className="font-medium">No epic</span>
+      : <><span className="font-mono">{epic}</span><span className="min-w-0 truncate">{title}</span></>}
+  </div>;
 }
 
 function Loading() { return <div className="divide-y" aria-busy>{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex h-11 items-center gap-3 px-4"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 flex-1" /></div>)}</div>; }

@@ -275,7 +275,7 @@ func newIssueList(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&hasOpenQuestion, "has-open-question", false, "only issues with an open question")
 	cmd.Flags().BoolVar(&deleted, "deleted", false, "only issues in their grace period — the one read that sees deleted rows")
 	cmd.Flags().StringVarP(&search, "query", "q", "", "full-text search in issue text, comments and questions")
-	cmd.Flags().StringVar(&sort, "sort", "", "updated, created or priority")
+	cmd.Flags().StringVar(&sort, "sort", "", "updated, created, priority or epic")
 	cmd.Flags().StringVar(&order, "order", "", "asc or desc")
 	cmd.Flags().StringVar(&cursor, "cursor", "", "the next page, as the previous one said")
 	cmd.Flags().IntVar(&limit, "limit", 50, "1 to 200")

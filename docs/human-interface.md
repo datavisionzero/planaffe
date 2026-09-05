@@ -23,7 +23,7 @@ read, so nothing has to be known about Markdown to write one
 | `/:project/ready` | Ready | shared issue list with workable defaults | two-line rows, no horizontal scroll |
 | `/:project/in-progress` | In progress | shared issue list filtered to active claims | two-line rows, no horizontal scroll |
 | `/:project/needs-you` | Needs you | question, review, unready and stuck reasons | reason and next action stay visible |
-| `/:project/issues` | All issues | shared issue list and all URL filters | filters open as a dismissible sheet |
+| `/:project/issues` | All issues | shared issue list, all URL filters, and the four sorts — by epic it groups | filters open as a dismissible sheet |
 | `/:project/issues/new` | Create issue | title, Markdown description, priority, status, `ready`, and the five choices — labels, epic, parent, assignee, blockers | one column throughout; the pairs of fields stack, chips wrap, each suggestion list opens below its field |
 | `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs | one column; metadata as chips under the title |
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
@@ -96,6 +96,15 @@ author, blocked, `ready`, sort and order live in the URL. The server supplies
 filter choices. An empty project and an empty filtered result are distinct
 states. The command palette shows a few full-text matches and links to the full
 filtered list.
+
+Sorting by epic groups the list. It groups by sorting rather than by cutting up
+the page it happens to hold — the epic is the first sort key on the server
+(`docs/api.md`), so a group is one unbroken run and opens exactly once, whatever
+page it began on. A head names the epic and its title, the run for the issues
+under no epic comes last and says "No epic" rather than trailing off the end,
+and within a group the order is what is up next: priority first. The heads are
+rows of the same virtual window and are `presentation` inside the listbox, which
+takes only options; every row still says which issue it is.
 
 A row marks the two things that are scales rather than words twice over, so
 that neither rests on colour alone. The status is a dot whose fill says the

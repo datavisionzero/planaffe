@@ -15,16 +15,21 @@ namespace Planaffe.Application.Acts;
 /// </summary>
 public static class IssueCursor
 {
-    private sealed record Payload(string F, DateTimeOffset? T, short? P, int N, Guid I);
+    private sealed record Payload(string F, DateTimeOffset? T, short? P, int N, Guid I, string? K = null, int? E = null);
 
     public static string Encode(IssueQuery query, IssueSort sort, SortOrder order, IssueRow last)
     {
         var payload = new Payload(
             Fingerprint(query, sort, order),
             sort is IssueSort.Updated ? last.UpdatedAt : last.CreatedAt,
-            sort is IssueSort.Priority ? (short)last.Priority : null,
+            sort is IssueSort.Priority or IssueSort.Epic ? (short)last.Priority : null,
             last.Number,
-            last.Id);
+            last.Id,
+            // The epic key, in the two halves the comparison chain uses. A row
+            // under no epic carries no number, which is the extreme value at
+            // the far end of that chain rather than a missing one.
+            sort is IssueSort.Epic ? last.ProjectKey : null,
+            sort is IssueSort.Epic ? last.EpicNumber : null);
 
         return Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(payload))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -50,7 +55,8 @@ public static class IssueCursor
             throw new Refusal(RefusalCode.CursorInvalid, "The cursor is not one this server issued for these filters and this sort.");
         }
 
-        return new IssuePosition(payload.T, payload.P is { } p ? (Priority)p : null, payload.N, payload.I);
+        return new IssuePosition(
+            payload.T, payload.P is { } p ? (Priority)p : null, payload.N, payload.I, payload.K ?? string.Empty, payload.E);
     }
 
     private static string Fingerprint(IssueQuery query, IssueSort sort, SortOrder order)

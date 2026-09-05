@@ -495,15 +495,21 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
 
     public Task SaveAsync(CancellationToken cancellationToken) => context.SaveChangesAsync(cancellationToken);
 
+    // The epic joins in for its number alone, so that `sort=epic` can order by
+    // the key a reader sees. It is a left join on a primary key beside the one
+    // the project already needs.
     private IQueryable<IssueRow> Live() =>
         from i in context.IssueReads
         join p in context.Projects on i.ProjectId equals p.Id
+        join e in context.Epics on i.EpicId equals e.Id into epics
+        from e in epics.DefaultIfEmpty()
         where p.DeletedAt == null
         select new IssueRow
         {
             Id = i.Id, ProjectId = i.ProjectId, ProjectKey = p.Key, Number = i.Number, Title = i.Title,
             Description = i.Description, Result = i.Result, Status = i.Status, Ready = i.Ready, Priority = i.Priority,
-            AssigneeId = i.AssigneeId, EpicId = i.EpicId, ParentId = i.ParentId, ClaimedBy = i.ClaimedBy, ClaimedAt = i.ClaimedAt,
+            AssigneeId = i.AssigneeId, EpicId = i.EpicId, EpicNumber = e == null ? null : e.Number, ParentId = i.ParentId,
+            ClaimedBy = i.ClaimedBy, ClaimedAt = i.ClaimedAt,
             ClaimExpiresAt = i.ClaimExpiresAt, AuthorId = i.AuthorId, CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
             ClosedAt = i.ClosedAt,
         };
@@ -513,12 +519,15 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     private IQueryable<IssueRow> Deleted() =>
         from i in context.Issues
         join p in context.Projects on i.ProjectId equals p.Id
+        join e in context.Epics on i.EpicId equals e.Id into epics
+        from e in epics.DefaultIfEmpty()
         where i.DeletedAt != null
         select new IssueRow
         {
             Id = i.Id, ProjectId = i.ProjectId, ProjectKey = p.Key, Number = i.Number, Title = i.Title,
             Description = i.Description, Result = i.Result, Status = i.Status, Ready = i.Ready, Priority = i.Priority,
-            AssigneeId = i.AssigneeId, EpicId = i.EpicId, ParentId = i.ParentId, ClaimedBy = i.Claim!.HolderId, ClaimedAt = i.Claim!.ClaimedAt,
+            AssigneeId = i.AssigneeId, EpicId = i.EpicId, EpicNumber = e == null ? null : e.Number, ParentId = i.ParentId,
+            ClaimedBy = i.Claim!.HolderId, ClaimedAt = i.Claim!.ClaimedAt,
             ClaimExpiresAt = i.Claim!.ExpiresAt, AuthorId = i.AuthorId, CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
             ClosedAt = i.ClosedAt, DeletedAt = i.DeletedAt, DeletedBy = i.DeletedBy,
         };
@@ -630,6 +639,17 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
             (IssueSort.Created, SortOrder.Desc) => rows.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Number).ThenByDescending(r => r.Id),
             (IssueSort.Created, _) => rows.OrderBy(r => r.CreatedAt).ThenBy(r => r.Number).ThenBy(r => r.Id),
             (IssueSort.Priority, _) => rows.OrderByDescending(r => r.Priority).ThenBy(r => r.CreatedAt).ThenBy(r => r.Number).ThenBy(r => r.Id),
+            // The epic key in the two halves it is made of, so that PLAN-E9
+            // comes before PLAN-E10 rather than after it, and the issues under
+            // no epic as one group at the end. Within a group, what is up
+            // next: priority descending, then the number.
+            (IssueSort.Epic, _) => rows
+                .OrderBy(r => r.EpicNumber == null)
+                .ThenBy(r => r.ProjectKey)
+                .ThenBy(r => r.EpicNumber)
+                .ThenByDescending(r => r.Priority)
+                .ThenBy(r => r.Number)
+                .ThenBy(r => r.Id),
             _ => throw new ArgumentOutOfRangeException(nameof(sort)),
         };
 
@@ -654,7 +674,47 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                 || (r.Priority == (after.Priority ?? default)
                     && (r.CreatedAt > time
                         || (r.CreatedAt == time && (r.Number > number || (r.Number == number && r.Id.CompareTo(id) > 0)))))),
+            (IssueSort.Epic, _) => AfterEpic(rows, after),
             _ => throw new ArgumentOutOfRangeException(nameof(sort)),
         };
+    }
+
+    /// <summary>
+    /// The keyset for <c>sort=epic</c>, whose chain is six long: whether the
+    /// row hangs under an epic at all, the project key, the epic number,
+    /// priority descending, the number, the id. Whether the page ended inside
+    /// an epic or in the group at the end is known before the query is built,
+    /// so it is two statements rather than one with a case in it — this is the
+    /// place where a wrong comparison silently skips or repeats rows.
+    /// </summary>
+    private static IQueryable<IssueRow> AfterEpic(IQueryable<IssueRow> rows, IssuePosition after)
+    {
+        var project = after.ProjectKey;
+        var priority = after.Priority ?? default;
+        var number = after.Number;
+        var id = after.Id;
+
+        if (after.EpicNumber is not { } epic)
+        {
+            // The page ended in the group at the end, which nothing follows
+            // but itself.
+            return rows.Where(r =>
+                r.EpicNumber == null
+                && (r.ProjectKey.CompareTo(project) > 0
+                    || (r.ProjectKey == project
+                        && (r.Priority < priority
+                            || (r.Priority == priority
+                                && (r.Number > number || (r.Number == number && r.Id.CompareTo(id) > 0)))))));
+        }
+
+        return rows.Where(r =>
+            r.EpicNumber == null
+            || r.ProjectKey.CompareTo(project) > 0
+            || (r.ProjectKey == project
+                && (r.EpicNumber > epic
+                    || (r.EpicNumber == epic
+                        && (r.Priority < priority
+                            || (r.Priority == priority
+                                && (r.Number > number || (r.Number == number && r.Id.CompareTo(id) > 0))))))));
     }
 }

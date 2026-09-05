@@ -38,7 +38,7 @@ public sealed record IssueListRequest(
     int? Limit);
 
 /// <summary>
-/// A page of slim issues (ADR 0012): every filter of <c>docs/api.md</c>, three
+/// A page of slim issues (ADR 0012): every filter of <c>docs/api.md</c>, four
 /// sorts, a cursor rather than an offset — because agents insert while others
 /// read, and an offset would skip or repeat under them.
 /// </summary>
@@ -72,7 +72,8 @@ public sealed class ListIssues(
             null or "updated" => IssueSort.Updated,
             "created" => IssueSort.Created,
             "priority" => IssueSort.Priority,
-            _ => throw Refusal.Validation("sort", "sort is updated, created or priority."),
+            "epic" => IssueSort.Epic,
+            _ => throw Refusal.Validation("sort", "sort is updated, created, priority or epic."),
         };
 
         var order = request.Order?.ToLowerInvariant() switch

@@ -169,6 +169,100 @@ public sealed class IssueEndpointTests(PostgresFixture postgres)
         await ProjectEndpointTests.Problem(await admin.GetAsync("/issues?limit=201", Ct), HttpStatusCode.BadRequest, "validation");
     }
 
+    // The decision of PLAN-19: a list that groups by epic groups by sorting.
+    // A group that opens a second time on page two is not a group, it is a
+    // display error — so this pages the whole list and asks where each group
+    // begins and ends, rather than looking at one page.
+    [Fact]
+    public async Task Sorting_by_epic_opens_every_group_exactly_once_across_the_pages()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Ready(instance);
+
+        // Eleven epics, so that E10 and E11 have to sort behind E9 rather than
+        // where a plain comparison of the key string would put them.
+        for (var e = 1; e <= 11; e++)
+        {
+            using var epic = await admin.PostAsJsonAsync("/epics", new { project = "PLAN", title = $"Epic {e}" }, Ct);
+            Assert.Equal(HttpStatusCode.Created, epic.StatusCode);
+        }
+
+        // Twelve issues per epic and twelve under none, in an order that has
+        // nothing to do with the one they are expected back in.
+        var issues = new List<object>();
+        for (var i = 0; i < 12; i++)
+        {
+            for (var e = 11; e >= 1; e--)
+            {
+                issues.Add(new { title = $"E{e} #{i}", epic = $"PLAN-E{e}", priority = (i + e) % 5 });
+            }
+
+            issues.Add(new { title = $"Loose #{i}", priority = i % 5 });
+        }
+
+        foreach (var batch in issues.Chunk(72))
+        {
+            using var created = await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = batch }, Ct);
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        }
+
+        var seen = new List<JsonElement>();
+        string? cursor = null;
+        var pages = 0;
+
+        do
+        {
+            var url = "/issues?project=PLAN&sort=epic&limit=25" + (cursor is null ? string.Empty : $"&cursor={Uri.EscapeDataString(cursor)}");
+            var page = await admin.GetFromJsonAsync<JsonElement>(url, Ct);
+            seen.AddRange(page.GetProperty("items").EnumerateArray());
+            cursor = page.GetProperty("has_more").GetBoolean() ? page.GetProperty("next_cursor").GetString() : null;
+            pages++;
+        }
+        while (cursor is not null);
+
+        Assert.True(pages >= 6, $"{pages} pages is not enough to cross a group boundary in the middle of a page.");
+        var keys = seen.Select(i => i.GetProperty("key").GetString()!).ToArray();
+        Assert.Equal(12 * 12, keys.Length);
+        Assert.Equal(keys.Length, keys.Distinct().Count());
+
+        // Every group is one unbroken run, in key order, with the issues under
+        // no epic as the last run of all.
+        var groups = seen.Select(i => i.GetProperty("epic").GetString()).ToArray();
+        var opened = new List<string?>();
+        for (var i = 0; i < groups.Length; i++)
+        {
+            if (i == 0 || groups[i] != groups[i - 1])
+            {
+                opened.Add(groups[i]);
+            }
+        }
+
+        Assert.Equal(
+            [.. Enumerable.Range(1, 11).Select(e => $"PLAN-E{e}"), null],
+            opened);
+        Assert.Equal(12, groups.Count(g => g is null));
+
+        // Within a group: priority descending, then the number.
+        foreach (var group in opened)
+        {
+            var inside = seen
+                .Where(i => i.GetProperty("epic").GetString() == group)
+                .Select(i => (Priority: i.GetProperty("priority").GetInt32(), Number: int.Parse(i.GetProperty("key").GetString()!.Split('-')[1], System.Globalization.CultureInfo.InvariantCulture)))
+                .ToArray();
+
+            Assert.Equal([.. inside.OrderByDescending(i => i.Priority).ThenBy(i => i.Number)], inside);
+        }
+
+        // A cursor issued for this sort is still refused by another one.
+        var first = await admin.GetFromJsonAsync<JsonElement>("/issues?project=PLAN&sort=epic&limit=25", Ct);
+        var bound = first.GetProperty("next_cursor").GetString()!;
+        await ProjectEndpointTests.Problem(
+            await admin.GetAsync($"/issues?project=PLAN&sort=priority&cursor={Uri.EscapeDataString(bound)}", Ct),
+            HttpStatusCode.BadRequest,
+            "cursor-invalid");
+        await ProjectEndpointTests.Problem(await admin.GetAsync("/issues?project=PLAN&sort=nonsense", Ct), HttpStatusCode.BadRequest, "validation");
+    }
+
     [Fact]
     public async Task The_filters_narrow_the_list()
     {

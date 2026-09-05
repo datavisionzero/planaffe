@@ -37,6 +37,13 @@ public sealed record IssueRow
 
     public Guid? EpicId { get; init; }
 
+    /// <summary>
+    /// The number behind the <c>E</c> of the epic's key, joined in beside the
+    /// id because <c>sort=epic</c> orders by the key a reader sees and not by a
+    /// Guid that means nothing to anybody.
+    /// </summary>
+    public int? EpicNumber { get; init; }
+
     public Guid? ParentId { get; init; }
 
     public Guid? ClaimedBy { get; init; }
@@ -59,6 +66,9 @@ public sealed record IssueRow
 
     public string Key => IssueKey.Of(ProjectKey, Number);
 
+    /// <summary>The epic's key, or <c>null</c> where the issue hangs under none.</summary>
+    public string? EpicKey => EpicNumber is { } number ? Domain.Projects.EpicKey.Of(ProjectKey, number) : null;
+
     public bool Closed => Status is IssueStatus.Done or IssueStatus.Canceled;
 }
 
@@ -73,6 +83,13 @@ public enum IssueSort
     Updated,
     Created,
     Priority,
+
+    /// <summary>
+    /// The epic as the first sort key, so that a group opens exactly once and
+    /// not again on the next page: epic key ascending with the issues under no
+    /// epic last, then priority descending, then the number.
+    /// </summary>
+    Epic,
 }
 
 public enum SortOrder
@@ -112,7 +129,10 @@ public sealed record IssueQuery(
 /// in one act share a timestamp, and the id's order within a millisecond is
 /// random — the way the index <c>issue_next</c> is ordered.
 /// </summary>
-public sealed record IssuePosition(DateTimeOffset? Time, Priority? Priority, int Number, Guid Id);
+/// <param name="ProjectKey">Under <c>sort=epic</c> the first half of the epic key; empty otherwise.</param>
+/// <param name="EpicNumber">Under <c>sort=epic</c> the second half, <c>null</c> where the last item hung under no epic.</param>
+public sealed record IssuePosition(
+    DateTimeOffset? Time, Priority? Priority, int Number, Guid Id, string ProjectKey = "", int? EpicNumber = null);
 
 public sealed record IssuePageRows(IReadOnlyList<IssueRow> Items, int Total, bool HasMore);
 
