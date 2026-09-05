@@ -17,6 +17,7 @@ Existing issue trackers are built for a world in which humans write, plan, move 
 - **Too much ceremony.** Status transitions with mandatory-field dialogs, sprint planning, story points, workflow designers, custom fields — overhead that creates no value whatsoever for a solo developer working with agents.
 - **Not built for agents.** APIs exist, but they are an afterthought: no CLI that was thought through, no clear semantics for an agent taking a ticket exclusively, no concept of "this ticket is ready for an agent".
 - **Too broad.** Helpdesk, product management, roadmapping, portfolio levels — a feature surface a two-person development team never touches but has to click past every day.
+- **Slow where it now counts: through the agent.** Every one of them has an API, and an MCP server in front of it makes that API reachable for an agent. What neither fixes is the shape underneath: a ticket is written in several calls, against a generic schema with a hundred fields, in a markup of the tracker's own — and every answer comes back into the agent's context in full.
 
 ### 2.1 Why not GitHub Issues, GitLab, or Markdown in the repository?
 
@@ -33,6 +34,18 @@ These three do not meet the criticism above: `gh` is free, mature and already in
 **What it costs us.** The automatic link to the code is lost: "Fixes #12" closes the issue on GitHub; here, the ticket ID in the branch name and the commit subject is a convention until there is a forge integration. External contributors have no account with us. And one more container runs.
 
 **So we do not replace GitHub Issues, we work next to it:** GitHub Issues stays the public intake, planaffe is the internal working level where things are broken down, claimed and worked off. Where GitHub Issues is enough, use it.
+
+### 2.2 An API is not the same as being fast
+
+The bullet above is the one that only shows itself in use, so it gets its own paragraph.
+
+**An MCP server in front of a big tracker makes it reachable, not fast.** It translates; it does not remove a single round trip. Creating one ticket there is a handful of calls — create it, then set what the create call would not take, then link it to its parent and its blockers — each against a schema built for every industry that tracker serves, and each answering with a payload written for a UI rather than for a reader. The description goes in as that product's own markup, so the agent translates what it just wrote. Nothing in that chain is broken. It is simply expensive, and it is expensive per ticket.
+
+**Context is the resource this costs.** An agent has one hard budget (6.1), and a generic API spends it on envelopes: field catalogues, permission blocks, rendered variants of a text the agent already had. Break an assignment into seven tickets that way and a noticeable share of a run is gone before the first line of code is written.
+
+**What we hold against it is the shape, not the server.** One command creates a ticket with its epic, its labels and its blockers; the description arrives as Markdown on stdin, because Markdown is what it was already; the answer is the two lines somebody actually reads (6.1). The difference is not a few hundred milliseconds of response time — it is whether a human can go through a dozen items in one conversation without the conversation becoming a queue.
+
+That is the promise the CLI carries for the whole product: **the unit of measure is not the server's latency, it is what one ticket costs in round trips and context.** Whoever tries the same conversation against a tracker that was built for humans clicking feels the difference immediately, and it is the reason agent-first (4.) is the first principle and not the last.
 
 ## 3. Target Group
 
@@ -708,6 +721,7 @@ Unsorted, not yet decided:
 - From `git clone` to the first issue created in under five minutes, with a single command.
 - An AI agent can carry out its complete working cycle through the CLI, without a human opening the UI.
 - A status change and a claim cost exactly one action each.
+- A ticket written in a conversation costs one command and one round trip — epic, labels and blockers included (2.2).
 - The five-minute path in the README is the only documentation a new user needs for their first complete agent cycle.
 - Operations consist of Postgres backups — nothing else.
 
