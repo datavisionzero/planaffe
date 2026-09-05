@@ -80,4 +80,24 @@ EXPOSE 8080
 RUN chown -R $APP_UID:$APP_UID /app
 USER $APP_UID
 
+# Where this image came from, said by the image itself. The package page on
+# GHCR carries the same link, but that is a property of the registry: an image
+# somebody mirrors or copies into their own registry keeps these and loses
+# that. Two of them repeat the arguments the build stage consumed, so they are
+# declared again here — an ARG belongs to one stage.
+#
+# Last, after the COPYs and after the only RUN that costs anything, because
+# `revision` changes on every commit and a label is the cheapest layer there
+# is. Nothing below it has to be rebuilt when it does.
+ARG VERSION=0.0.0-dev
+ARG REVISION=
+LABEL org.opencontainers.image.title="planaffe" \
+      org.opencontainers.image.description="A lean, self-hosted issue tracker for software development in the agentic age." \
+      org.opencontainers.image.source="https://github.com/datavisionzero/planaffe" \
+      org.opencontainers.image.documentation="https://github.com/datavisionzero/planaffe/blob/main/docs/operations.md" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="datavisionzero" \
+      org.opencontainers.image.version="$VERSION" \
+      org.opencontainers.image.revision="$REVISION"
+
 ENTRYPOINT ["planaffe"]
