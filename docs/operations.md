@@ -46,7 +46,9 @@ the socket, and behind a proxy that is the proxy's own address for every
 request: the failed-sign-in limit of twenty per address in fifteen minutes then
 counts every caller together, and twenty bad passwords by anybody stop
 everybody until the window passes. `all` trusts whoever connects, so publish no
-port the proxy does not own.
+port the proxy does not own: where the proxy runs on the same machine, set
+`PLANAFFE_PORT=127.0.0.1:8080` and the instance is reachable from that machine
+and from nowhere else.
 
 ## Upgrading
 
@@ -86,7 +88,7 @@ Set in `deploy/.env`; read once, at start.
 | `PLANAFFE_LOG_ENDPOINT` | no | | a logaffe instance to log into, scheme and host; set together with the token (ADR 0008) |
 | `PLANAFFE_LOG_TOKEN` | no | | the ingest token of the logaffe project the entries belong to |
 | `PLANAFFE_LOG_LEVEL` | no | `Information` | the floor: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal` |
-| `PLANAFFE_PORT` | no | `8080` | the host port the instance is published on |
+| `PLANAFFE_PORT` | no | `8080` | the host port the instance is published on; it is the whole left half of the published port, so `127.0.0.1:8080` binds on loopback alone |
 | `PLANAFFE_IMAGE` | no | `ghcr.io/datavisionzero/planaffe:main` | the image; name a `sha-<commit>` tag to pin an installation |
 
 The three bootstrap variables are ignored on every start after the first — the
