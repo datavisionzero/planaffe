@@ -27,11 +27,13 @@ public sealed class Labels(PlanaffeDbContext context) : ILabels
     public Task SaveAsync(Label label, CancellationToken cancellationToken) =>
         SaveOrRefuseTheNameAsync(label.Name, cancellationToken);
 
-    // The live issues carrying this label and another live label of the group:
-    // what a group change would leave with two of one group.
-    public async Task<IReadOnlyList<string>> IssuesWithAnotherOfGroupAsync(
-        Label label, string groupName, CancellationToken cancellationToken) =>
-        await (
+    // The live issues and epics carrying this label and another live label of
+    // the group: what a group change would leave with two of one group. Epics
+    // carry labels under the same rule, so they answer the same question.
+    public async Task<GroupClash> ClashesWithGroupAsync(
+        Label label, string groupName, CancellationToken cancellationToken)
+    {
+        var issues = await (
             from issue in context.Issues
             where issue.DeletedAt == null
             where context.IssueLabels.Any(il => il.IssueId == issue.Id && il.LabelId == label.Id)
@@ -43,6 +45,22 @@ public sealed class Labels(PlanaffeDbContext context) : ILabels
             join project in context.Projects on issue.ProjectId equals project.Id
             orderby issue.Number
             select project.Key + "-" + issue.Number).ToListAsync(cancellationToken);
+
+        var epics = await (
+            from epic in context.Epics
+            where epic.DeletedAt == null
+            where context.EpicLabels.Any(el => el.EpicId == epic.Id && el.LabelId == label.Id)
+            where (
+                from el in context.EpicLabels
+                join other in context.Labels on el.LabelId equals other.Id
+                where el.EpicId == epic.Id && other.Id != label.Id && other.DeletedAt == null && other.Group == groupName
+                select el).Any()
+            join project in context.Projects on epic.ProjectId equals project.Id
+            orderby epic.Number
+            select project.Key + "-E" + epic.Number).ToListAsync(cancellationToken);
+
+        return new GroupClash(issues, epics);
+    }
 
     private async Task SaveOrRefuseTheNameAsync(string name, CancellationToken cancellationToken)
     {

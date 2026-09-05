@@ -194,6 +194,18 @@ mean copying the group name onto every `issue_label` row and rewriting those
 rows whenever a label changes group. Every write to an issue's labels goes
 through one place in the store, and that place is where the rule lives.
 
+**The rule is the epic's as well.** An epic carries labels through `epic_label`
+under the same group rule, and it holds through the same code: creating an epic
+and `PATCH /epics/{key}` resolve their labels where the issue paths do, and two
+labels of one group in one set are refused there. No act adds a single label to
+an epic, so there is no second way around it.
+
+**Changing a label's group asks both.** Moving a label into another group is
+refused when an issue *or* an epic already carries another label of that group,
+because the move would leave behind exactly the state the group exists to make
+impossible. The refusal names the issues under `issues` and the epics under
+`epics` (`docs/api.md`, Labels).
+
 **A new project gets the group `kind`** with `bug`, `feature` and `chore`, each
 with the description VISION 8 gives it. The `repo` group is not created; whoever
 needs it creates it (VISION 13).

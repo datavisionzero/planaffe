@@ -96,7 +96,7 @@ public static class LabelEndpoints
                     new LabelChanges(request?.Name, request?.GroupGiven ?? false, request?.Group, request?.DescriptionGiven ?? false, request?.Description),
                     cancellationToken))
             .WithName("ChangeLabel")
-            .WithSummary("Rename, regroup or describe a label. A group change that would leave an issue with two of one group is refused, and `issues` says which.")
+            .WithSummary("Rename, regroup or describe a label. A group change that would leave an issue or an epic with two of one group is refused, and `issues` and `epics` say which.")
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
         door.MapDelete("/{name}", async (string key, string name, DeleteLabel delete, CancellationToken cancellationToken) =>

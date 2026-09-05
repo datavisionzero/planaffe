@@ -359,13 +359,14 @@ function Field({
 
 /**
  * `validation` carries `errors`, field to message; the group refusal carries
- * the issues that stand in the way under `issues` as well, and those are worth
- * following rather than reading (`docs/api.md`, Errors). Both are extension
- * members, so the generated type does not know them.
+ * what stands in the way under `issues` and `epics` as well, and those are
+ * worth following rather than reading (`docs/api.md`, Errors). All are
+ * extension members, so the generated type does not know them.
  */
 function refusalOf(problem: Problem | undefined, status: number): Refused {
   const errors = (problem as { errors?: Record<string, string | string[]> } | undefined)?.errors ?? {};
-  const issues = (problem as { issues?: string[] } | undefined)?.issues ?? [];
+  const carrying = problem as { issues?: string[]; epics?: string[] } | undefined;
+  const inTheWay = [...(carrying?.issues ?? []), ...(carrying?.epics ?? [])];
   const fields: Refused["fields"] = {};
 
   for (const field of ["name", "group", "description"] as const) {
@@ -374,10 +375,10 @@ function refusalOf(problem: Problem | undefined, status: number): Refused {
 
     const text = Array.isArray(said) ? said.join(" ") : said;
     fields[field] =
-      field === "group" && issues.length > 0 ? (
+      field === "group" && inTheWay.length > 0 ? (
         <>
           {text}{" "}
-          {issues.map((key, index) => (
+          {inTheWay.map((key, index) => (
             <span key={key}>
               {index > 0 && ", "}
               <Link className="font-mono underline" to={keyPath(key)}>

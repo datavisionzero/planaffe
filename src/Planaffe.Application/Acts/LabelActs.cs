@@ -54,10 +54,10 @@ public sealed class CreateLabel(IProjects projects, ProjectScope scope, ILabels 
 }
 
 /// <summary>
-/// Rename, regroup or describe a label. Moving it into a group an issue
-/// already carries another label of is refused with <c>validation</c> and the
-/// keys under <c>issues</c>: the alternative is an issue with two of one group,
-/// which the group exists to make impossible.
+/// Rename, regroup or describe a label. Moving it into a group an issue or an
+/// epic already carries another label of is refused with <c>validation</c> and
+/// the keys under <c>issues</c> and <c>epics</c>: the alternative is one of them
+/// with two of one group, which the group exists to make impossible.
 /// </summary>
 public sealed class ChangeLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings)
 {
@@ -73,16 +73,18 @@ public sealed class ChangeLabel(IProjects projects, ProjectScope scope, ILabels 
         if (changes.GroupGiven && changes.Group is not null && changes.Group != label.Group)
         {
             var group = Validated.Field("group", () => LabelName.Normalize(changes.Group, "group"));
-            var issues = await labels.IssuesWithAnotherOfGroupAsync(label, group, cancellationToken);
-            if (issues.Count > 0)
+            var clash = await labels.ClashesWithGroupAsync(label, group, cancellationToken);
+            if (clash.Count > 0)
             {
+                var carriers = Carriers(clash);
                 throw new Refusal(
                     RefusalCode.Validation,
-                    $"{issues.Count} issue(s) would carry two labels of the group {group}: {string.Join(", ", issues)}.",
+                    $"{carriers} would carry two labels of the group {group}: {string.Join(", ", clash.Keys)}.",
                     new Dictionary<string, object?>
                     {
-                        ["errors"] = new Dictionary<string, string[]> { ["group"] = [$"{issues.Count} issue(s) would carry two labels of this group."] },
-                        ["issues"] = issues,
+                        ["errors"] = new Dictionary<string, string[]> { ["group"] = [$"{carriers} would carry two labels of this group."] },
+                        ["issues"] = clash.Issues,
+                        ["epics"] = clash.Epics,
                     });
             }
         }
@@ -111,6 +113,24 @@ public sealed class ChangeLabel(IProjects projects, ProjectScope scope, ILabels 
         await labels.SaveAsync(label, cancellationToken);
 
         return LabelShape.Of(label);
+    }
+
+    // Only what is actually in the way is named, so that a refusal about epics
+    // alone does not open by counting issues.
+    private static string Carriers(GroupClash clash)
+    {
+        var counted = new List<string>(2);
+        if (clash.Issues.Count > 0)
+        {
+            counted.Add($"{clash.Issues.Count} issue(s)");
+        }
+
+        if (clash.Epics.Count > 0)
+        {
+            counted.Add($"{clash.Epics.Count} epic(s)");
+        }
+
+        return string.Join(" and ", counted);
     }
 }
 

@@ -2208,7 +2208,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Rename, regroup or describe a label. A group change that would leave an issue with two of one group is refused, and `issues` says which.",
+        "summary": "Rename, regroup or describe a label. A group change that would leave an issue or an epic with two of one group is refused, and `issues` and `epics` say which.",
         "operationId": "ChangeLabel",
         "parameters": [
           {

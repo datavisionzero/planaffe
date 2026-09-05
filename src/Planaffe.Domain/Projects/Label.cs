@@ -9,8 +9,9 @@ namespace Planaffe.Domain.Projects;
 /// <para>
 /// <see cref="Group"/> is the label group: a name several labels share, within
 /// which only one applies at a time. The rule that a group admits one label is
-/// held by the write path under the issue's row lock, not by this type and not
-/// by the database (<c>docs/storage.md</c>, Labels).
+/// held by the write path under the row lock of whatever carries the label —
+/// an issue or an epic — not by this type and not by the database
+/// (<c>docs/storage.md</c>, Labels).
 /// </para>
 /// <para>
 /// Deleting a label is a soft delete with the same grace period as an issue,

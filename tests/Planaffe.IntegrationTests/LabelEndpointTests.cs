@@ -110,9 +110,47 @@ public sealed class LabelEndpointTests(PostgresFixture postgres)
         using var refused = await admin.PatchAsJsonAsync("/projects/PLAN/labels/urgent-ish", new { group = "kind" }, Ct);
         var problem = await ProjectEndpointTests.Problem(refused, HttpStatusCode.BadRequest, "validation");
         Assert.Equal(["PLAN-1"], problem.GetProperty("issues").EnumerateArray().Select(i => i.GetString()));
+        Assert.Empty(problem.GetProperty("epics").EnumerateArray());
         Assert.True(problem.GetProperty("errors").TryGetProperty("group", out _));
 
         // Into a group nothing else on those issues carries: fine.
+        using var moved = await admin.PatchAsJsonAsync("/projects/PLAN/labels/urgent-ish", new { group = "priority-ish" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+    }
+
+    /// <summary>
+    /// The group rule is the epic's too, and a group change has to ask the
+    /// epics as well — the structured roadmap of VISION 7 is a label group on
+    /// epics, and nothing else keeps one of them off two of a group.
+    /// </summary>
+    [Fact]
+    public async Task A_group_change_that_would_leave_an_epic_with_two_of_a_group_is_refused()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+        await admin.PostAsJsonAsync("/projects/PLAN/labels", new { name = "next", group = "horizon" }, Ct);
+        await admin.PostAsJsonAsync("/projects/PLAN/labels", new { name = "urgent-ish" }, Ct);
+
+        // Two of one group in the same set is refused on an epic as on an issue.
+        await admin.PostAsJsonAsync("/projects/PLAN/labels", new { name = "later", group = "horizon" }, Ct);
+        await ProjectEndpointTests.Problem(
+            await admin.PostAsJsonAsync("/epics", new { project = "PLAN", title = "Both", labels = new[] { "next", "later" } }, Ct),
+            HttpStatusCode.BadRequest,
+            "validation");
+
+        // PLAN-E1 carries `next` (horizon) and the ungrouped `urgent-ish`.
+        using var created = await admin.PostAsJsonAsync("/epics", new { project = "PLAN", title = "The roadmap", labels = new[] { "next", "urgent-ish" } }, Ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        // Moving `urgent-ish` into `horizon` would leave the epic with two of it.
+        using var refused = await admin.PatchAsJsonAsync("/projects/PLAN/labels/urgent-ish", new { group = "horizon" }, Ct);
+        var problem = await ProjectEndpointTests.Problem(refused, HttpStatusCode.BadRequest, "validation");
+        Assert.Equal(["PLAN-E1"], problem.GetProperty("epics").EnumerateArray().Select(e => e.GetString()));
+        Assert.Empty(problem.GetProperty("issues").EnumerateArray());
+        Assert.True(problem.GetProperty("errors").TryGetProperty("group", out _));
+
+        // Into a group the epic carries nothing else of: fine.
         using var moved = await admin.PatchAsJsonAsync("/projects/PLAN/labels/urgent-ish", new { group = "priority-ish" }, Ct);
         Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
     }

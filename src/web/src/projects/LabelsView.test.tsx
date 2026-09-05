@@ -79,9 +79,9 @@ it("edits the name, the group and the description in one dialog", async () => {
   expect(await request.json()).toEqual({ name: "browser", group: null, description: "Web application" });
 });
 
-// The server names the issues that stand in the way; reading them is not the
-// same as being able to go and look.
-it("shows the group refusal at the group, with the issues in the way as links", async () => {
+// The server names the issues and the epics that stand in the way; reading them
+// is not the same as being able to go and look.
+it("shows the group refusal at the group, with what is in the way as links", async () => {
   installInstance({
     "GET /projects/PLAN/labels": [
       { name: "web", group: "area", description: null },
@@ -91,9 +91,10 @@ it("shows the group refusal at the group, with the issues in the way as links", 
       status: 400,
       body: {
         type: "/problems/validation", title: "refused", status: 400,
-        detail: "1 issue(s) would carry two labels of the group surface: PLAN-4.",
-        errors: { group: ["1 issue(s) would carry two labels of this group."] },
+        detail: "1 issue(s) and 1 epic(s) would carry two labels of the group surface: PLAN-4, PLAN-E2.",
+        errors: { group: ["1 issue(s) and 1 epic(s) would carry two labels of this group."] },
         issues: ["PLAN-4"],
+        epics: ["PLAN-E2"],
       },
     },
   });
@@ -108,8 +109,9 @@ it("shows the group refusal at the group, with the issues in the way as links", 
   await user.click(within(dialog).getByRole("button", { name: "Save label" }));
 
   const said = await within(dialog).findByRole("alert");
-  expect(said).toHaveTextContent("1 issue(s) would carry two labels of this group.");
+  expect(said).toHaveTextContent("1 issue(s) and 1 epic(s) would carry two labels of this group.");
   expect(within(said).getByRole("link", { name: "PLAN-4" })).toHaveAttribute("href", "/PLAN/issues/4");
+  expect(within(said).getByRole("link", { name: "PLAN-E2" })).toHaveAttribute("href", "/PLAN/epics/E2");
   expect(within(dialog).getByRole("combobox", { name: "Group" })).toHaveAttribute("aria-invalid", "true");
 });
 

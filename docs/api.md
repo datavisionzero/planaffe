@@ -362,7 +362,7 @@ metadata back channel (`PATCH /me/metadata`) is cut two.
 |---|---|---|---|
 | `GET` | `/projects/{key}/labels` | any | every label of the project with `name`, `group`, `description`; no pagination |
 | `POST` | `/projects/{key}/labels` | any | `{ name, group?, description? }` → 201 |
-| `PATCH` | `/projects/{key}/labels/{name}` | any | `{ name?, group?, description? }`. Changing the group is refused with `validation` when an issue would end up with two labels of the new group; `issues` lists them |
+| `PATCH` | `/projects/{key}/labels/{name}` | any | `{ name?, group?, description? }`. Changing the group is refused with `validation` when an issue or an epic would end up with two labels of the new group; `issues` and `epics` list them |
 | `DELETE` | `/projects/{key}/labels/{name}` | any | soft delete; the label vanishes from every issue; 204 |
 | `POST` | `/projects/{key}/labels/{name}/restore` | any | back, with its attachments |
 
@@ -522,10 +522,10 @@ you" list, with the blocker-chain rule, is `GET /projects/{key}/needs-you`.
 
 | method | path | who | does |
 |---|---|---|---|
-| `POST` | `/epics` | any | `{ project, title, description?, labels? }` → 201 `Epic` |
+| `POST` | `/epics` | any | `{ project, title, description?, labels? }` → 201 `Epic`; `labels` has its groups enforced as on an issue |
 | `GET` | `/epics` | any | a page of `EpicSummary`: `project`, `status` (`open` default, or `closed`, or `all`), `label`, `cursor`, `limit`; newest first |
 | `GET` | `/epics/{key}` | any | `Epic` |
-| `PATCH` | `/epics/{key}` | any | `{ title?, description?, labels? }`, `If-Match` honoured; the description is the living document of VISION 7, and the history records that it changed |
+| `PATCH` | `/epics/{key}` | any | `{ title?, description?, labels? }`, `If-Match` honoured; `labels` replaces the whole set, groups enforced as on an issue; the description is the living document of VISION 7, and the history records that it changed |
 | `POST` | `/epics/{key}/close` | any | `closed`, `closed_at` set, whatever is still open — the response carries `progress`, and the CLI lists what is open and offers to cancel or park it. Gates nothing (VISION 7) |
 | `POST` | `/epics/{key}/reopen` | any | back to `open` |
 | `DELETE` | `/epics/{key}` | any | soft delete, refused with `has-issues` while any issue, deleted ones included, references it |
