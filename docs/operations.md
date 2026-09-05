@@ -17,6 +17,10 @@ cp deploy/.env.example deploy/.env      # set POSTGRES_PASSWORD and the bootstra
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
+The image carries `linux/amd64` and `linux/arm64`, so `docker compose pull`
+resolves the right one on an ARM machine without anybody naming it — a
+Raspberry Pi, an ARM VPS and a Mac on Apple Silicon all run it natively.
+
 Two services come up: the instance and its Postgres. The instance applies its
 migrations, creates the first administrator and their token from the three
 bootstrap variables, and listens on port 8080. `GET /version` answers without
