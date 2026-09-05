@@ -310,9 +310,13 @@ _Avoid_: inbox, attention, alerts, triage list, work queue
 
 **Stuck**:
 Derived: a blocked issue whose chain of open blockers ends in a **dead end** —
-an issue that is parked, or has an open question, or is in a project with no
-agent. The last group of "needs you"; a blocked issue whose blockers an agent
-will pull is not stuck and is not on the list. `stuck` in the API.
+an issue that is parked, or has an open question. The last group of "needs
+you"; a blocked issue whose blockers an agent will pull is not stuck and is not
+on the list, and neither is a parked issue itself, because parking is the
+decision that it is not up yet. That the instance has no agent at all is not
+part of this: it is true of every issue at once, so it is said once beside the
+list rather than making each blocked issue a separate emergency. `stuck` in the
+API.
 _Avoid_: dead, orphaned, abandoned, deadlocked
 
 **Wait**:

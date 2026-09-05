@@ -86,6 +86,7 @@ pa next --claim --ready      # only flagged issues, even where triage is not req
 pa next --claim --epic PLAN-E3 --label cut-1 --repo none
 pa next --json               # the page, with reasons
 pa needs-you                 # questions, review, unready under triage, then stuck blocker chains
+                             # an instance without an agent is said once on stderr, not per ticket
 pa needs-you --wait 3600     # wait until the list gains an entry; exit 8 at the deadline
 pa needs-you --limit 20 --json
 

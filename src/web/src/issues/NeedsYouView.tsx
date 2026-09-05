@@ -14,7 +14,7 @@ type Item = Schemas["NeedsYouItem"];
 type Page =
   | { at: "asking" }
   | { at: "failed"; why: string }
-  | { at: "known"; items: Item[]; total: number; nextCursor: string | null };
+  | { at: "known"; items: Item[]; total: number; nextCursor: string | null; agents: number };
 
 const pageSize = 50;
 
@@ -62,7 +62,7 @@ export function NeedsYouView() {
 
         return data === undefined
           ? { at: "failed", why: describe(error, response.status) }
-          : { at: "known", items: data.items, total: data.total, nextCursor: data.next_cursor };
+          : { at: "known", items: data.items, total: data.total, nextCursor: data.next_cursor, agents: data.agents };
       } catch {
         return { at: "failed", why: "The instance did not answer." };
       }
@@ -112,7 +112,7 @@ export function NeedsYouView() {
       current !== null && current.of === project && current.page.at === "known" && answer.at === "known"
         ? {
             of: project,
-            page: { at: "known", items: [...current.page.items, ...answer.items], total: answer.total, nextCursor: answer.nextCursor },
+            page: { at: "known", items: [...current.page.items, ...answer.items], total: answer.total, nextCursor: answer.nextCursor, agents: answer.agents },
           }
         : current,
     );
@@ -134,6 +134,15 @@ export function NeedsYouView() {
         </div>
       )}
       {page.at === "failed" && <p className="p-4 text-sm text-destructive">{page.why}</p>}
+      {/* A fact about the instance, said once beside the list rather than turned
+          into entries on it: without an agent nothing here gets worked off, and
+          the one thing to do about it is not an issue on this list. */}
+      {page.at === "known" && page.agents === 0 && (
+        <p className="border-b bg-amber-500/5 px-4 py-2 text-sm">
+          No agent can pick work up on this instance, so nothing here will be worked off.{" "}
+          <code className="font-mono text-xs">pa agent create &lt;name&gt;</code> makes one.
+        </p>
+      )}
       {page.at === "known" && page.items.length === 0 && (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
           <p className="font-medium">Nothing needs you.</p>

@@ -6912,7 +6912,8 @@
           "items",
           "total",
           "has_more",
-          "next_cursor"
+          "next_cursor",
+          "agents"
         ],
         "type": "object",
         "properties": {
@@ -6934,6 +6935,10 @@
               "null",
               "string"
             ]
+          },
+          "agents": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

@@ -48,6 +48,7 @@ public sealed class NeedsYouEndpointTests(PostgresFixture postgres)
 
         var first = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/needs-you?limit=2", Ct);
         Assert.Equal(5, first.GetProperty("total").GetInt32());
+        Assert.Equal(1, first.GetProperty("agents").GetInt32());
         Assert.True(first.GetProperty("has_more").GetBoolean());
         Assert.Equal(
             [("PLAN-1", "question"), ("PLAN-2", "review")],
@@ -73,34 +74,66 @@ public sealed class NeedsYouEndpointTests(PostgresFixture postgres)
             "not-found");
     }
 
+    // PLAN-29, both halves. An instance without an agent used to make every
+    // blocked issue stuck at once — a fact about the instance turned into a
+    // property of tickets — and a parked issue stayed on the list although
+    // parking is the explicit decision that it is not up yet.
     [Fact]
-    public async Task Unready_is_absent_without_triage_and_no_active_agent_makes_a_blocker_chain_stuck()
+    public async Task A_missing_agent_is_said_once_and_a_parked_issue_is_not_stuck_itself()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
         using var admin = instance.ClientWith(AnInstance.BootstrapToken);
         await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
         await admin.PostAsJsonAsync("/agents", new { name = "worker" }, Ct);
-        await admin.PostAsJsonAsync("/issues", new
+        using var created = await admin.PostAsJsonAsync("/issues", new
         {
             project = "PLAN",
             issues = new object[]
             {
+                new { @ref = "leaf", title = "Parked leaf", status = "backlog" },
+                new { title = "Waiting behind the parked one", ready = true, blocked_by = new[] { "leaf" } },
+                new { title = "Parked and blocked", status = "backlog", blocked_by = new[] { "leaf" } },
+                new { title = "Parked, blocked and asked", status = "backlog", blocked_by = new[] { "leaf" } },
                 new { title = "Unready" },
-                new { title = "Blocked", blocked_by = new[] { "free" } },
+                new { title = "Blocked but an agent can resolve it", ready = true, blocked_by = new[] { "free" } },
                 new { @ref = "free", title = "Free", ready = true },
             },
         }, Ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
 
-        var whileAgentExists = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/needs-you", Ct);
-        Assert.Empty(Entries(whileAgentExists));
+        await using (var context = Migrated.ContextFor(instance.ConnectionString))
+        {
+            var user = await context.Users.SingleAsync(Ct);
+            var asked = await context.Issues.SingleAsync(issue => issue.Number == 4, Ct);
+            context.Questions.Add(Question.Ask(asked.ProjectId, asked.Id, "Still?", user.Id, Migrated.Now));
+            await context.SaveChangesAsync(Ct);
+        }
+
+        // PLAN-4 is parked and carries a question, so it is on the list as a
+        // question: parking says nothing about an answer being owed. PLAN-2
+        // waits behind a parked blocker, which is the real find. PLAN-3 is
+        // parked itself and is not. `unready` is absent without triage.
+        var withAgent = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/needs-you", Ct);
+        Assert.Equal([("PLAN-4", "question"), ("PLAN-2", "stuck")], Entries(withAgent));
+        Assert.Equal(1, withAgent.GetProperty("agents").GetInt32());
 
         await using (var context = Migrated.ContextFor(instance.ConnectionString))
         {
             await context.Database.ExecuteSqlRawAsync("update token set revoked_at = now() where kind = 'agent'", Ct);
         }
 
+        // The instance losing its last agent changes the list not at all. It
+        // changes the one number beside it, and that is the whole message.
         var withoutAgent = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/needs-you", Ct);
-        Assert.Equal([("PLAN-2", "stuck")], Entries(withoutAgent));
+        Assert.Equal([("PLAN-4", "question"), ("PLAN-2", "stuck")], Entries(withoutAgent));
+        Assert.Equal(0, withoutAgent.GetProperty("agents").GetInt32());
+
+        // Unparking puts the issue back on the list as stuck: nothing about the
+        // chain changed, only the decision that it is not up yet.
+        using var unparked = await admin.PatchAsJsonAsync("/issues/PLAN-3", new { status = "todo" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, unparked.StatusCode);
+        var after = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/needs-you", Ct);
+        Assert.Equal([("PLAN-4", "question"), ("PLAN-2", "stuck"), ("PLAN-3", "stuck")], Entries(after));
     }
 
     [Fact]

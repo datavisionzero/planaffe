@@ -89,6 +89,15 @@ func newNeedsYou(g *globals) *cobra.Command {
 				return render.JSON(cmd.OutOrStdout(), page)
 			}
 			render.NeedsYou(cmd.OutOrStdout(), page.Items)
+			if len(page.Items) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "Nothing needs you.")
+			}
+			// A fact about the instance, said once beside the list rather than
+			// once per ticket: without an agent nothing here gets worked off,
+			// and the one thing to do about it is not on the list.
+			if page.Agents == 0 {
+				fmt.Fprintln(cmd.ErrOrStderr(), "This instance has no active agent token, so nothing will be worked off: pa agent create <name>.")
+			}
 			if page.HasMore && page.NextCursor != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "%d of %d; next page: --cursor %s\n", len(page.Items), page.Total, *page.NextCursor)
 			}

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using NpgsqlTypes;
 using Planaffe.Application.Ports;
+using Planaffe.Domain.Identities;
 using Planaffe.Domain.Issues;
 using Planaffe.Domain.Projects;
 
@@ -194,10 +195,12 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     // The human's four groups. `walk` follows only open blocker edges and
     // remembers its path: blocker cycles are refused on write, but the guard
     // keeps old or manually changed data from making this read recurse forever.
-    // Until project assignment arrives in cut three every live agent can work
-    // in every project, so "a project without agents" is an instance with no
-    // unrevoked agent token. That one predicate becomes project-scoped later;
-    // the blocker traversal and the public shape do not change.
+    //
+    // Whether the instance has an agent at all is deliberately not in here. It
+    // is the same for every row, so as a condition on rows it turned every
+    // blocked issue in the project into a separate emergency at once — and the
+    // thing to do about it is to create an agent token, which has nothing to do
+    // with any of them. It is counted once per answer instead.
     private const string NeedsYouBase = """
         with recursive derived as (
             select i.id, i.project_id, i.priority, i.created_at, i.number, i.ready,
@@ -229,7 +232,6 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
               join derived terminal on terminal.id = walk.node_id
              where terminal.status = 'backlog'
                 or exists (select 1 from question q where q.issue_id = terminal.id and q.answer is null)
-                or not exists (select 1 from token t where t.kind = 'agent' and t.revoked_at is null)
         ),
         classified as (
             select candidate.id,
@@ -237,7 +239,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                      when exists (select 1 from question q where q.issue_id = candidate.id and q.answer is null) then 0
                      when candidate.status = 'review' then 1
                      when {2} and candidate.status = 'todo' and not candidate.ready then 2
-                     when stuck.root_id is not null then 3
+                     when stuck.root_id is not null and candidate.status <> 'backlog' then 3
                    end as because,
                    candidate.priority, candidate.created_at, candidate.number
               from derived candidate
@@ -247,7 +249,11 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                and (exists (select 1 from question q where q.issue_id = candidate.id and q.answer is null)
                     or candidate.status = 'review'
                     or ({2} and candidate.status = 'todo' and not candidate.ready)
-                    or stuck.root_id is not null)
+                    -- A parked issue is the explicit decision that it is not up
+                    -- yet, so it is not something waiting for a human. Waiting
+                    -- *behind* a parked blocker still is, which is the
+                    -- `terminal` clause above and stays.
+                    or (stuck.root_id is not null and candidate.status <> 'backlog'))
         )
         """;
 
@@ -275,8 +281,15 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         var hasMore = selected.Count > limit;
         var page = hasMore ? selected[..limit] : selected;
 
+        // Once per answer, not once per row. Until project assignment arrives
+        // in cut three every live agent can work in every project, so "agents
+        // that could pick this up" is the instance's unrevoked agent tokens;
+        // the count becomes project-scoped later and the shape does not change.
+        var agents = await context.Tokens
+            .CountAsync(t => t.Kind == IdentityKind.Agent && t.RevokedAt == null, cancellationToken);
+
         return new NeedsYouPageRows(
-            [.. page.Select(row => new NeedsYouRow(row.Id, (NeedsYouBecause)row.Because))], total, hasMore);
+            [.. page.Select(row => new NeedsYouRow(row.Id, (NeedsYouBecause)row.Because))], total, hasMore, agents);
     }
 
     private static object[] NeedsYouParameters(Guid projectId, bool triageRequired, NeedsYouPosition? after, int limit) =>

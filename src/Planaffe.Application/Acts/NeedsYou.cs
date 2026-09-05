@@ -9,8 +9,18 @@ namespace Planaffe.Application.Acts;
 /// <summary>One entry in the human's work list.</summary>
 public sealed record NeedsYouItem(IssueSummaryShape Issue, NeedsYouBecause Because);
 
-/// <summary>A cursor page of what only a human can resolve (VISION 10).</summary>
-public sealed record NeedsYouPage(IReadOnlyList<NeedsYouItem> Items, int Total, bool HasMore, string? NextCursor);
+/// <summary>
+/// A cursor page of what only a human can resolve (VISION 10).
+/// </summary>
+/// <param name="Agents">
+/// How many agents could pick work up at all. It is a fact about the instance
+/// and not about any row, so it is said once beside the list rather than turned
+/// into an entry on it: at <c>0</c> nothing on this list gets worked off, and
+/// the thing to do is to create an agent token — one act, unrelated to every
+/// issue the list would otherwise have named. This is VISION 10's "an empty
+/// result explains itself", for this list.
+/// </param>
+public sealed record NeedsYouPage(IReadOnlyList<NeedsYouItem> Items, int Total, bool HasMore, string? NextCursor, int Agents);
 
 /// <summary>The page and its validator, or an unchanged long-poll answer.</summary>
 public sealed record NeedsYouAnswer(NeedsYouPage? Page, string ETag);
@@ -46,7 +56,8 @@ public sealed class NeedsYou(
             items,
             page.Total,
             page.HasMore,
-            page.HasMore ? NeedsYouCursor.Encode(project.Id, page.Items[^1], orderedRows[^1]) : null);
+            page.HasMore ? NeedsYouCursor.Encode(project.Id, page.Items[^1], orderedRows[^1]) : null,
+            page.Agents);
     }
 
     public async Task<NeedsYouAnswer> WaitAsync(
@@ -85,6 +96,9 @@ public sealed class NeedsYou(
             var page = await ExecuteAsync(projectKey, cursor, requestedLimit, cancellationToken);
             var tag = ETag(page);
 
+            // `Agents` is part of the validator through the serialized page, so
+            // an instance that gains or loses its last agent is a change the
+            // holder of a long poll is told about like any other.
             if (baseline is null && page.Items.Count > 0 || baseline is not null && !Matches(baseline, tag))
             {
                 await waiting.CancelAsync();

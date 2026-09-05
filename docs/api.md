@@ -602,15 +602,27 @@ Within each group, higher priority comes first and age breaks a tie. The page
 uses the ordinary `cursor` and `limit` query parameters and always carries an
 ETag, including when it is empty.
 
+Beside the list the answer carries `agents`: how many agents could pick work up
+at all. At `0` nothing on this list will be worked off, whatever it says — and
+the thing to do about it is to create an agent token, one act that has nothing
+to do with any issue on the list. That is why it is said once beside the list
+rather than turned into entries on it; it is VISION 10's "an empty result
+explains itself" for this list. It is part of the ETag, so a long poll is told
+when the instance gains or loses its last agent. Until project assignment
+arrives in cut three, agents can work in every project, so the number is the
+instance's unrevoked agent tokens; it becomes project-scoped later and the
+shape does not change.
+
 **Stuck** is the blocker-chain rule of VISION 10: a blocked issue is on the
 list only when a chain of open blockers from it ends in a dead end — an issue
-that is parked, or has an open question, or is in a project with no agent —
-because a blocker an agent will pull needs nobody and is noise here. The
-predicate is one recursive query over the open edges, evaluated in SQL beside
-`Workable`. Until project assignment arrives in cut three, agents can work in
-every project, so the last condition means that the instance has no active
-agent token. The CLI: `pa needs-you`, which prints the four groups under their
-headings.
+that is parked, or has an open question — because a blocker an agent will pull
+needs nobody and is noise here. The predicate is one recursive query over the
+open edges, evaluated in SQL beside `Workable`. A **parked issue is never on
+the list as `stuck` itself**: parking is the explicit decision that it is not
+up yet, so there is nothing there for a human to resolve. Waiting *behind* a
+parked blocker still counts, and a parked issue with an open question is on the
+list as `question`. The CLI: `pa needs-you`, which prints the four groups under
+their headings.
 
 ### Waiting
 

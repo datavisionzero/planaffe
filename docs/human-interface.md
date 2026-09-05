@@ -22,7 +22,7 @@ read, so nothing has to be known about Markdown to write one
 | `/projects/new` | Create project | immutable key, name and two project switches | centred single column |
 | `/:project/ready` | Ready | shared issue list with workable defaults | two-line rows, no horizontal scroll |
 | `/:project/in-progress` | In progress | shared issue list filtered to active claims | two-line rows, no horizontal scroll |
-| `/:project/needs-you` | Needs you | question, review, unready and stuck reasons | reason and next action stay visible |
+| `/:project/needs-you` | Needs you | question, review, unready and stuck reasons, and a line where no agent could pick work up | reason and next action stay visible |
 | `/:project/issues` | All issues | shared issue list, all URL filters, and the four sorts — by epic it groups | filters open as a dismissible sheet |
 | `/:project/issues/new` | Create issue | title, Markdown description, priority, status, `ready`, and the five choices — labels, epic, parent, assignee, blockers | one column throughout; the pairs of fields stack, chips wrap, each suggestion list opens below its field |
 | `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs | one column; metadata as chips under the title |

@@ -151,7 +151,8 @@ public sealed record NeedsYouPosition(NeedsYouBecause Because, Priority Priority
 /// <summary>An issue selected for needs-you, before its slim shape is assembled.</summary>
 public sealed record NeedsYouRow(Guid Id, NeedsYouBecause Because);
 
-public sealed record NeedsYouPageRows(IReadOnlyList<NeedsYouRow> Items, int Total, bool HasMore);
+/// <param name="Agents">Agents that could pick work up at all — a fact about the instance, not about any row.</param>
+public sealed record NeedsYouPageRows(IReadOnlyList<NeedsYouRow> Items, int Total, bool HasMore, int Agents);
 
 /// <summary>
 /// What <c>next</c> asks for: the project, the caller the eight conditions are

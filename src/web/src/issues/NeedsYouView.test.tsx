@@ -29,6 +29,7 @@ const fourReasons = {
   total: 4,
   has_more: false,
   next_cursor: null,
+  agents: 1,
 };
 
 /** The frame's number, which this screen feeds rather than letting it ask again. */
@@ -99,7 +100,7 @@ it("sets ready in place and reads the list again", async () => {
   expect(asked).toBe(2);
   // The number in the navigation comes from this read, so it moves with it and
   // the frame never asks the same question a second time.
-  expect(noted).toEqual([{ project: "PLAN", needsYou: 4 }, { project: "PLAN", needsYou: 3 }]);
+  await vi.waitFor(() => expect(noted).toEqual([{ project: "PLAN", needsYou: 4 }, { project: "PLAN", needsYou: 3 }]));
 });
 
 it("says why a refused triage did not happen and leaves the row where it is", async () => {
@@ -155,4 +156,25 @@ it("says what it could not load", async () => {
   renderNeedsYou();
 
   expect(await screen.findByText("No project PLAN.")).toBeInTheDocument();
+});
+
+/**
+ * PLAN-29: an instance with no agent used to turn every blocked issue into an
+ * entry of its own here. It is one fact about the instance, and the one thing
+ * to do about it is not an issue on this list — so it is said once, beside it.
+ */
+it("says once that no agent can pick anything up, rather than per issue", async () => {
+  installInstance({ "GET /projects/PLAN/needs-you": { ...fourReasons, agents: 0 } });
+  renderNeedsYou();
+
+  expect(await screen.findByText(/No agent can pick work up on this instance/)).toBeInTheDocument();
+  expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(4);
+});
+
+it("says nothing about agents where there is one", async () => {
+  installInstance({ "GET /projects/PLAN/needs-you": fourReasons });
+  renderNeedsYou();
+
+  await screen.findByText("Asked something");
+  expect(screen.queryByText(/No agent can pick work up/)).not.toBeInTheDocument();
 });

@@ -17,7 +17,7 @@ func TestNeedsYouPrintsGroupsAndPages(t *testing.T) {
 		return 200, `{"items":[` +
 			`{"because":"question","issue":{"key":"PLAN-1","project":"PLAN","title":"Answer me","status":"todo","ready":true,"priority":4,"labels":[],"epic":null,"parent":null,"assignee":null,"claim":null,"blocked_by":[],"open_questions":1,"open_blockers":0,"open_sub_issues":0,"created_at":"2026-09-02T14:00:00Z","updated_at":"2026-09-02T14:00:00Z","closed_at":null,"deleted_at":null,"deleted_by":null}},` +
 			`{"because":"review","issue":{"key":"PLAN-2","project":"PLAN","title":"Check me","status":"review","ready":true,"priority":3,"labels":[],"epic":null,"parent":null,"assignee":null,"claim":null,"blocked_by":[],"open_questions":0,"open_blockers":0,"open_sub_issues":0,"created_at":"2026-09-02T14:00:00Z","updated_at":"2026-09-02T14:00:00Z","closed_at":null,"deleted_at":null,"deleted_by":null}}` +
-			`],"total":3,"has_more":true,"next_cursor":"next-page"}`
+			`],"total":3,"has_more":true,"next_cursor":"next-page","agents":1}`
 	}}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
@@ -41,9 +41,31 @@ func TestNeedsYouPrintsGroupsAndPages(t *testing.T) {
 	}
 }
 
+// PLAN-29: without an agent token the list used to call every blocked issue
+// stuck at once. It is a fact about the instance, so it is said once, beside a
+// list that is now empty.
+func TestNeedsYouSaysTheInstanceHasNoAgentBesideTheList(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) {
+		return 200, `{"items":[],"total":0,"has_more":false,"next_cursor":null,"agents":0}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, errOut := run(t, server, repository(t, "project = PLAN\n"), "needs-you")
+	if code != exit.OK {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+	if !strings.Contains(out, "Nothing needs you.") {
+		t.Errorf("an empty list explains itself; stdout %q", out)
+	}
+	if !strings.Contains(errOut, "no active agent token") || !strings.Contains(errOut, "pa agent create") {
+		t.Errorf("stderr %q says nothing about the missing agent", errOut)
+	}
+}
+
 func TestNeedsYouJSONKeepsThePageShape(t *testing.T) {
 	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) {
-		return 200, `{"items":[],"total":0,"has_more":false,"next_cursor":null}`
+		return 200, `{"items":[],"total":0,"has_more":false,"next_cursor":null,"agents":1}`
 	}}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
@@ -60,9 +82,9 @@ func TestNeedsYouWaitLongPollsWithThePreviousETag(t *testing.T) {
 	f.answer = func(r *http.Request) (int, string) {
 		calls++
 		if calls == 1 {
-			return 200, `{"items":[],"total":0,"has_more":false,"next_cursor":null}`
+			return 200, `{"items":[],"total":0,"has_more":false,"next_cursor":null,"agents":1}`
 		}
-		return 200, `{"items":[{"because":"question","issue":{"key":"PLAN-1","project":"PLAN","title":"Answer me","status":"todo","ready":true,"priority":4,"labels":[],"epic":null,"parent":null,"assignee":null,"claim":null,"blocked_by":[],"open_questions":1,"open_blockers":0,"open_sub_issues":0,"created_at":"2026-09-02T14:00:00Z","updated_at":"2026-09-02T14:00:00Z","closed_at":null,"deleted_at":null,"deleted_by":null}}],"total":1,"has_more":false,"next_cursor":null}`
+		return 200, `{"items":[{"because":"question","issue":{"key":"PLAN-1","project":"PLAN","title":"Answer me","status":"todo","ready":true,"priority":4,"labels":[],"epic":null,"parent":null,"assignee":null,"claim":null,"blocked_by":[],"open_questions":1,"open_blockers":0,"open_sub_issues":0,"created_at":"2026-09-02T14:00:00Z","updated_at":"2026-09-02T14:00:00Z","closed_at":null,"deleted_at":null,"deleted_by":null}}],"total":1,"has_more":false,"next_cursor":null,"agents":1}`
 	}
 	f.headers = func(*http.Request) map[string]string {
 		if calls == 1 {
@@ -89,7 +111,7 @@ func TestNeedsYouWaitDeadlineIsEmptyAndBadWaitIsUsage(t *testing.T) {
 			if r.Header.Get("If-None-Match") != "" {
 				return http.StatusNotModified, ""
 			}
-			return 200, `{"items":[],"total":0,"has_more":false,"next_cursor":null}`
+			return 200, `{"items":[],"total":0,"has_more":false,"next_cursor":null,"agents":1}`
 		},
 		headers: func(*http.Request) map[string]string { return map[string]string{"ETag": `"empty"`} },
 	}
