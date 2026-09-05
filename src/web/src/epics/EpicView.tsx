@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
@@ -367,6 +367,7 @@ function EpicForm({ initial, submit, write, onWritten, onCancel }: {
   const [labels, setLabels] = useState(initial?.labels.map((label) => label.name) ?? []);
   const [saving, setSaving] = useState(false);
   const [why, setWhy] = useState<string>();
+  const titleId = useId();
   const { project } = useParams();
   const known = useLabels(project);
   const start = { title: initial?.title ?? "", description: initial?.description ?? "", labels: initial?.labels.map((label) => label.name) ?? [] };
@@ -401,7 +402,7 @@ function EpicForm({ initial, submit, write, onWritten, onCancel }: {
     <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => void save(event)}>
       <label className="grid gap-1 text-sm font-medium">
         Title
-        <Input required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} />
+        <Input id={titleId} required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
       <MarkdownField label="Description" value={description} onChange={setDescription} />
       <LabelPicker label="Labels" labels={known.labels} value={labels} onChange={setLabels} onCreate={known.create} />

@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { SearchIcon, SlidersHorizontalIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { api, describe, type IssueSummary } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,8 @@ export function IssueListView({ view }: { view: View }) {
   const [search, setSearch] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const searchId = useId();
+  const sortId = useId();
   const scrollElement = useRef<HTMLDivElement>(null);
   // The one control the filters belong to, whichever shape they take, and
   // where the focus goes back to when they close.
@@ -142,8 +144,8 @@ export function IssueListView({ view }: { view: View }) {
       <Button size="sm" render={<Link to={`/${project}/issues/new`} />}>New issue</Button>
     </PageHeader>
     <div className="flex flex-wrap items-center gap-2 border-b p-2">
-      <div className="relative min-w-48 flex-1 sm:max-w-sm"><SearchIcon className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" /><Input data-issue-search aria-label="Search issues" placeholder="Search issues…" value={search.get("q") ?? ""} onChange={(event) => change("q", event.target.value)} className="pl-8" /></div>
-      <select aria-label="Sort issues" value={search.get("sort") ?? "updated"} onChange={(event) => change("sort", event.target.value === "updated" ? undefined : event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="priority">Priority</option></select>
+      <div className="relative min-w-48 flex-1 sm:max-w-sm"><SearchIcon className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" /><Input id={searchId} data-issue-search aria-label="Search issues" placeholder="Search issues…" value={search.get("q") ?? ""} onChange={(event) => change("q", event.target.value)} className="pl-8" /></div>
+      <select id={sortId} aria-label="Sort issues" value={search.get("sort") ?? "updated"} onChange={(event) => change("sort", event.target.value === "updated" ? undefined : event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="priority">Priority</option></select>
       <Button variant="ghost" size="sm" onClick={() => change("order", (search.get("order") ?? "desc") === "desc" ? "asc" : undefined)} aria-label="Reverse sort order">{(search.get("order") ?? "desc") === "desc" ? "Descending" : "Ascending"}</Button>
     </div>
     {/* Wide: the bar stays in place above the list. Narrow: the same controls
@@ -170,13 +172,14 @@ export function IssueListView({ view }: { view: View }) {
 }
 
 function FilterBar({ search, change, changeAll, labels, clear, className }: { search: URLSearchParams; change: (name: string, value?: string) => void; changeAll: (name: string, values: string[]) => void; labels: PickableLabel[]; clear: () => void; className?: string }) {
+  const field = useId();
   return <div className={cn("flex flex-wrap items-end gap-2 border-b bg-muted/30 p-2", className)} role="group" aria-label="Issue filters">
     <Filter label="Status" name="status" value={search.get("status") ?? ""} change={change}><option value="">Any</option>{["backlog", "todo", "in_progress", "review", "done", "canceled"].map((value) => <option key={value}>{value}</option>)}</Filter>
     <Filter label="Priority" name="priority" value={search.get("priority") ?? ""} change={change}><option value="">Any</option>{[0, 1, 2, 3, 4].map((value) => <option key={value} value={value}>{priorityLabel(value)}</option>)}</Filter>
     {/* Several labels at once: the query has carried repeated `label` values
         all along, and one text field could only ever say one of them. */}
     <LabelPicker label="Label" labels={labels} value={search.getAll("label")} onChange={(names) => changeAll("label", names)} className="w-56 text-xs font-normal text-muted-foreground" />
-    {[["Epic", "epic"], ["Assignee", "assignee"], ["Author", "author"]].map(([label, name]) => <label key={name} className="grid gap-1 text-xs text-muted-foreground">{label}<Input value={search.get(name) ?? ""} onChange={(event) => change(name, event.target.value)} className="w-32 text-foreground" /></label>)}
+    {[["Epic", "epic"], ["Assignee", "assignee"], ["Author", "author"]].map(([label, name]) => <label key={name} className="grid gap-1 text-xs text-muted-foreground">{label}<Input id={`${field}-${name}`} value={search.get(name) ?? ""} onChange={(event) => change(name, event.target.value)} className="w-32 text-foreground" /></label>)}
     <Filter label="Claim" name="claimed" value={search.get("claimed") ?? ""} change={change}><option value="">Any</option><option value="true">Claimed</option><option value="false">Unclaimed</option><option value="me">Mine</option></Filter>
     {/* The one read that sees deleted rows (ADR 0013). It was reachable only
         by typing the query parameter. */}
@@ -188,7 +191,8 @@ function FilterBar({ search, change, changeAll, labels, clear, className }: { se
 }
 
 function Filter({ label, name, value, change, children }: { label: string; name: string; value: string; change: (name: string, value?: string) => void; children: React.ReactNode }) {
-  return <label className="grid gap-1 text-xs text-muted-foreground">{label}<select value={value} onChange={(event) => change(name, event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm text-foreground">{children}</select></label>;
+  const id = useId();
+  return <label className="grid gap-1 text-xs text-muted-foreground">{label}<select id={id} value={value} onChange={(event) => change(name, event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm text-foreground">{children}</select></label>;
 }
 
 function IssueRow({ issue, active, onActive, style }: { issue: IssueSummary; active: boolean; onActive: () => void; style: React.CSSProperties }) {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import { useId, useState, type FormEvent, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -98,6 +98,7 @@ export function TextActionDialog({ trigger, open: controlled, onOpenChange, titl
   const [value, setValue] = useState(initialValue);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const id = useId();
   const open = controlled ?? uncontrolled;
 
   function changeOpen(next: boolean) {
@@ -135,7 +136,7 @@ export function TextActionDialog({ trigger, open: controlled, onOpenChange, titl
           </DialogHeader>
           <label className="grid gap-1 text-sm font-medium">
             {label}
-            <Input value={value} onChange={(event) => setValue(event.target.value)} required={required} />
+            <Input id={id} value={value} onChange={(event) => setValue(event.target.value)} required={required} />
           </label>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <DialogFooter>

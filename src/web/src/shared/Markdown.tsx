@@ -83,6 +83,10 @@ const components: Components = {
   td: ({ className, ...props }) => <td className={cn("border-b px-2 py-1 align-top", className)} {...props} />,
   input: ({ className, ...props }) =>
     props.type === "checkbox" ? (
+      // The box a task list in the description draws. It is disabled — the
+      // text is the truth, and it is edited as text — so it is not a form
+      // field anybody fills in, and it needs no name the browser could learn.
+      // eslint-disable-next-line no-restricted-syntax
       <input className={cn("mr-1.5 align-middle accent-brand", className)} {...props} disabled />
     ) : null,
 };

@@ -1,5 +1,5 @@
 import { ArrowRightIcon, SearchIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 import { api, type IssueSummary, type Project } from "@/api/client";
 import { useTheme } from "@/components/theme-provider";
@@ -74,6 +74,7 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const [found, setFound] = useState<{ of: string; items: IssueSummary[] }>({ of: "", items: [] });
+  const searchId = useId();
 
   const needle = query.trim();
   const projectKey = current?.key;
@@ -253,6 +254,7 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
         <div className="flex items-center gap-2 border-b px-3">
           <SearchIcon className="size-4 text-muted-foreground" />
           <input
+            id={searchId}
             autoFocus
             role="combobox"
             aria-expanded

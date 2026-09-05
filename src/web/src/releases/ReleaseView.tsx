@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, describe, type IssueSummary, type Release } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
@@ -292,6 +292,7 @@ function RenameDialog({ release, onRenamed }: { release: Release; onRenamed: (re
   const { project } = useParams();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(release.name);
+  const nameId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -340,7 +341,7 @@ function RenameDialog({ release, onRenamed }: { release: Release; onRenamed: (re
           </DialogHeader>
           <label className="grid gap-1 text-sm font-medium">
             Name
-            <Input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required />
+            <Input id={nameId} value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required />
           </label>
           {error !== undefined && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
@@ -386,6 +387,7 @@ function PublishDialog({ release, onPublished }: { release: Release; onPublished
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [notes, setNotes] = useState(release.description);
+  const nameId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -441,6 +443,7 @@ function PublishDialog({ release, onPublished }: { release: Release; onPublished
           <label className="grid gap-1 text-sm font-medium">
             Name
             <Input
+              id={nameId}
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="1.4.0"
