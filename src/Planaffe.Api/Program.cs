@@ -147,6 +147,8 @@ builder.Services.AddScoped<ListReleases>();
 builder.Services.AddScoped<ReadRelease>();
 builder.Services.AddScoped<ChangeRelease>();
 builder.Services.AddScoped<PublishRelease>();
+builder.Services.AddScoped<RetractRelease>();
+builder.Services.AddScoped<ChangeReleaseIssues>();
 
 // Deleting is a soft delete with a floor (ADR 0013); the purge runs at the end of every write transaction.
 builder.Services.AddScoped<DeleteIssue>();

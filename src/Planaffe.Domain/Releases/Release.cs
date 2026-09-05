@@ -53,6 +53,41 @@ public sealed class Release
         UpdatedAt = at;
     }
 
+    /// <summary>
+    /// Correct the name of the publication, which is a different thing from
+    /// rewriting the record: only the newest publication may be renamed, and
+    /// the act that calls this decides that (VISION 7).
+    /// </summary>
+    public void Rename(string name, DateTimeOffset at)
+    {
+        if (Status is not ReleaseStatus.Published)
+        {
+            throw new InvalidOperationException("Only a published release carries a name.");
+        }
+
+        Name = NormalizeName(name);
+        UpdatedAt = at;
+    }
+
+    /// <summary>
+    /// Take the publication back: this release is the open one again. The
+    /// correction of a fumble, and only ever of the newest publication — which
+    /// the act that calls this establishes.
+    /// </summary>
+    public void Retract(DateTimeOffset at)
+    {
+        if (Status is not ReleaseStatus.Published)
+        {
+            throw new InvalidOperationException("The release is not published.");
+        }
+
+        Name = null;
+        Status = ReleaseStatus.Open;
+        PublishedAt = null;
+        PublishedBy = null;
+        UpdatedAt = at;
+    }
+
     public static string NormalizeName(string name)
     {
         var value = name?.Trim();

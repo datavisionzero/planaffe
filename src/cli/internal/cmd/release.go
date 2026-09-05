@@ -10,7 +10,8 @@ import (
 
 func newRelease(g *globals) *cobra.Command {
 	cmd := &cobra.Command{Use: "release", Short: "Releases record what shipped together; the open release fills itself."}
-	cmd.AddCommand(newReleaseList(g), newReleaseView(g), newReleasePublish(g), newReleaseNotes(g))
+	cmd.AddCommand(newReleaseList(g), newReleaseView(g), newReleasePublish(g), newReleaseNotes(g),
+		newReleaseAdd(g), newReleaseRemove(g), newReleaseRename(g), newReleaseRetract(g))
 	return cmd
 }
 
@@ -143,4 +144,96 @@ func newReleaseNotes(g *globals) *cobra.Command {
 		}}
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "replace the release's Markdown annotation, from a file or `-` for stdin")
 	return cmd
+}
+
+// The one release that is not a record yet, and the only one either of the two
+// following verbs writes to.
+const openRelease = "unreleased"
+
+func newReleaseAdd(g *globals) *cobra.Command {
+	return &cobra.Command{Use: "add KEY", Short: "Put an issue into the open release by hand; a ticket that shipped stays where it shipped.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, c, err := projectAndClient(g)
+			if err != nil {
+				return err
+			}
+			resp, err := c.AddIssueToReleaseWithResponse(cmd.Context(), project, openRelease, args[0])
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			render.Release(cmd.OutOrStdout(), *resp.JSON200)
+			return nil
+		}}
+}
+
+func newReleaseRemove(g *globals) *cobra.Command {
+	return &cobra.Command{Use: "remove KEY", Short: "Take an issue out of the open release: it has not shipped yet and does not belong.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, c, err := projectAndClient(g)
+			if err != nil {
+				return err
+			}
+			resp, err := c.RemoveIssueFromReleaseWithResponse(cmd.Context(), project, openRelease, args[0])
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			render.Release(cmd.OutOrStdout(), *resp.JSON200)
+			return nil
+		}}
+}
+
+func newReleaseRename(g *globals) *cobra.Command {
+	return &cobra.Command{Use: "rename NAME NEW", Short: "Correct the name of the newest publication; an older one is a record and keeps its own.", Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, c, err := projectAndClient(g)
+			if err != nil {
+				return err
+			}
+			resp, err := c.ChangeReleaseWithResponse(cmd.Context(), project, args[0], api.ChangeReleaseRequest{Name: &args[1]})
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			render.Release(cmd.OutOrStdout(), *resp.JSON200)
+			return nil
+		}}
+}
+
+func newReleaseRetract(g *globals) *cobra.Command {
+	return &cobra.Command{Use: "retract NAME", Short: "Take the newest publication back; it is the open release again and the tickets stay in it.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			project, c, err := projectAndClient(g)
+			if err != nil {
+				return err
+			}
+			resp, err := c.RetractReleaseWithResponse(cmd.Context(), project, args[0])
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			render.Release(cmd.OutOrStdout(), *resp.JSON200)
+			return nil
+		}}
 }

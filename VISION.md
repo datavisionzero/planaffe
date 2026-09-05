@@ -267,7 +267,7 @@ We build software, so the question "what was in version 1.2?" belongs in the sys
 
 | Field | |
 |---|---|
-| `name` | `v1.2.0` — given on publishing, fixed from then on |
+| `name` | `v1.2.0` — given on publishing; correctable only on the newest publication |
 | `description` | Markdown — release notes |
 | `status` | `open` / `published`, with a date |
 
@@ -282,6 +282,8 @@ Which is why it fills itself:
 - A ticket belongs to at most one **open** release.
 - **When a ticket is reopened**, it leaves a release that is still open. If it sits in one already **published**, it stays there — it did ship, and you do not rewrite a record. When it is closed again, it additionally enters the current release. A ticket appearing in v1.2.0 *and* v1.2.1 is not a bug but exactly the story: shipped once, fixed once.
 - `pa release notes v1.2.0` prints the contained tickets as Markdown. That is half the changelog work, and an agent can turn it into a readable changelog in one step.
+
+**Correcting a fumble is not rewriting the record.** The record is what shipped, and it stands: membership in a published release does not change, and neither does the name of a release that another has already followed. But the publication that has just happened is not yet history — it is the last thing you did, and it can have a typo in the name, or not have been meant at all. So exactly two corrections exist, and only on the newest publication: **renaming** it, and **taking the publication back**, which makes it the open release again with the same tickets in it. Taking it back is refused once another release has followed it, or once work has closed into the release the publication opened — at that point somebody has built on it, and it is history like everything else.
 
 Epic and release are orthogonal and do not fight: the **epic says what belongs together**, the **release says what shipped together**. An epic can stretch over several releases, a release contains tickets from many epics.
 

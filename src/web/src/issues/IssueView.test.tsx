@@ -191,4 +191,33 @@ describe("the human-first issue detail", () => {
 
     expect(await screen.findByRole("button", { name: "Restore issue" })).toHaveFocus();
   });
+
+  // VISION 7 promises it in as many words: a ticket that has not shipped yet
+  // simply does not belong, and moving one by hand still works.
+  it("puts an issue into the open release by hand and takes it out again", async () => {
+    let put = false;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": () => (put ? { ...free, release: "unreleased" } : free),
+      "GET /issues/PLAN-9/history": [],
+      "PUT /projects/PLAN/releases/unreleased/issues/PLAN-9": () => { put = true; return { body: { name: "unreleased", status: "open", description: "", published_at: null, published_by: null, issues: [] } }; },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Put into the open release" }));
+
+    expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "PUT"))).toBe(true);
+    expect(await screen.findByText("unreleased")).toBeInTheDocument();
+  });
+
+  it("offers no release move on an issue that has shipped", async () => {
+    installInstance({ "GET /issues/PLAN-9": { ...free, release: "0.4.0" }, "GET /issues/PLAN-9/history": [] });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "More actions" }));
+
+    expect(screen.queryByRole("menuitem", { name: /open release/ })).not.toBeInTheDocument();
+  });
 });

@@ -34,6 +34,12 @@ func TestReleaseVerbsAndMarkdownNotes(t *testing.T) {
 		{[]string{"release", "view", "v1.0.0"}, "GET", "/projects/PLAN/releases/v1.0.0", "First release."},
 		{[]string{"release", "publish", "v1.0.0"}, "POST", "/projects/PLAN/releases/publish", "v1.0.0"},
 		{[]string{"release", "notes", "v1.0.0"}, "GET", "/projects/PLAN/releases/v1.0.0", "  - PLAN-2 Child"},
+		// VISION 7: a ticket that has not shipped yet simply does not belong,
+		// and the newest publication may be corrected.
+		{[]string{"release", "add", "PLAN-1"}, "PUT", "/projects/PLAN/releases/unreleased/issues/PLAN-1", "v1.0.0"},
+		{[]string{"release", "remove", "PLAN-1"}, "DELETE", "/projects/PLAN/releases/unreleased/issues/PLAN-1", "v1.0.0"},
+		{[]string{"release", "rename", "v1.0.O", "v1.0.0"}, "PATCH", "/projects/PLAN/releases/v1.0.O", "v1.0.0"},
+		{[]string{"release", "retract", "v1.0.0"}, "POST", "/projects/PLAN/releases/v1.0.0/retract", "v1.0.0"},
 	} {
 		code, out, stderr := run(t, server, dir, tc.args...)
 		if code != exit.OK || stderr != "" {

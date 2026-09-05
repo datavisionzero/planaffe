@@ -587,6 +587,14 @@ a sub-issue closed after its parent already shipped enters the open release
 like any issue. Publishing names the open release, sets `published_at` and
 `published_by`, and creates the next open one, in one transaction.
 
+Three acts write `release_issue` and `release` by hand, and only ever the open
+release (VISION 7): one inserts a `release_issue` row, one deletes it, and
+retracting a publication deletes the empty open release row and clears the
+retracted one's `name`, `published_at` and `published_by` — which is why the
+partial unique index on the open release holds throughout, since the row that
+would have been the second open one is gone in the same transaction. Renaming
+is a write of `name` and answers to `release_name`.
+
 The deletion rule of ADR 0013 — an issue in a published release cannot be
 deleted — is `in-published-release`, checked by the delete act against
 `release_issue` joined to `release.status`.

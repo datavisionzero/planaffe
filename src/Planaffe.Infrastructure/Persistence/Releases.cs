@@ -68,6 +68,25 @@ public sealed class Releases(PlanaffeDbContext context) : IReleases
     public Task<bool> NameTakenAsync(Guid projectId, string name, CancellationToken ct) =>
         context.Releases.AnyAsync(r => r.ProjectId == projectId && r.Name != null && r.Name.ToLower() == name.ToLower(), ct);
 
+    public Task<Release?> LatestPublishedAsync(Guid projectId, CancellationToken ct) =>
+        context.Releases.Where(r => r.ProjectId == projectId && r.Status == ReleaseStatus.Published)
+            .OrderByDescending(r => r.PublishedAt).FirstOrDefaultAsync(ct);
+
+    public Task<int> IssueCountAsync(Guid releaseId, CancellationToken ct) =>
+        context.ReleaseIssues.CountAsync(x => x.ReleaseId == releaseId, ct);
+
+    public async Task<bool> AttachAsync(Guid releaseId, Guid issueId, CancellationToken ct)
+    {
+        if (await context.ReleaseIssues.AnyAsync(x => x.ReleaseId == releaseId && x.IssueId == issueId, ct)) return false;
+        context.ReleaseIssues.Add(ReleaseIssue.Attach(releaseId, issueId));
+        return true;
+    }
+
+    public async Task<bool> DetachAsync(Guid releaseId, Guid issueId, CancellationToken ct) =>
+        await context.ReleaseIssues.Where(x => x.ReleaseId == releaseId && x.IssueId == issueId).ExecuteDeleteAsync(ct) > 0;
+
+    public void Remove(Release release) => context.Releases.Remove(release);
+
     public Task<bool> InPublishedAsync(Guid issueId, CancellationToken ct) =>
         (from ri in context.ReleaseIssues
          join r in context.Releases on ri.ReleaseId equals r.Id

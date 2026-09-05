@@ -560,8 +560,11 @@ sub-issues under the description.
 |---|---|---|---|
 | `GET` | `/projects/{key}/releases` | any | every release of the project, the open one first, then published ones newest first: `{ name, status, description, published_at, published_by, issues }` with `issues` a count. Not paginated |
 | `GET` | `/projects/{key}/releases/{name}` | any | one release with its issues as `IssueSummary`, sub-issues after their parent; `unreleased` names the open one |
-| `PATCH` | `/projects/{key}/releases/{name}` | any | `{ description? }` — the release notes are a living document until published, and editable after, because a record can be annotated |
+| `PATCH` | `/projects/{key}/releases/{name}` | any | `{ name?, description? }` — a field left out is left alone. The notes are a living document until published, and editable after, because a record can be annotated. `name` corrects the newest publication only: an older one or the open release is `transition`, a name the project has is `release-exists` |
 | `POST` | `/projects/{key}/releases/publish` | any | `{ name, description? }`: names the open release, freezes it, sets the date and the caller, and creates the next open one, in one transaction. 201 with the published release. A name the project has is `release-exists`; `unreleased` and `none` are reserved |
+| `POST` | `/projects/{key}/releases/{name}/retract` | any | takes the newest publication back: the release is the open one again with the same issues, and the empty open release goes. `transition` where another publication followed it, where work has closed into the open release since, or where the named release was never published |
+| `PUT` | `/projects/{key}/releases/{name}/issues/{issue}` | any | puts the issue into the open release by hand (VISION 7). The answer is the release. `in-published-release` where the named release is published or the issue shipped already |
+| `DELETE` | `/projects/{key}/releases/{name}/issues/{issue}` | any | takes the issue out of the open release: it has not shipped yet and does not belong. The answer is the release. `in-published-release` where the named release is published |
 
 `GET /issues` gains `release` (a name, `unreleased`, or `none`). An issue's
 membership follows the acts (VISION 7): `done` lands in the open release,

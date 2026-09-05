@@ -26,7 +26,7 @@ available in the browser.
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
 | `/:project/epics/:number` | Epic | Markdown description, progress and issue list | one column |
 | `/:project/releases` | Releases | `unreleased`, then published releases newest first | stacked summaries |
-| `/:project/releases/:name` | Release | notes, exact issue membership and publish/copy actions | one column |
+| `/:project/releases/:name` | Release | notes, exact issue membership and publish/copy actions; on the open release each row can be taken out, on the newest publication rename and take back | one column |
 | `/:project/labels` | Labels | the project's set, grouped where its labels exclude one another, with the create line above it | the row stacks: the name and what it means above the two acts |
 | `/settings/profile` | Personal settings · Profile | name and email address | area list folds above the area |
 | `/settings/security` | Personal settings · Security | password and browser sessions | area list folds above the area |
@@ -147,9 +147,9 @@ breakpoint and carries the rest.
 
 | area | read actions | write actions |
 |---|---|---|
-| Issue | list, search, filter, open, inspect history | create, edit fields and relationships, set or clear `ready`, comment, answer, close, hand in for review, reopen, claim, release, delete, restore |
+| Issue | list, search, filter, open, inspect history | create, edit fields and relationships, set or clear `ready`, comment, answer, close, hand in for review, reopen, claim, release the claim, put into or take out of the open release, delete, restore |
 | Epic | list, open, inspect progress and filtered issues | create, edit Markdown and labels, close, reopen, delete, restore |
-| Release | list, open, preview exact membership, copy as Markdown | edit notes, publish |
+| Release | list, open, preview exact membership, copy as Markdown | edit notes, publish, put an issue into the open release or take it out, rename or take back the newest publication |
 | Label | list and inspect use | create, edit name, group and description, rename or dissolve a group, delete, restore |
 | Project | switch and inspect settings/members | create; edit name and switches; delete or restore when administrator |
 | Identity | inspect own profile, sessions, tokens and agents | change own name, verified email and password; revoke sessions/tokens; create or revoke own tokens and agents |

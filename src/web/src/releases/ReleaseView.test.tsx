@@ -71,7 +71,7 @@ it("keeps the notes of a published release editable", async () => {
   await user.click(screen.getByRole("button", { name: "Save notes" }));
 
   const request = await vi.waitFor(() => instance.calls.find((call) => call.method === "PATCH")!);
-  expect(await request.json()).toEqual({ description: "The third cut." });
+  expect(await request.json()).toEqual({ name: null, description: "The third cut." });
   expect(await screen.findByText("The third cut.")).toBeInTheDocument();
   // Publishing is over; only the annotation is still offered.
   expect(screen.queryByRole("button", { name: "Publish…" })).not.toBeInTheDocument();
@@ -124,4 +124,92 @@ it("says a release it could not read is not there, and offers the way back", asy
 
   expect(await screen.findByText("No release 0.9.0 in PLAN.")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "All releases" })).toHaveAttribute("href", "/PLAN/releases");
+});
+
+const published = {
+  name: "0.4.0",
+  status: "published",
+  description: "The third cut.",
+  published_at: "2026-09-01T10:00:00Z",
+  published_by: { id: "0199a000-0000-7000-8000-000000000001", kind: "user", name: "maintainer" },
+  issues: [anIssue("PLAN-41", "The epic's own view")],
+};
+
+// VISION 7: "Moving a ticket by hand still works — a ticket that has not
+// shipped yet simply does not belong."
+it("takes an issue out of the open release", async () => {
+  const instance = installInstance({
+    "GET /projects/PLAN/releases/unreleased": { body: open },
+    "GET /projects/PLAN/releases": [{ ...open, issues: 2 }],
+    "DELETE /projects/PLAN/releases/unreleased/issues/PLAN-42": { body: { ...open, issues: [open.issues[0]] } },
+  });
+  renderRelease("unreleased");
+  const user = userEvent.setup();
+
+  const row = (await screen.findByRole("link", { name: "PLAN-42" })).closest("li")!;
+  await user.click(within(row).getByRole("button", { name: "Remove" }));
+
+  expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "DELETE"))).toBe(true);
+  expect(await screen.findByText("Issues · 1")).toBeInTheDocument();
+});
+
+it("offers no way to take an issue out of a published release", async () => {
+  installInstance({
+    "GET /projects/PLAN/releases/0.4.0": { body: published },
+    "GET /projects/PLAN/releases": [{ ...open, issues: 0 }, { ...published, issues: 1 }],
+  });
+  renderRelease("0.4.0");
+
+  await screen.findByRole("link", { name: "PLAN-41" });
+  expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+});
+
+it("corrects the name of the newest publication", async () => {
+  const instance = installInstance({
+    "GET /projects/PLAN/releases/0.4.0": { body: published },
+    "GET /projects/PLAN/releases": [{ ...open, issues: 0 }, { ...published, issues: 1 }],
+    "PATCH /projects/PLAN/releases/0.4.0": { body: { ...published, name: "0.4.1" } },
+  });
+  renderRelease("0.4.0");
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Rename…" }));
+  const dialog = screen.getByRole("dialog", { name: "Rename 0.4.0" });
+  await user.clear(within(dialog).getByLabelText("Name"));
+  await user.type(within(dialog).getByLabelText("Name"), "0.4.1");
+  await user.click(within(dialog).getByRole("button", { name: "Rename release" }));
+
+  expect(await vi.waitFor(() => instance.calls.some((call) => call.method === "PATCH"))).toBe(true);
+  expect(await instance.calls.find((call) => call.method === "PATCH")!.json()).toEqual({ name: "0.4.1", description: null });
+});
+
+// A record is not rewritten: only the publication nothing has followed can be
+// corrected, and the screen does not offer what the instance would refuse.
+it("offers neither correction on a publication that another has followed", async () => {
+  const older = { ...published, name: "0.3.0", published_at: "2026-08-01T10:00:00Z" };
+  installInstance({
+    "GET /projects/PLAN/releases/0.3.0": { body: older },
+    "GET /projects/PLAN/releases": [{ ...open, issues: 0 }, { ...published, issues: 1 }, { ...older, issues: 1 }],
+  });
+  renderRelease("0.3.0");
+
+  await screen.findByRole("link", { name: "PLAN-41" });
+  expect(screen.queryByRole("button", { name: "Rename…" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Take publication back" })).not.toBeInTheDocument();
+});
+
+it("takes the newest publication back and lands on the open release", async () => {
+  const instance = installInstance({
+    "GET /projects/PLAN/releases/0.4.0": { body: published },
+    "GET /projects/PLAN/releases": [{ ...open, issues: 0 }, { ...published, issues: 1 }],
+    "POST /projects/PLAN/releases/0.4.0/retract": { body: { ...open, issues: published.issues } },
+    "GET /projects/PLAN/releases/unreleased": { body: { ...open, issues: published.issues } },
+  });
+  renderRelease("0.4.0");
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Take publication back" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Take 0.4.0 back?" })).getByRole("button", { name: "Take it back" }));
+
+  expect(await vi.waitFor(() => instance.calls.some((call) => call.url.endsWith("/retract")))).toBe(true);
 });

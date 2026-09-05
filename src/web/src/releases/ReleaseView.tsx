@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, describe, type IssueSummary, type Release } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownField } from "@/issues/IssueEditor";
 import { StatusDot } from "@/issues/status";
+import { ActionDialog } from "@/shared/ActionDialog";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
 import { keyPath, releasePath } from "@/shell/views";
@@ -37,8 +38,16 @@ export function ReleaseView() {
   const { project, name } = useParams();
   const navigate = useNavigate();
   const [known, setKnown] = useState<{ of: string; loaded: Loaded } | null>(null);
+  // Which publication is the newest, because only that one can be corrected
+  // (VISION 7). The list answers it in one read; the release itself does not.
+  const [newest, setNewest] = useState<{ of: string; name: string | null } | null>(null);
   const address = `${project}/${name}`;
   const loaded: Loaded = known !== null && known.of === address ? known.loaded : { at: "asking" };
+
+  const reload = useCallback(async () => {
+    const { data } = await api.GET("/projects/{key}/releases", { params: { path: { key: project! } } });
+    setNewest({ of: address, name: data?.find((r) => r.status === "published")?.name ?? null });
+  }, [address, project]);
 
   useEffect(() => {
     let current = true;
@@ -60,12 +69,13 @@ export function ReleaseView() {
           setKnown({ of: address, loaded: { at: "failed", why: "The instance did not answer." } });
         }
       }
+      if (current) await reload();
     })();
 
     return () => {
       current = false;
     };
-  }, [address, name, project]);
+  }, [address, name, project, reload]);
 
   if (loaded.at === "asking") {
     return (
@@ -95,6 +105,7 @@ export function ReleaseView() {
 
   const release = loaded.release;
   const changed = (value: Release) => setKnown({ of: address, loaded: { at: "known", release: value } });
+  const correctable = release.status === "published" && newest?.of === address && newest.name === release.name;
 
   return (
     <>
@@ -114,6 +125,24 @@ export function ReleaseView() {
         }
       >
         <CopyAsMarkdown release={release} />
+        {/* Correcting the newest publication is not rewriting the record: a
+            typo in the name it was just given, and a publication nobody meant
+            to make (VISION 7). */}
+        {correctable && <RenameDialog release={release} onRenamed={(value) => navigate(releasePath(project!, value.name), { replace: true })} />}
+        {correctable && (
+          <ActionDialog
+            trigger={<Button variant="outline" size="sm">Take publication back</Button>}
+            title={`Take ${release.name} back?`}
+            description="It becomes the open release again with the same issues in it, and the empty open release goes. Refused once another release has followed it."
+            confirmLabel="Take it back"
+            confirmVariant="default"
+            onConfirm={async () => {
+              const result = await api.POST("/projects/{key}/releases/{name}/retract", { params: { path: { key: project!, name: release.name } } });
+              if (!result.data) throw new Error(describe(result.error, result.response.status));
+              void navigate(releasePath(project!, "unreleased"), { replace: true });
+            }}
+          />
+        )}
         {release.status === "open" && (
           <PublishDialog
             release={release}
@@ -132,7 +161,14 @@ export function ReleaseView() {
                 : "This release was published with nothing in it."}
             </p>
           ) : (
-            <Membership issues={release.issues} />
+            <Membership
+              issues={release.issues}
+              onRemove={release.status !== "open" ? undefined : async (key) => {
+                const result = await api.DELETE("/projects/{key}/releases/{name}/issues/{issue}", { params: { path: { key: project!, name: release.name, issue: key } } });
+                if (!result.data) throw new Error(describe(result.error, result.response.status));
+                changed(result.data);
+              }}
+            />
           )}
         </Section>
       </div>
@@ -155,7 +191,7 @@ function Notes({ release, onChanged }: { release: Release; onChanged: (release: 
     try {
       const { data, error: refusal, response } = await api.PATCH("/projects/{key}/releases/{name}", {
         params: { path: { key: project!, name: release.name } },
-        body: { description: draft },
+        body: { name: null, description: draft },
       });
 
       if (data === undefined) {
@@ -221,19 +257,101 @@ function Notes({ release, onChanged }: { release: Release; onChanged: (release: 
  * The exact membership. The instance answers parent first, then that parent's
  * sub-issues, so a sub-issue is indented where it stands rather than moved.
  */
-function Membership({ issues }: { issues: IssueSummary[] }) {
+function Membership({ issues, onRemove }: { issues: IssueSummary[]; onRemove?: (key: string) => Promise<void> }) {
+  const [why, setWhy] = useState<string>();
+
   return (
-    <ul className="divide-y rounded-md border">
-      {issues.map((issue) => (
-        <li key={issue.key} className={`flex min-h-9 items-center gap-3 px-3 py-1 ${issue.parent === null ? "" : "pl-8"}`}>
-          <StatusDot status={issue.status} />
-          <Link className="font-mono text-xs text-brand hover:underline" to={keyPath(issue.key)}>
-            {issue.key}
-          </Link>
-          <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="divide-y rounded-md border">
+        {issues.map((issue) => (
+          <li key={issue.key} className={`flex min-h-9 items-center gap-3 px-3 py-1 ${issue.parent === null ? "" : "pl-8"}`}>
+            <StatusDot status={issue.status} />
+            <Link className="font-mono text-xs text-brand hover:underline" to={keyPath(issue.key)}>
+              {issue.key}
+            </Link>
+            <span className="min-w-0 flex-1 truncate text-sm">{issue.title}</span>
+            {onRemove !== undefined && (
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => void onRemove(issue.key).then(() => setWhy(undefined), (reason: unknown) => setWhy(reason instanceof Error ? reason.message : "The instance did not answer."))}
+              >
+                Remove
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {why !== undefined && <p role="alert" className="mt-2 text-sm text-destructive">{why}</p>}
+    </>
+  );
+}
+
+/** The one thing a published release still gives up: the name it was just given. */
+function RenameDialog({ release, onRenamed }: { release: Release; onRenamed: (release: Release) => void }) {
+  const { project } = useParams();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(release.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  function changeOpen(next: boolean) {
+    if (busy) return;
+    if (next) setName(release.name);
+    setError(undefined);
+    setOpen(next);
+  }
+
+  async function rename(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const chosen = name.trim();
+    if (chosen === "" || chosen === release.name) return;
+    setBusy(true);
+    setError(undefined);
+
+    try {
+      const { data, error: refusal, response } = await api.PATCH("/projects/{key}/releases/{name}", {
+        params: { path: { key: project!, name: release.name } },
+        body: { name: chosen, description: null },
+      });
+      if (data === undefined) {
+        setError(describe(refusal, response.status));
+        return;
+      }
+      setOpen(false);
+      onRenamed(data);
+    } catch {
+      setError("The instance did not answer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={changeOpen}>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>Rename…</DialogTrigger>
+      <DialogContent>
+        <form className="grid gap-4" onSubmit={(event) => void rename(event)}>
+          <DialogHeader>
+            <DialogTitle>Rename {release.name}</DialogTitle>
+            <DialogDescription>
+              Only the newest publication can be renamed. What shipped in it does not change.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="grid gap-1 text-sm font-medium">
+            Name
+            <Input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required />
+          </label>
+          {error !== undefined && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" disabled={busy} />}>Cancel</DialogClose>
+            <Button type="submit" disabled={busy || name.trim() === "" || name.trim() === release.name}>
+              {busy ? "Renaming…" : "Rename release"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

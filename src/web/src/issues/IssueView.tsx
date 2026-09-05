@@ -137,6 +137,20 @@ function ActionBar({ issue, onEdit, onChanged, onDeleted }: { issue: Issue; onEd
   const close = (status: "done" | "canceled") => () => run(() => issueRequest("/issues/{key}/close", issue, { status, result: issue.result }));
   const hand = () => run(() => issueRequest("/issues/{key}/review", issue, { result: issue.result }));
   const ready = () => run(async () => { const result = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: { ready: !issue.ready } as never }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return result.data; });
+  // "Moving a ticket by hand still works — a ticket that has not shipped yet
+  // simply does not belong" (VISION 7). The act is the release's; the answer is
+  // the release, so the issue is read again.
+  const shipped = issue.release !== null && issue.release !== "unreleased";
+  const moveRelease = (into: boolean) => run(async () => {
+    const path = { key: issue.project, name: "unreleased", issue: issue.key };
+    const result = into
+      ? await api.PUT("/projects/{key}/releases/{name}/issues/{issue}", { params: { path } })
+      : await api.DELETE("/projects/{key}/releases/{name}/issues/{issue}", { params: { path } });
+    if (!result.data) throw new Error(describe(result.error, result.response.status));
+    const read = await api.GET("/issues/{key}", { params: { path: { key: issue.key } } });
+    if (!read.data) throw new Error(describe(read.error, read.response.status));
+    return read.data;
+  });
 
   // One primary per status, and only one: accept what was handed in, hand in
   // what is being worked on, take what is free, reopen what is closed.
@@ -157,6 +171,7 @@ function ActionBar({ issue, onEdit, onChanged, onDeleted }: { issue: Issue; onEd
         {open && <DropdownMenuItem onClick={() => void close("done")()}>Close as done</DropdownMenuItem>}
         {open && <DropdownMenuItem onClick={() => void close("canceled")()}>Close as canceled</DropdownMenuItem>}
         <DropdownMenuItem onClick={() => void ready()}>{issue.ready ? "Clear ready" : "Set ready"}</DropdownMenuItem>
+        {!shipped && <DropdownMenuItem onClick={() => void moveRelease(issue.release === null)}>{issue.release === null ? "Put into the open release" : "Take out of the open release"}</DropdownMenuItem>}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>Delete issue</DropdownMenuItem>
       </DropdownMenuContent>
@@ -285,7 +300,7 @@ function historyText(x: HistoryEntry) {
 function value(x: unknown) { if (x == null) return null; if (typeof x === "object" && "name" in x && typeof x.name === "string") return x.name; return String(x); }
 
 function Metadata({ issue }: { issue: Issue }) {
-  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l"><Field name="Status" className="max-md:hidden"><StatusDot status={issue.status} withLabel /></Field><Field name="Priority" className="max-md:hidden"><span className="font-mono text-xs">{priorityLabel(issue.priority)}</span></Field><Field name="Ready" className="max-md:hidden">{issue.ready ? "yes" : "no"}</Field>{issue.epic && <Field name="Epic" className="max-md:hidden"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}{issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}{issue.assignee && <Field name="Assignee">{issue.assignee.name}</Field>}{issue.labels.length > 0 && <Field name="Labels"><span className="flex flex-wrap gap-1">{issue.labels.map((x) => <Badge key={x.name} variant="secondary" className="font-normal">{x.name}</Badge>)}</span></Field>}<Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field>{issue.release && <Field name="Release">{issue.release}</Field>}</aside>;
+  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l"><Field name="Status" className="max-md:hidden"><StatusDot status={issue.status} withLabel /></Field><Field name="Priority" className="max-md:hidden"><span className="font-mono text-xs">{priorityLabel(issue.priority)}</span></Field><Field name="Ready" className="max-md:hidden">{issue.ready ? "yes" : "no"}</Field>{issue.epic && <Field name="Epic" className="max-md:hidden"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}{issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}{issue.assignee && <Field name="Assignee">{issue.assignee.name}</Field>}{issue.labels.length > 0 && <Field name="Labels"><span className="flex flex-wrap gap-1">{issue.labels.map((x) => <Badge key={x.name} variant="secondary" className="font-normal">{x.name}</Badge>)}</span></Field>}<Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field><Field name="Release">{issue.release === null ? <span className="text-muted-foreground">not in a release</span> : issue.release}</Field></aside>;
 }
 
 /**

@@ -36,6 +36,9 @@ public static class HistoryField
     /// <inheritdoc cref="Label"/>
     public const string BlockedBy = "blocked_by";
 
+    /// <summary>The release an issue is recorded in; empty where it is in none.</summary>
+    public const string Release = "release";
+
     public const string Deleted = "deleted";
 }
 

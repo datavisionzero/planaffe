@@ -137,6 +137,10 @@ pa release list
 pa release view unreleased | pa release view v1.2.0
 pa release publish v1.2.0 [--description-file notes.md]
 pa release notes v1.2.0                 # Markdown, with sub-issues indented under their parent
+pa release add PLAN-42                  # into the open release by hand
+pa release remove PLAN-42               # out of it: it has not shipped yet
+pa release rename v1.2.O v1.2.0         # the newest publication only
+pa release retract v1.2.0               # take the publication back; it is the open release again
 ```
 
 Identities (ADR 0015) — a secret is printed once, to stdout, and nowhere else:
