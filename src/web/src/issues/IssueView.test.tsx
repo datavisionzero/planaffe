@@ -2,10 +2,17 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { installInstance, renderAt } from "@/shared/testing";
+import { aUser, installInstance, renderAt } from "@/shared/testing";
+import { SessionProvider } from "@/session/Session";
 import { IssueView } from "./IssueView";
 
-const routedIssue = <Routes><Route path="/:project/issues/:number" element={<IssueView />} /></Routes>;
+// The screen lives under the shell, and it asks who is looking: only the
+// author of a comment is offered the correction of it (ADR 0022).
+const routedIssue = (
+  <SessionProvider value={{ me: aUser, signOut: vi.fn() }}>
+    <Routes><Route path="/:project/issues/:number" element={<IssueView />} /></Routes>
+  </SessionProvider>
+);
 
 const person = { id: "0199a000-0000-7000-8000-000000000001", kind: "user", name: "maintainer" };
 const agent = { ...person, id: "0199a000-0000-7000-8000-000000000002", kind: "agent", name: "codex" };
@@ -164,6 +171,73 @@ describe("the human-first issue detail", () => {
       return calls[1]!;
     });
     expect(second.headers.get("If-Match")).toBe("2026-09-05T12:00:00Z");
+  });
+
+  // ADR 0022: the author corrects their own comment in the field they wrote it
+  // in, and the correction is visible. What the caller may not do is not
+  // offered — the check itself is the instance's.
+  it("corrects its author's own comment in place and says that it was edited", async () => {
+    const corrected = { ...issue.comments[0], body: "A corrected comment.", edited_at: "2026-09-05T11:00:00Z" };
+    const instance = installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "PATCH /comments/0199a000-0000-7000-8000-000000000003": { body: corrected },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText("A comment.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Actions on the comment by maintainer" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Edit comment" }));
+
+    // The field opens in the text it is correcting rather than empty.
+    const field = await screen.findByLabelText("Save comment");
+    expect(field).toHaveValue("A comment.");
+    await user.clear(field);
+    await user.type(field, "A corrected comment.");
+    await user.click(screen.getByRole("button", { name: "Save comment" }));
+
+    expect(await screen.findByText("A corrected comment.")).toBeInTheDocument();
+    expect(await instance.calls.find((call) => call.method === "PATCH")!.json()).toEqual({ body: "A corrected comment." });
+    expect(screen.getByText("edited")).toBeInTheDocument();
+  });
+
+  it("takes a comment away for good, once it has been confirmed", async () => {
+    const instance = installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "DELETE /comments/0199a000-0000-7000-8000-000000000003": { status: 204 },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText("A comment.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Actions on the comment by maintainer" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete comment" }));
+
+    // No grace period, so the dialog says so before it happens.
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("gone for good");
+    await user.click(within(dialog).getByRole("button", { name: "Delete comment" }));
+
+    await waitFor(() => expect(screen.queryByText("A comment.")).toBeNull());
+    expect(instance.calls.some((call) => call.method === "DELETE")).toBe(true);
+  });
+
+  // A comment somebody else wrote: a user may clear it up, and nobody but its
+  // author may rewrite it.
+  it("offers only the delete on somebody else's comment", async () => {
+    installInstance({
+      "GET /issues/PLAN-9": { ...free, comments: [{ ...issue.comments[0], author: agent }] },
+      "GET /issues/PLAN-9/history": [],
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Actions on the comment by codex" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "Delete comment" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: "Edit comment" })).not.toBeInTheDocument();
   });
 
   // An always-open comment box invites the comment nobody needed, and it sat

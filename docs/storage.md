@@ -409,7 +409,8 @@ create table comment (
     issue_id    uuid        not null references issue (id) on delete cascade,
     author_id   uuid        not null references identity (id),
     body        text        not null,
-    created_at  timestamptz not null
+    created_at  timestamptz not null,
+    edited_at   timestamptz
 );
 
 create index comment_issue on comment (issue_id, created_at);
@@ -433,7 +434,13 @@ create index question_issue on question (issue_id, asked_at);
 create index question_open  on question (issue_id) where answer is null;
 ```
 
-A comment is written once and stays; cut one has no edit and no delete for it.
+A comment is its author's to correct and to take back (ADR 0022): `edited_at`
+is null while it stands as written and carries the time of the last correction
+otherwise, and a delete is a delete — the row goes, the history entry that says
+it went stays. No grace period and no `deleted_at`: ADR 0013's floor hangs on
+the issue, the label and the project, and an object the size of a paragraph does
+not get a second lifetime rule. The `search` column is generated and stored, so
+a correction recomputes it and a delete takes it with the row.
 A question is open while `answer` is null, and the partial index is what
 condition 4 of VISION 10 and the "needs you" list read. `project_id` is
 denormalised from the issue solely so the wake-up trigger below can choose its
@@ -473,16 +480,22 @@ gaining a fourth column of its own.
 `field` is the name of the column or edge that changed, spelled as the API
 spells it: `title`, `description`, `result`, `status`, `ready`, `priority`,
 `assignee`, `claim`, `epic`, `label`, `blocked_by`, `deleted` — plus `created`
-for the row's birth, with no values, and `body` and `slug` on a page. For
+for the row's birth, with no values, `body` and `slug` on a page, and `comment`
+on an issue. For
 `description`, `result` and `body` the values are null: the entry records *that* the text changed, not how. For an edge
 (`label`, `blocked_by`) an addition has the new value and a removal the old.
+A `comment` entry follows that shape: a correction carries the comment's id as
+the new value, a withdrawal carries it as the old, and neither carries the text
+(ADR 0022) — a history that kept what somebody withdrew would keep the one
+thing the withdrawal was for.
 Identities in `assignee` and `claim` are stored as their ids; the API renders
 names.
 
-`note` carries the two things a value cannot: `expired`, on the `claim` entry
+`note` carries what a value cannot: `expired`, on the `claim` entry
 of a successor whose predecessor's claim had lapsed — the one trace an expiry
-leaves, written by whoever comes next (VISION 11) — and `forced`, on a claim
-taken with `--force`.
+leaves, written by whoever comes next (VISION 11); `forced`, on a claim
+taken with `--force`; and `edited` or `withdrawn`, on a `comment` entry, which
+is what says which of the two happened.
 
 **The history dies with its subject.** `on delete cascade` from the issue is
 ADR 0013's decision that a deletion's record does not outlive the row.

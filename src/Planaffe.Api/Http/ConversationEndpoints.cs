@@ -40,6 +40,31 @@ public static class ConversationEndpoints
             .WithName("ReadHistory")
             .WithSummary("Every change to the issue, oldest first: who, when, which field, from what to what.");
 
+        // Addressed by the comment's own id rather than under its issue: the
+        // comment belongs to exactly one issue and the id says which, the way a
+        // question's answer is already addressed (ADR 0022).
+        var comments = endpoints.MapGroup("/comments")
+            .RequireAuthorization()
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        comments.MapPatch("/{id:guid}", (Guid id, CommentRequest? request, EditComment edit, CancellationToken cancellationToken) =>
+                edit.ExecuteAsync(id, request?.Body, cancellationToken))
+            .WithName("EditComment")
+            .WithSummary("Rewrite a comment. Its author only; the correction is visible as `edited_at`.")
+            .Produces<CommentShape>()
+            .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        comments.MapDelete("/{id:guid}", async (Guid id, DeleteComment delete, CancellationToken cancellationToken) =>
+            {
+                await delete.ExecuteAsync(id, cancellationToken);
+                return Results.NoContent();
+            })
+            .WithName("DeleteComment")
+            .WithSummary("Take a comment away for good. Its author, or any user on anybody's; an agent only its own.")
+            .Produces(StatusCodes.Status204NoContent);
+
         var questions = endpoints.MapGroup("/questions")
             .RequireAuthorization()
             .ProducesProblem(StatusCodes.Status401Unauthorized);

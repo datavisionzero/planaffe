@@ -58,6 +58,9 @@ public sealed class ProjectScopeMiddleware(RequestDelegate next)
             case "questions" when values["id"] is string question && Guid.TryParse(question, out var questionId):
                 return FromQuestion(issues, questionId, http.RequestAborted);
 
+            case "comments" when values["id"] is string comment && Guid.TryParse(comment, out var commentId):
+                return FromComment(issues, commentId, http.RequestAborted);
+
             default:
                 return null;
         }
@@ -75,4 +78,13 @@ public sealed class ProjectScopeMiddleware(RequestDelegate next)
 
     private static async Task<Guid> FromQuestion(IIssues issues, Guid id, CancellationToken cancellationToken) =>
         (await issues.FindQuestionAsync(id, cancellationToken))?.ProjectId ?? Guid.Empty;
+
+    // A comment carries no project of its own; the issue it hangs on does.
+    private static async Task<Guid> FromComment(IIssues issues, Guid id, CancellationToken cancellationToken)
+    {
+        if (await issues.FindCommentAsync(id, cancellationToken) is not { } comment) return Guid.Empty;
+
+        var issue = (await issues.FindLiveManyAsync([comment.IssueId], cancellationToken)).SingleOrDefault();
+        return issue?.ProjectId ?? Guid.Empty;
+    }
 }

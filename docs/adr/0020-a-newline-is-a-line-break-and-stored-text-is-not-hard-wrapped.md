@@ -65,6 +65,13 @@ rewritten because the renderer learned something. The handful written before
 this decision stay as they are and read as a staircase. That is the honest
 outcome and it is cheaper than an edit endpoint nobody wanted.
 
+> **Superseded by
+> [ADR 0022](./0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md).**
+> This paragraph, and only this one. A comment can be edited now, by its
+> author — not because the renderer learned something, but because the person
+> who wrote it had no way to take back their own mistake. The rest of this
+> decision stands, and those staircases are repairable rather than written off.
+
 **Whoever writes tickets is told.** This is a convention for the text agents
 produce, not a rule about the repository, so it lives where the instructions for
 writing tickets live rather than in `AGENTS.md`.

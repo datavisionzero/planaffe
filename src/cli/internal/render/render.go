@@ -130,7 +130,14 @@ func Issue(w io.Writer, issue api.Issue) {
 		}
 	}
 	for _, c := range issue.Comments {
-		fmt.Fprintf(w, "\n> %s (%s, %s)\n", c.Body, c.Author.Name, c.CreatedAt.Format("2006-01-02 15:04"))
+		// Said "edited" where its author corrected it (ADR 0022): a comment
+		// that is no longer what was first written says so here too, or the
+		// console shows a correction as if it were the original.
+		edited := ""
+		if c.EditedAt != nil {
+			edited = ", edited"
+		}
+		fmt.Fprintf(w, "\n> %s (%s, %s%s)\n", c.Body, c.Author.Name, c.CreatedAt.Format("2006-01-02 15:04"), edited)
 	}
 }
 

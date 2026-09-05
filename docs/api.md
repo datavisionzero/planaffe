@@ -100,7 +100,7 @@ not change when it starts counting.
   "epic": { "key": "PLAN-E2", "title": "Backend and data model", "description": "…markdown…", "status": "open" },
   "blocked_by": [ { "key": "PLAN-40", "title": "…", "status": "todo", "open": true } ],
   "blocks":     [ { "key": "PLAN-44", "title": "…", "status": "todo", "open": true } ],
-  "comments":   [ { "id": "…", "author": {…}, "body": "…", "created_at": "…" } ],
+  "comments":   [ { "id": "…", "author": {…}, "body": "…", "created_at": "…", "edited_at": null } ],
   "questions":  [ { "id": "…", "question": "…", "asked_by": {…}, "asked_at": "…",
                     "answer": null, "answered_by": null, "answered_at": null } ],
   "project": { "key": "PLAN", "name": "planaffe", "triage_required": false, "review_required": false,
@@ -327,9 +327,13 @@ one role and project access:
   and questions in every project, and read projects and its own identity. It may
   not create or change a project, a user, an agent or a token, and may not
   list agents or tokens ([ADR 0015](./adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)).
+  A comment is the one thing narrower than that line: only its author may
+  rewrite it, and an agent takes away only its own
+  ([ADR 0022](./adr/0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md)).
 - **A user may do everything an agent may**, plus create projects and change
   their switches, create agents and their own tokens, rename and revoke agents
-  they own, and list agents.
+  they own, and list agents — and take away anybody's comment, which is the
+  same clearing up ADR 0013 conceded for issues.
 - **An administrator** may in addition create users, rename and revoke any
   agent, and delete projects. Whoever bootstrapped the instance is one.
 - **Project access belongs to a user.** The user and all their agents see and
@@ -509,6 +513,8 @@ protected only against agents, which `claim-protected` says.
 | `POST` | `/issues/{key}/review` | `{ result? }` | hand in explicitly, whatever the switch says. From any open status but `review`. Clears the claim, no `closed_at` |
 | `POST` | `/issues/{key}/reopen` | `{ comment? }` | one movement from `review`, `done` or `canceled` to `todo`: `closed_at` cleared, no claim, `result` kept. `comment` is written as a comment first and expected on the way back from `review` — pointed out when missing, never refused |
 | `POST` | `/issues/{key}/comments` | `{ body }` | 201 with the comment. On any issue, by anyone, claimed or not — a comment forces nobody to act (VISION 7) |
+| `PATCH` | `/comments/{id}` | author | `{ body }` → 200 with the comment, `edited_at` set. Its author only; anybody else is `forbidden` ([ADR 0022](./adr/0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md)). An empty body is `validation` — a comment that says nothing is one to withdraw |
+| `DELETE` | `/comments/{id}` | author, or any user | 204. Gone for good, with no grace period; the history keeps that it went and who took it. An agent takes away only its own, a user takes away anybody's — the clearing up of ADR 0013 |
 | `POST` | `/issues/{key}/questions` | `{ question }` | ask. 201 with the question. Does not release the claim (VISION 10). On any open issue |
 | `POST` | `/questions/{id}/answer` | `{ answer }` | answer an open question; a second answer is `transition`. 200 with the question. Users and agents alike — the convention that an agent answers only when told to is a convention |
 | `POST` | `/issues/{key}/labels/{name}` | — | add one label, replacing another of its group; 200 `Issue` |

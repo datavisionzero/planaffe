@@ -247,8 +247,9 @@ Two things follow from that:
 |---|---|
 | `body` | Markdown |
 | `author`, `created_at` | who, when |
+| `edited_at` | when its author last corrected it, where they did |
 
-Nothing more is needed. The only interesting part is the boundary against the question, because an agent has to be able to draw it:
+Nothing more is needed. Its author may rewrite it and take it back, and a user may take anybody's away — a person who mistyped, or sent a sentence a paragraph too early, must be able to put that right in the interface rather than by leaving a second comment that withdraws the first (ADR 0022). Nothing else about it changes: the correction is visible, the history says that it happened, and a comment still forces nobody to act. The only interesting part is the boundary against the question, because an agent has to be able to draw it:
 
 A **comment** is a note on the ticket that forces nobody to act — an interim state, an observation, the reasoning behind a decision. A **question** is a state: the ticket waits and is not workable until it is answered (see 10.).
 

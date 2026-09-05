@@ -128,6 +128,8 @@ builder.Services.AddScoped<MoveIssue>();
 
 // What hangs on an issue beside its fields: comments, questions, the history.
 builder.Services.AddScoped<CommentOnIssue>();
+builder.Services.AddScoped<EditComment>();
+builder.Services.AddScoped<DeleteComment>();
 builder.Services.AddScoped<AskQuestion>();
 builder.Services.AddScoped<AnswerQuestion>();
 builder.Services.AddScoped<ReadQuestion>();

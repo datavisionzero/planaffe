@@ -250,6 +250,12 @@ public interface IIssues
 
     void Add(Comment comment);
 
+    /// <summary>One comment by id, tracked, whatever the state of its issue.</summary>
+    Task<Comment?> FindCommentAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Takes a comment away for good; the history keeps that it was (ADR 0022).</summary>
+    void Remove(Comment comment);
+
     void Add(Question question);
 
     Task<Question?> FindQuestionAsync(Guid id, CancellationToken cancellationToken);

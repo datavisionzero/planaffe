@@ -37,7 +37,8 @@ public sealed record IssueSummaryShape(
 
 public sealed record EpicRefShape(string Key, string Title, string Description, Domain.Epics.EpicStatus Status);
 
-public sealed record CommentShape(Guid Id, IdentityRef Author, string Body, DateTimeOffset CreatedAt);
+/// <param name="EditedAt">When its author last corrected it, or nothing while it is as written (ADR 0022).</param>
+public sealed record CommentShape(Guid Id, IdentityRef Author, string Body, DateTimeOffset CreatedAt, DateTimeOffset? EditedAt);
 
 public sealed record QuestionShape(
     Guid Id,

@@ -139,7 +139,10 @@ another replaces the previous one. This is what replaces an issue type.
 _Avoid_: category, dimension, field, enum
 
 **Comment**:
-A note on an issue that forces nobody to act. Whoever can go on comments.
+A note on an issue that forces nobody to act. Whoever can go on comments. Its
+author may correct it — the correction is visible as `edited_at` — and its
+author, or any user, may take it away for good (ADR 0022). It is what somebody
+said, not a record that is kept against them.
 _Avoid_: note, remark, discussion, thread
 
 **Question**:

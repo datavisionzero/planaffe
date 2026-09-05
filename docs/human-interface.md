@@ -25,7 +25,7 @@ read, so nothing has to be known about Markdown to write one
 | `/:project/needs-you` | Needs you | question, review, unready and stuck reasons, and a line where no agent could pick work up | reason and next action stay visible |
 | `/:project/issues` | All issues | shared issue list, all URL filters, and the four sorts — by epic it groups | filters open as a dismissible sheet |
 | `/:project/issues/new` | Create issue | title, Markdown description, priority, status, `ready`, and the five choices — labels, epic, parent, assignee, blockers | one column throughout; the pairs of fields stack, chips wrap, each suggestion list opens below its field |
-| `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs; editing it is guarded and a conflict is shown, not lost | one column; metadata as chips under the title |
+| `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs; editing it is guarded and a conflict is shown, not lost; a comment carries its author's edit and delete | one column; metadata as chips under the title |
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
 | `/:project/epics/new` | Create epic | title, Markdown description and the label choice | one column; the same form the epic screen edits in place |
 | `/:project/epics/:number` | Epic | Markdown description, progress and issue list; editing it is guarded and a conflict is shown, not lost | one column |
@@ -236,8 +236,12 @@ away: a long one is capped at a readable height behind a fade until somebody
 asks for the rest. Below that, conversation, relationships and history share one
 tabbed area, each tab carrying its count, with the conversation open by default;
 a comment or a question opens its field on a button inside that tab rather than
-standing open beside the actions. Adding and removing a blocker lives in the
-relationships tab.
+standing open beside the actions. A comment carries the two acts ADR 0022 gave
+it in the same overflow menu the header uses, and only where they are allowed:
+its author edits it — in the field it was written in, opened on the text it is
+correcting, with "edited" in the byline afterwards — and its author, or any
+user on anybody's, deletes it behind a confirmation that says there is no
+grace period. Adding and removing a blocker lives in the relationships tab.
 
 Narrow screens get status, priority, `ready` and the epic as a chip line
 directly under the title; the metadata column itself starts at the medium
@@ -247,7 +251,7 @@ breakpoint and carries the rest.
 
 | area | read actions | write actions |
 |---|---|---|
-| Issue | list, search, filter, open, inspect history | create, edit fields and relationships, set or clear `ready`, comment, answer, close, hand in for review, reopen, claim, release the claim, put into or take out of the open release, delete, restore |
+| Issue | list, search, filter, open, inspect history | create, edit fields and relationships, set or clear `ready`, comment, edit or delete a comment, answer, close, hand in for review, reopen, claim, release the claim, put into or take out of the open release, delete, restore |
 | Epic | list, open, inspect progress and filtered issues | create, edit Markdown and labels, close, reopen, delete, restore |
 | Release | list, open, preview exact membership, copy as Markdown | edit notes, publish, put an issue into the open release or take it out, rename or take back the newest publication |
 | Label | list and inspect use | create, edit name, group and description, rename or dissolve a group, delete, restore |

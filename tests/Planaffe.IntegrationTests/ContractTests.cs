@@ -42,6 +42,7 @@ public sealed class ContractTests(PostgresFixture postgres)
             [
                 "/admin/projects", "/admin/smtp", "/admin/smtp/test",
                 "/agents", "/agents/{id}",
+                "/comments/{id}",
                 "/email-changes/confirm",
                 "/epics", "/epics/{key}", "/epics/{key}/close", "/epics/{key}/reopen", "/epics/{key}/restore",
                 "/invitations/accept",
