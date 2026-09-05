@@ -163,7 +163,10 @@ palette compare against and which `shell/ShortcutsDialog.tsx` draws, so the
 overview a reader opens cannot drift away from what is bound. What is waiting
 for a human is read once for the whole frame in `shell/useAttention.ts`: the
 count on "Needs you" in the navigation and the screen that lists it are two
-readers of one state, not two requests asking the same question.
+readers of one state, not two requests asking the same question. That state
+holds the long poll of `docs/api.md`, Waiting — one connection per project and
+tab, given up while the tab is hidden — and hands the screen the wake pulse
+instead of a second connection.
 `components/ui/` is what the shadcn CLI
 generated and `index.css` is the token layer; both are the repository's to
 edit. `api/client.ts` is the one way to the instance — `openapi-fetch` over the

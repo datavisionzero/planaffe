@@ -85,7 +85,123 @@ public sealed class CommentOnIssue(
         var author = await identities.FindAsync(caller.Id, cancellationToken)
             ?? throw new InvalidOperationException("The caller has no row.");
 
-        return new CommentShape(comment.Id, IdentityRef.Of(author), comment.Body, comment.CreatedAt);
+        return new CommentShape(comment.Id, IdentityRef.Of(author), comment.Body, comment.CreatedAt, comment.EditedAt);
+    }
+}
+
+/// <summary>
+/// Correct a comment: its author rewrites what they said (ADR 0022). Nobody
+/// else may — a text somebody else rewrote is no longer what its byline says
+/// was said. The correction is visible through <c>edited_at</c>, and the
+/// history records that it happened without keeping the old text.
+/// </summary>
+public sealed class EditComment(
+    ICallerIdentity callerIdentity,
+    IIdentities identities,
+    IIssues issues,
+    IHistory history,
+    ProjectScope scope,
+    ITransactions transactions,
+    InstanceSettings settings,
+    TimeProvider clock)
+{
+    public async Task<CommentShape> ExecuteAsync(Guid id, string? body, CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller;
+        var (found, row) = await Comments.LiveAsync(issues, scope, id, cancellationToken);
+
+        if (found.AuthorId != caller.Id)
+        {
+            throw new Refusal(RefusalCode.Forbidden, "Only the author of a comment may rewrite it (ADR 0022).");
+        }
+
+        var comment = await transactions.RunAsync(async () =>
+        {
+            var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)
+                ?? throw new Refusal(RefusalCode.NotFound, $"No comment {id}.");
+            var open = await issues.FindCommentAsync(id, cancellationToken)
+                ?? throw new Refusal(RefusalCode.NotFound, $"No comment {id}.");
+
+            var now = clock.GetUtcNow();
+            Validated.Field("body", () => { open.Rewrite(body!, now); return true; });
+            history.Add(HistoryEntry.OnIssue(
+                issue.Id, caller.Id, now, HistoryField.Comment, newValue: id.ToString(), note: HistoryNote.Edited));
+            issue.Touch(now);
+            issue.ExtendClaimIfHeldBy(caller.Id, caller.Kind, now, settings.ClaimExpiry);
+
+            await issues.SaveAsync(cancellationToken);
+            return open;
+        }, cancellationToken);
+
+        var author = await identities.FindAsync(comment.AuthorId, cancellationToken)
+            ?? throw new InvalidOperationException("The author has no row.");
+
+        return new CommentShape(comment.Id, IdentityRef.Of(author), comment.Body, comment.CreatedAt, comment.EditedAt);
+    }
+}
+
+/// <summary>
+/// Withdraw a comment (ADR 0022). Its author may, and so may any user on
+/// anybody's — the clearing up ADR 0013 already conceded for issues, for the
+/// same reason: agents leave noise and a human must be able to take it away
+/// without a database client. An agent takes away only its own.
+/// </summary>
+public sealed class DeleteComment(
+    ICallerIdentity callerIdentity,
+    IIssues issues,
+    IHistory history,
+    ProjectScope scope,
+    ITransactions transactions,
+    InstanceSettings settings,
+    TimeProvider clock)
+{
+    public async Task ExecuteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller;
+        var (found, row) = await Comments.LiveAsync(issues, scope, id, cancellationToken);
+
+        if (found.AuthorId != caller.Id && !caller.IsUser)
+        {
+            throw new Refusal(RefusalCode.Forbidden, "An agent takes away only its own comments; clearing up after one is a user's (ADR 0022).");
+        }
+
+        await transactions.RunAsync(async () =>
+        {
+            var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)
+                ?? throw new Refusal(RefusalCode.NotFound, $"No comment {id}.");
+            var open = await issues.FindCommentAsync(id, cancellationToken)
+                ?? throw new Refusal(RefusalCode.NotFound, $"No comment {id}.");
+
+            var now = clock.GetUtcNow();
+            issues.Remove(open);
+            history.Add(HistoryEntry.OnIssue(
+                issue.Id, caller.Id, now, HistoryField.Comment, oldValue: id.ToString(), note: HistoryNote.Withdrawn));
+            issue.Touch(now);
+            issue.ExtendClaimIfHeldBy(caller.Id, caller.Kind, now, settings.ClaimExpiry);
+
+            await issues.SaveAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
+    }
+}
+
+/// <summary>Finding a comment on a live issue the caller may see, in one place.</summary>
+internal static class Comments
+{
+    /// <exception cref="Refusal"><c>not-found</c> where either is absent or gone.</exception>
+    public static async Task<(Comment Comment, IssueRow Issue)> LiveAsync(
+        IIssues issues, ProjectScope scope, Guid id, CancellationToken cancellationToken)
+    {
+        // A deleted issue hides its conversation with it, so the comment on one
+        // is as absent as the issue — the same answer an unknown id gets.
+        var comment = await issues.FindCommentAsync(id, cancellationToken)
+            ?? throw new Refusal(RefusalCode.NotFound, $"No comment {id}.");
+        var row = (await issues.FindLiveManyAsync([comment.IssueId], cancellationToken)).SingleOrDefault()
+            ?? throw new Refusal(RefusalCode.NotFound, $"No comment {id}.");
+
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
+
+        return (comment, row);
     }
 }
 
@@ -254,6 +370,19 @@ public sealed class ReadQuestion(
 internal static class Waits
 {
     public const int MaximumSeconds = 3600;
+
+    /// <summary>
+    /// The validator of a page, which is the hash of the page as it goes on the
+    /// wire. It makes no assumption about what a change is, which is what lets
+    /// the coarse wake channel of <see cref="IChanges"/> stay coarse: a caller
+    /// woken by somebody else's change asks again and is answered <c>304</c>.
+    /// </summary>
+    public static string ETag<T>(T page) =>
+        $"\"{Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(page)))}\"";
+
+    /// <summary>Whether an <c>If-None-Match</c> header covers this validator.</summary>
+    public static bool Matches(string candidates, string tag) =>
+        candidates.Split(',').Select(candidate => candidate.Trim()).Any(candidate => candidate == tag || candidate == "*");
 
     public static void Validate(int? wait)
     {

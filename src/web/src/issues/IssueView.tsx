@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "@/shared/Markdown";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
+import { useSession } from "@/session/useSession";
+import { stale } from "@/shared/stale";
 import { keyPath, pathKey } from "@/shell/views";
 import { PriorityMark } from "./priority";
 import { StatusDot } from "./status";
@@ -136,7 +138,16 @@ function ActionBar({ issue, onEdit, onChanged, onDeleted }: { issue: Issue; onEd
 
   const close = (status: "done" | "canceled") => () => run(() => issueRequest("/issues/{key}/close", issue, { status, result: issue.result }));
   const hand = () => run(() => issueRequest("/issues/{key}/review", issue, { result: issue.result }));
-  const ready = () => run(async () => { const result = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: { ready: !issue.ready } as never }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return result.data; });
+  // Nothing is typed here, so a stale refusal has nothing to merge — but it
+  // still may not be a dead end. The screen takes the version the refusal
+  // carried, says what happened, and the same press writes against that one.
+  const ready = () => run(async () => {
+    const result = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: { ready: !issue.ready } as never });
+    const current = stale<Issue>(result);
+    if (current !== undefined) { onChanged(current); throw new Error(`${issue.key} changed while it was open. It is shown as it is now; set it again to write against that version.`); }
+    if (!result.data) throw new Error(describe(result.error, result.response.status));
+    return result.data;
+  });
   // "Moving a ticket by hand still works — a ticket that has not shipped yet
   // simply does not belong" (VISION 7). The act is the release's; the answer is
   // the release, so the issue is read again.
@@ -254,11 +265,56 @@ function Conversation({ issue, onChanged }: { issue: Issue; onChanged: (issue: I
   const entries = [...issue.questions.map((value) => ({ kind: "question" as const, at: value.asked_at, value })), ...issue.comments.map((value) => ({ kind: "comment" as const, at: value.created_at, value }))].sort((a, b) => a.at.localeCompare(b.at));
   const added = (issue: Issue) => { setWriting(undefined); onChanged(issue); };
   return <div className="space-y-5">
-    {entries.length === 0 ? <p className="text-sm text-muted-foreground">Nothing has been said on this issue yet.</p> : entries.map((entry) => entry.kind === "comment" ? <article key={entry.value.id}><Byline name={entry.value.author.name} at={entry.value.created_at} /><Markdown className="mt-1">{entry.value.body}</Markdown></article> : <article key={entry.value.id}><Eyebrow>{entry.value.answer === null ? "Open question" : "Question"}</Eyebrow><Markdown className="mt-1">{entry.value.question}</Markdown><Byline name={entry.value.asked_by.name} at={entry.value.asked_at} />{entry.value.answer !== null && <div className="mt-3 border-l-2 pl-3"><Markdown>{entry.value.answer}</Markdown><Byline name={entry.value.answered_by?.name ?? "Unknown"} at={entry.value.answered_at!} /></div>}</article>)}
+    {entries.length === 0 ? <p className="text-sm text-muted-foreground">Nothing has been said on this issue yet.</p> : entries.map((entry) => entry.kind === "comment" ? <CommentEntry key={entry.value.id} issue={issue} comment={entry.value} onChanged={onChanged} /> : <article key={entry.value.id}><Eyebrow>{entry.value.answer === null ? "Open question" : "Question"}</Eyebrow><Markdown className="mt-1">{entry.value.question}</Markdown><Byline name={entry.value.asked_by.name} at={entry.value.asked_at} />{entry.value.answer !== null && <div className="mt-3 border-l-2 pl-3"><Markdown>{entry.value.answer}</Markdown><Byline name={entry.value.answered_by?.name ?? "Unknown"} at={entry.value.answered_at!} /></div>}</article>)}
     {writing === undefined && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => setWriting("comment")}>Add comment</Button><Button variant="outline" size="sm" onClick={() => setWriting("question")}>Ask question</Button></div>}
     {writing === "comment" && <TextAction label="Add comment" multiline onCancel={() => setWriting(undefined)} onRun={async (body) => { const result = await api.POST("/issues/{key}/comments", { params: { path: { key: issue.key } }, body: { body } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, comments: [...issue.comments, result.data] }; }} onChanged={added} />}
     {writing === "question" && <TextAction label="Ask question" multiline onCancel={() => setWriting(undefined)} onRun={async (question) => { const result = await api.POST("/issues/{key}/questions", { params: { path: { key: issue.key } }, body: { question } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, questions: [...issue.questions, result.data], open_questions: issue.open_questions + 1 }; }} onChanged={added} />}
   </div>;
+}
+
+/**
+ * One comment, with the two things its author can do to it (ADR 0022). The
+ * acts sit in the same overflow menu the issue header uses rather than as two
+ * text links under every paragraph: a conversation is read, and a row of verbs
+ * under each entry is read too.
+ *
+ * Shown only where they are allowed, because a menu that offers what the
+ * instance refuses teaches the reader nothing. Hiding is not the check — the
+ * instance makes it, and it is `forbidden` there.
+ */
+function CommentEntry({ issue, comment, onChanged }: { issue: Issue; comment: Issue["comments"][number]; onChanged: (issue: Issue) => void }) {
+  const { me } = useSession();
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const mine = comment.author.id === me.id;
+  // The author rewrites; the author or any user clears up, on anybody's.
+  const removable = mine || me.kind === "user";
+  const without = (issue: Issue) => ({ ...issue, comments: issue.comments.filter((x) => x.id !== comment.id) });
+
+  return <article>
+    <div className="flex items-start justify-between gap-2">
+      <Byline name={comment.author.name} at={comment.created_at} edited={comment.edited_at} />
+      {(mine || removable) && <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Actions on the comment by ${comment.author.name}`} />}><MoreHorizontalIcon /></DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {mine && <DropdownMenuItem onClick={() => setEditing(true)}>Edit comment</DropdownMenuItem>}
+          {removable && <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>Delete comment</DropdownMenuItem>}
+        </DropdownMenuContent>
+      </DropdownMenu>}
+    </div>
+    {editing
+      ? <TextAction label="Save comment" multiline initial={comment.body} onCancel={() => setEditing(false)} onRun={async (body) => {
+          const result = await api.PATCH("/comments/{id}", { params: { path: { id: comment.id } }, body: { body } });
+          if (!result.data) throw new Error(describe(result.error, result.response.status));
+          return { ...issue, comments: issue.comments.map((x) => x.id === comment.id ? result.data! : x) };
+        }} onChanged={(next) => { setEditing(false); onChanged(next); }} />
+      : <Markdown className="mt-1">{comment.body}</Markdown>}
+    <ActionDialog open={deleting} onOpenChange={setDeleting} title="Delete this comment?" description="It is gone for good — there is no grace period for a comment. The history keeps that it was taken away." confirmLabel="Delete comment" onConfirm={async () => {
+      const result = await api.DELETE("/comments/{id}", { params: { path: { id: comment.id } } });
+      if (!result.response.ok) throw new Error(describe(result.error, result.response.status));
+      onChanged(without(issue));
+    }} />
+  </article>;
 }
 
 function EdgeAction({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
@@ -281,8 +337,10 @@ function IssueAction({ label, path, issue, body, onChanged, variant = "default" 
   return <span><Button variant={variant} disabled={busy} onClick={() => void run()}>{busy ? "Working…" : label}</Button>{error && <span role="alert" className="ml-2 text-xs text-destructive">{error}</span>}</span>;
 }
 
-function TextAction({ label, placeholder, multiline, onRun, onChanged, onCancel }: { label: string; placeholder?: string; multiline?: boolean; onRun: (text: string) => Promise<Issue>; onChanged: (issue: Issue) => void; onCancel?: () => void }) {
-  const [text, setText] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState<string>();
+function TextAction({ label, placeholder, multiline, initial, onRun, onChanged, onCancel }: { label: string; placeholder?: string; multiline?: boolean; initial?: string; onRun: (text: string) => Promise<Issue>; onChanged: (issue: Issue) => void; onCancel?: () => void }) {
+  // A correction opens in the text it is correcting, in the same field it was
+  // written in — not in an empty box that makes the author type it again.
+  const [text, setText] = useState(initial ?? ""); const [busy, setBusy] = useState(false); const [error, setError] = useState<string>();
   const id = useId();
   async function run() { if (!text.trim()) return; setBusy(true); setError(undefined); try { onChanged(await onRun(text)); setText(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); } finally { setBusy(false); } }
   return <div className="mt-3 grid max-w-xl gap-2">{multiline ? <MarkdownField label={label} value={text} onChange={setText} /> : <label className="grid gap-1 text-sm font-medium">{label}<Input id={id} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} /></label>}<div className="flex gap-2"><Button size="sm" disabled={busy || !text.trim()} onClick={() => void run()}>{busy ? "Saving…" : label}</Button>{onCancel && <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>}</div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}</div>;
@@ -294,6 +352,10 @@ function History({ loaded }: { loaded: Load<HistoryEntry[]> }) {
 
 function historyText(x: HistoryEntry) {
   if (x.field === "created") return "created the issue";
+  // A comment entry names the fact and which comment, never the text (ADR
+  // 0022): a history that carried what somebody withdrew would keep the one
+  // thing the withdrawal was for.
+  if (x.field === "comment") return x.note === "withdrawn" ? "took a comment away" : "edited a comment";
   const from = value(x.old_value), to = value(x.new_value);
   if (from === null) return <>set <strong>{x.field}</strong> to {to}</>;
   if (to === null) return <>cleared <strong>{x.field}</strong> from {from}</>;
@@ -325,7 +387,7 @@ function Long({ children }: { children: string }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) { return <section className="border-t py-5 first:border-t-0 first:pt-0"><h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>{children}</section>; }
 function Field({ name, className, children }: { name: string; className?: string; children: React.ReactNode }) { return <div className={className}><div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{name}</div><div className="mt-0.5">{children}</div></div>; }
 function Eyebrow({ children }: { children: React.ReactNode }) { return <h2 className="text-xs font-semibold tracking-wide uppercase">{children}</h2>; }
-function Byline({ name, at }: { name?: string; at: string }) { return <p className="mt-1 text-xs text-muted-foreground">{name && <>{name} · </>}<time dateTime={at}>{date(at)}</time></p>; }
+function Byline({ name, at, edited }: { name?: string; at: string; edited?: string | null }) { return <p className="mt-1 text-xs text-muted-foreground">{name && <>{name} · </>}<time dateTime={at}>{date(at)}</time>{edited != null && <> · <span title={date(edited)}>edited</span></>}</p>; }
 function date(x: string) { return new Date(x).toLocaleString(); }
 function relativeTime(x: string) { const hours = Math.max(0, Math.floor((Date.now() - new Date(x).getTime()) / 3_600_000)); return hours < 24 ? `${hours} hour${hours === 1 ? "" : "s"} ago` : `${Math.floor(hours / 24)} days ago`; }
 /** How much of the grace period is left, in the words the deadline is read in. */

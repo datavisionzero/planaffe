@@ -118,7 +118,7 @@ public sealed class IssueAssembler(
             questions.Count(q => q.Open),
             blockedBy.Count(b => !b.Closed),
             subIssues.Count(i => !i.Closed),
-            [.. comments.Select(c => new CommentShape(c.Id, Ref(people, c.AuthorId)!, c.Body, c.CreatedAt))],
+            [.. comments.Select(c => new CommentShape(c.Id, Ref(people, c.AuthorId)!, c.Body, c.CreatedAt, c.EditedAt))],
             [.. questions.Select(q => new QuestionShape(q.Id, q.Text, Ref(people, q.AskedBy)!, q.AskedAt, q.Answer, Ref(people, q.AnsweredBy), q.AnsweredAt))],
             new ProjectContextShape(project.Key, project.Name, project.TriageRequired, project.ReviewRequired, [.. projectLabels.Select(LabelShape.Of)]),
             row.CreatedAt,

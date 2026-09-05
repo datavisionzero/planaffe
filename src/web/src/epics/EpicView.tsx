@@ -13,6 +13,7 @@ import { useAbandon } from "@/shared/abandon";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
+import { stale } from "@/shared/stale";
 import { keyPath, pathKey } from "@/shell/views";
 
 type Epic = Schemas["Epic"];
@@ -338,7 +339,7 @@ function EditEpicForm({ epic, onSaved, onCancel }: { epic: Epic; onSaved: (epic:
           body: draft,
         });
 
-        const current = stale(answer);
+        const current = stale<Epic>(answer);
         if (current !== undefined) {
           setConflict(current);
           setVersion(current.updated_at);
@@ -371,21 +372,6 @@ export function NewEpicView() {
 
 type Draft = { title: string; description: string; labels: string[] };
 type Written = { data?: Epic; error?: unknown; response: Response };
-
-/**
- * The epic a `stale` refusal carries, or nothing. `docs/api.md` ("Concurrency
- * on text fields") has the refusal hand the current object back for exactly
- * this: without it the only way out of a conflict is to throw away what was
- * typed.
- */
-function stale(answer: Written): Epic | undefined {
-  if (answer.response.status !== 412) {
-    return undefined;
-  }
-
-  const current = (answer.error as { current?: Epic } | undefined)?.current;
-  return current?.updated_at === undefined ? undefined : current;
-}
 
 /**
  * What a stale refusal means, in the words it means it. The typed text is

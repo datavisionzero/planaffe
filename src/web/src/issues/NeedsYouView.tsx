@@ -4,6 +4,7 @@ import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/shared/PageHeader";
+import { stale } from "@/shared/stale";
 import { useAttention } from "@/shell/useAttention";
 import { keyPath } from "@/shell/views";
 import { StatusDot } from "./status";
@@ -47,7 +48,10 @@ const actions: Record<Because, string> = {
  */
 export function NeedsYouView() {
   const { project } = useParams();
-  const { note } = useAttention();
+  // The wake pulse of the frame, not a second connection: the number in the
+  // navigation and this screen read the same list, and a screen that stood
+  // still beside a number that moved would contradict it.
+  const { pulse } = useAttention();
   const [known, setKnown] = useState<{ of: string | undefined; page: Page } | null>(null);
   const [again, setAgain] = useState(0);
   const [more, setMore] = useState<{ busy: boolean; why?: string }>({ busy: false });
@@ -85,18 +89,10 @@ export function NeedsYouView() {
     return () => {
       current = false;
     };
-  }, [again, ask, project]);
-
-  // The number in the navigation is this list's total. The frame does not ask
-  // for it again while this screen is open — it is told, from the read that
-  // happened anyway, including after an answer or a review took a row off.
-  const total = page.at === "known" ? page.total : null;
-
-  useEffect(() => {
-    if (project !== undefined && total !== null) {
-      note(project, total);
-    }
-  }, [note, project, total]);
+    // A pulse is read from the top: the change it announces may have moved
+    // rows into and out of every group, and pages loaded under the old list
+    // are pages of a list that is gone.
+  }, [again, ask, project, pulse]);
 
   async function loadMore(cursor: string) {
     setMore({ busy: true });
@@ -214,15 +210,21 @@ function Row({ item, onResolved }: { item: Item; onResolved: () => void }) {
 function SetReady({ issue, onDone }: { issue: IssueSummary; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<string>();
+  // What a refusal handed back, against the row it was refused for. Nothing is
+  // typed here, so there is nothing to merge — but pressing again has to be
+  // able to work, and it cannot while the row keeps sending the version the
+  // list was read at. A row that has since been read again invalidates it.
+  const [adopted, setAdopted] = useState<{ from: string; version: string }>();
+  const version = adopted?.from === issue.updated_at ? adopted.version : issue.updated_at;
 
   async function run() {
     setBusy(true);
     setWhy(undefined);
 
     try {
-      const { data, error, response } = await api.PATCH("/issues/{key}", {
+      const answer = await api.PATCH("/issues/{key}", {
         params: { path: { key: issue.key } },
-        headers: { "If-Match": issue.updated_at },
+        headers: { "If-Match": version },
         // Every field of the change is required and `null` leaves it alone;
         // only `ready` is written here.
         body: {
@@ -231,8 +233,15 @@ function SetReady({ issue, onDone }: { issue: IssueSummary; onDone: () => void }
         },
       });
 
-      if (data === undefined) {
-        setWhy(describe(error, response.status));
+      const current = stale<{ updated_at: string }>(answer);
+      if (current !== undefined) {
+        setAdopted({ from: issue.updated_at, version: current.updated_at });
+        setWhy("It changed since this list was read. Set it again.");
+        return;
+      }
+
+      if (answer.data === undefined) {
+        setWhy(describe(answer.error, answer.response.status));
         return;
       }
 

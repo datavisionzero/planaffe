@@ -239,6 +239,100 @@ public sealed class ConversationEndpointTests(PostgresFixture postgres)
         Assert.True(entries.Zip(entries.Skip(1)).All(pair => pair.First.GetProperty("id").GetInt64() < pair.Second.GetProperty("id").GetInt64()));
     }
 
+    /// <summary>
+    /// ADR 0022: the author corrects, and a user clears up. What ADR 0020 said
+    /// could not happen — a comment being rewritten — is now the point.
+    /// </summary>
+    [Fact]
+    public async Task An_author_rewrites_their_comment_and_a_user_takes_anybodys_away()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await Issues(admin, new { title = "A" });
+        using var agent = await Agent(instance, admin, "one");
+        using var other = await Agent(instance, admin, "two");
+
+        using var written = await agent.PostAsJsonAsync("/issues/PLAN-1/comments", new { body = "Halfawy." }, Ct);
+        Assert.Equal(HttpStatusCode.Created, written.StatusCode);
+        var comment = await written.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        var id = comment.GetProperty("id").GetGuid();
+        Assert.Equal(JsonValueKind.Null, comment.GetProperty("edited_at").ValueKind);
+
+        var before = (await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct)).GetProperty("updated_at").GetDateTimeOffset();
+
+        // Nobody else rewrites it: the byline would then say something untrue.
+        await ProjectEndpointTests.Problem(
+            await other.PatchAsJsonAsync($"/comments/{id}", new { body = "Mine now." }, Ct), HttpStatusCode.Forbidden, "forbidden");
+        await ProjectEndpointTests.Problem(
+            await admin.PatchAsJsonAsync($"/comments/{id}", new { body = "Mine now." }, Ct), HttpStatusCode.Forbidden, "forbidden");
+
+        using var edited = await agent.PatchAsJsonAsync($"/comments/{id}", new { body = "Halfway." }, Ct);
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        var corrected = await edited.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal("Halfway.", corrected.GetProperty("body").GetString());
+        Assert.Equal("one", corrected.GetProperty("author").GetProperty("name").GetString());
+        Assert.NotEqual(JsonValueKind.Null, corrected.GetProperty("edited_at").ValueKind);
+
+        // An empty body is a withdrawal, not a save.
+        await ProjectEndpointTests.Problem(
+            await agent.PatchAsJsonAsync($"/comments/{id}", new { body = "   " }, Ct), HttpStatusCode.BadRequest, "validation");
+
+        var read = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+        Assert.Equal("Halfway.", read.GetProperty("comments")[0].GetProperty("body").GetString());
+        // Both acts move the issue's version, as writing a comment already did.
+        Assert.True(read.GetProperty("updated_at").GetDateTimeOffset() > before);
+
+        // The rewritten text is what the search finds, and the old one is gone.
+        Assert.Equal(["PLAN-1"], await Keys(admin, "/issues?q=Halfway"));
+        Assert.Empty(await Keys(admin, "/issues?q=Halfawy"));
+
+        // A user clears up after an agent — ADR 0013's concession, on a comment.
+        using var gone = await admin.DeleteAsync($"/comments/{id}", Ct);
+        Assert.Equal(HttpStatusCode.NoContent, gone.StatusCode);
+        Assert.Empty((await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct)).GetProperty("comments").EnumerateArray());
+        await ProjectEndpointTests.Problem(await admin.DeleteAsync($"/comments/{id}", Ct), HttpStatusCode.NotFound, "not-found");
+        Assert.Empty(await Keys(admin, "/issues?q=Halfway"));
+
+        // The history says that it happened and which comment, and no more.
+        var entries = (await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1/history", Ct)).EnumerateArray()
+            .Where(entry => entry.GetProperty("field").GetString() == "comment").ToArray();
+        Assert.Equal(2, entries.Length);
+        Assert.Equal("edited", entries[0].GetProperty("note").GetString());
+        Assert.Equal(id.ToString(), entries[0].GetProperty("new_value").GetString());
+        Assert.Equal("withdrawn", entries[1].GetProperty("note").GetString());
+        Assert.Equal(id.ToString(), entries[1].GetProperty("old_value").GetString());
+        Assert.DoesNotContain("Halfawy", (await admin.GetStringAsync("/issues/PLAN-1/history", Ct)));
+    }
+
+    /// <summary>An agent takes away only its own, and the issue's state is what it hangs on.</summary>
+    [Fact]
+    public async Task An_agent_takes_away_only_its_own_comment()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await Issues(admin, new { title = "A" });
+        using var agent = await Agent(instance, admin, "one");
+        using var other = await Agent(instance, admin, "two");
+
+        using var written = await agent.PostAsJsonAsync("/issues/PLAN-1/comments", new { body = "Mine." }, Ct);
+        var id = (await written.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+
+        await ProjectEndpointTests.Problem(
+            await other.DeleteAsync($"/comments/{id}", Ct), HttpStatusCode.Forbidden, "forbidden");
+        Assert.Equal(HttpStatusCode.NoContent, (await agent.DeleteAsync($"/comments/{id}", Ct)).StatusCode);
+
+        await ProjectEndpointTests.Problem(
+            await admin.PatchAsJsonAsync($"/comments/{Guid.NewGuid()}", new { body = "Nothing." }, Ct),
+            HttpStatusCode.NotFound,
+            "not-found");
+    }
+
+    private static async Task<string[]> Keys(HttpClient client, string url)
+    {
+        var page = await client.GetFromJsonAsync<JsonElement>(url, Ct);
+        return [.. page.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()!)];
+    }
+
     private static async Task<string[]> NextKeys(HttpClient client)
     {
         var page = await client.GetFromJsonAsync<JsonElement>("/projects/PLAN/next", Ct);

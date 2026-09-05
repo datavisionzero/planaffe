@@ -108,9 +108,10 @@ export function Shell() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [current, navigate]);
 
-  // How much is waiting for a human, read once for the frame: the sidebar
-  // draws it and the "Needs you" screen feeds it (epic "Attention").
-  const attention = useAttentionState(current?.key, currentView);
+  // How much is waiting for a human, held once for the frame: the sidebar
+  // draws the number and the "Needs you" screen shares the wake pulse that
+  // keeps it current (epic "Attention").
+  const attention = useAttentionState(current?.key);
 
   const known = projects.at === "known" ? projects.projects : [];
 

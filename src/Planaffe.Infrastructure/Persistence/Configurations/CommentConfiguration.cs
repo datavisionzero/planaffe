@@ -37,6 +37,10 @@ public sealed class CommentConfiguration : IEntityTypeConfiguration<Comment>
             .HasComputedColumnSql("to_tsvector('simple', body)", stored: true);
         builder.HasIndex("Search").HasMethod("GIN").HasDatabaseName("comment_search");
         builder.Property(c => c.CreatedAt).HasColumnName("created_at").IsRequired();
+        // Null while the comment is as it was written (ADR 0022). The search
+        // column above is generated and stored, so a rewrite recomputes it and
+        // a delete takes it with the row — neither needs a hand here.
+        builder.Property(c => c.EditedAt).HasColumnName("edited_at");
 
         builder.HasIndex(c => new { c.IssueId, c.CreatedAt }).HasDatabaseName("comment_issue");
     }

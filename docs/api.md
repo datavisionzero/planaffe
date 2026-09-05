@@ -100,7 +100,7 @@ not change when it starts counting.
   "epic": { "key": "PLAN-E2", "title": "Backend and data model", "description": "…markdown…", "status": "open" },
   "blocked_by": [ { "key": "PLAN-40", "title": "…", "status": "todo", "open": true } ],
   "blocks":     [ { "key": "PLAN-44", "title": "…", "status": "todo", "open": true } ],
-  "comments":   [ { "id": "…", "author": {…}, "body": "…", "created_at": "…" } ],
+  "comments":   [ { "id": "…", "author": {…}, "body": "…", "created_at": "…", "edited_at": null } ],
   "questions":  [ { "id": "…", "question": "…", "asked_by": {…}, "asked_at": "…",
                     "answer": null, "answered_by": null, "answered_at": null } ],
   "project": { "key": "PLAN", "name": "planaffe", "triage_required": false, "review_required": false,
@@ -327,9 +327,13 @@ one role and project access:
   and questions in every project, and read projects and its own identity. It may
   not create or change a project, a user, an agent or a token, and may not
   list agents or tokens ([ADR 0015](./adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)).
+  A comment is the one thing narrower than that line: only its author may
+  rewrite it, and an agent takes away only its own
+  ([ADR 0022](./adr/0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md)).
 - **A user may do everything an agent may**, plus create projects and change
   their switches, create agents and their own tokens, rename and revoke agents
-  they own, and list agents.
+  they own, and list agents — and take away anybody's comment, which is the
+  same clearing up ADR 0013 conceded for issues.
 - **An administrator** may in addition create users, rename and revoke any
   agent, and delete projects. Whoever bootstrapped the instance is one.
 - **Project access belongs to a user.** The user and all their agents see and
@@ -447,7 +451,7 @@ When `POST` finds nothing, `issue` is `null`, `reasons` says why, the status is
 | method | path | who | does |
 |---|---|---|---|
 | `POST` | `/issues` | any | create one or several wired-up issues in one transaction (below) → 201 with `{ items: [Issue] }` in the order given |
-| `GET` | `/issues` | any | a page of `IssueSummary`, filtered (below) |
+| `GET` | `/issues` | any | a page of `IssueSummary`, filtered (below). Carries an `ETag`, and takes `wait` with `If-None-Match` (Waiting) |
 | `GET` | `/issues/{key}` | any | `Issue`. A deleted issue is 404 `deleted` |
 | `PATCH` | `/issues/{key}` | any | `{ title?, description?, result?, priority?, ready?, assignee?, epic?, labels?, status? }`, `If-Match` honoured. `assignee` is a name or `null`; `epic` a key or `null`, and attaching to a closed epic reopens it; `labels` replaces the whole set, groups enforced; `status` accepts only `backlog` and `todo`, on an open, unclaimed issue that is not in `review` — parking and unparking are the two moves that carry no rule, and every other move is an act below ([ADR 0016](./adr/0016-status-transitions-are-acts-not-a-field-you-write.md)) |
 | `DELETE` | `/issues/{key}` | any | soft delete; the claim is let go; 204 |
@@ -509,6 +513,8 @@ protected only against agents, which `claim-protected` says.
 | `POST` | `/issues/{key}/review` | `{ result? }` | hand in explicitly, whatever the switch says. From any open status but `review`. Clears the claim, no `closed_at` |
 | `POST` | `/issues/{key}/reopen` | `{ comment? }` | one movement from `review`, `done` or `canceled` to `todo`: `closed_at` cleared, no claim, `result` kept. `comment` is written as a comment first and expected on the way back from `review` — pointed out when missing, never refused |
 | `POST` | `/issues/{key}/comments` | `{ body }` | 201 with the comment. On any issue, by anyone, claimed or not — a comment forces nobody to act (VISION 7) |
+| `PATCH` | `/comments/{id}` | author | `{ body }` → 200 with the comment, `edited_at` set. Its author only; anybody else is `forbidden` ([ADR 0022](./adr/0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md)). An empty body is `validation` — a comment that says nothing is one to withdraw |
+| `DELETE` | `/comments/{id}` | author, or any user | 204. Gone for good, with no grace period; the history keeps that it went and who took it. An agent takes away only its own, a user takes away anybody's — the clearing up of ADR 0013 |
 | `POST` | `/issues/{key}/questions` | `{ question }` | ask. 201 with the question. Does not release the claim (VISION 10). On any open issue |
 | `POST` | `/questions/{id}/answer` | `{ answer }` | answer an open question; a second answer is `transition`. 200 with the question. Users and agents alike — the convention that an agent answers only when told to is a convention |
 | `POST` | `/issues/{key}/labels/{name}` | — | add one label, replacing another of its group; 200 `Issue` |
@@ -675,24 +681,38 @@ their headings.
 
 ### Waiting
 
-`wait`, in seconds, on three reads — one mechanism, three doors (VISION 6.1):
+`wait`, in seconds, on four reads — one mechanism, four doors (VISION 6.1):
 
 | on | as | returns when |
 |---|---|---|
 | `POST /projects/{key}/next` | `wait` in the body | an issue was handed out, or the deadline passed — then the same `{ issue: null, reasons }` as without `wait` |
 | `GET /questions/{id}` | `wait` in the query | the question was answered, or the deadline passed — then the question as it is |
 | `GET /projects/{key}/needs-you` | `wait` in the query, with `If-None-Match` carrying the `ETag` of the last answer | the list differs from the one the caller has, or the deadline passed — then `304` |
+| `GET /issues` | `wait` in the query, with `If-None-Match` carrying the `ETag` of the last answer, and `project` naming one project | the page differs from the one the caller has, or the deadline passed — then `304` |
 
 The query is run first. `next` waits only while it finds nothing, a question
-only while it is open, and `needs-you` while its ETag still matches
+only while it is open, and the two lists while their ETag still matches
 `If-None-Match` (an absent validator establishes the empty page as its
 baseline). Waiting happens on the project's notification channel
 (`docs/storage.md`, Wake-ups); every notification re-runs the original query.
 At the deadline, `next` returns its empty answer, a question returns still
-open, and an unchanged `needs-you` returns `304`. `wait` is at most `3600`; a
+open, and an unchanged list returns `304`. `wait` is at most `3600`; a
 larger value is `wait-too-long`, and the CLI's `--wait` takes any number of
 seconds and asks in rounds. What an operator's proxy has to allow is in
 `docs/operations.md`.
+
+`GET /issues` carries an `ETag` on every answer, waiting or not, and the
+validator is the hash of the page it would return — filters, sort, cursor and
+`limit` included, because all of them shape it. `wait` there needs `project`:
+the wake channel is one project's, and a list across every project a caller
+sees has no single channel to hang on. Without it the answer is `validation`
+on `wait` rather than a connection the instance holds open on a guess.
+
+**The channel is coarse, on purpose.** It says "something in this project
+changed", not "your list changed". A filtered list is therefore woken by
+changes that do not concern it, asks its question again, and answers `304` with
+the same validator. That is what a notification carrying no state costs, and it
+is what keeps one channel per project enough for every list on it.
 
 The CLI: `pa next --claim --wait S`, `pa issue ask KEY "…" --wait S` — which holds
 the claim and waits for the answer, for at most the rest of the claim (VISION

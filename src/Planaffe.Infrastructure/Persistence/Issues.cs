@@ -402,6 +402,11 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
 
     public void Add(Comment comment) => context.Comments.Add(comment);
 
+    public Task<Comment?> FindCommentAsync(Guid id, CancellationToken cancellationToken) =>
+        context.Comments.SingleOrDefaultAsync(c => c.Id == id, cancellationToken);
+
+    public void Remove(Comment comment) => context.Comments.Remove(comment);
+
     public void Add(Question question) => context.Questions.Add(question);
 
     public Task<Question?> FindQuestionAsync(Guid id, CancellationToken cancellationToken) =>

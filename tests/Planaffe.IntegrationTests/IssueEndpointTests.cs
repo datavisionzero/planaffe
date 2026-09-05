@@ -439,6 +439,58 @@ public sealed class IssueEndpointTests(PostgresFixture postgres)
         return admin;
     }
 
+    [Fact]
+    public async Task The_list_carries_an_etag_and_wait_holds_it_until_the_filtered_page_changes()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Ready(instance);
+        await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "A" } } }, Ct);
+
+        using var initial = await admin.GetAsync("/issues?project=PLAN&status=in_progress", Ct);
+        Assert.Equal(HttpStatusCode.OK, initial.StatusCode);
+        var etag = initial.Headers.ETag?.ToString();
+        Assert.NotNull(etag);
+        Assert.Equal(0, (await initial.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("total").GetInt32());
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/issues?project=PLAN&status=in_progress&wait=5");
+        request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        var waiting = admin.SendAsync(request, Ct);
+        await Task.Delay(100, Ct);
+
+        // A claim is what puts an issue into `in_progress`; the wake channel is
+        // the project's and says nothing about which list wants to hear it.
+        using var claimed = await admin.PostAsJsonAsync("/issues/PLAN-1/claim", new { }, Ct);
+        Assert.Equal(HttpStatusCode.OK, claimed.StatusCode);
+
+        using var changed = await waiting.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        var page = await changed.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal(1, page.GetProperty("total").GetInt32());
+        var changedTag = changed.Headers.ETag?.ToString();
+        Assert.NotNull(changedTag);
+        Assert.NotEqual(etag, changedTag);
+
+        // An unrelated change in the same project wakes this list, which asks
+        // its question again and answers 304 with the validator it already had.
+        using var unchangedRequest = new HttpRequestMessage(HttpMethod.Get, "/issues?project=PLAN&status=in_progress&wait=2");
+        unchangedRequest.Headers.TryAddWithoutValidation("If-None-Match", changedTag);
+        var quiet = admin.SendAsync(unchangedRequest, Ct);
+        await Task.Delay(100, Ct);
+        await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "B" } } }, Ct);
+
+        using var unchanged = await quiet.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        Assert.Equal(HttpStatusCode.NotModified, unchanged.StatusCode);
+        Assert.Equal(changedTag, unchanged.Headers.ETag?.ToString());
+
+        // The channel is one project's, so a list that spans them all may not wait.
+        await ProjectEndpointTests.Problem(
+            await admin.GetAsync("/issues?wait=5", Ct), HttpStatusCode.BadRequest, "validation");
+        await ProjectEndpointTests.Problem(
+            await admin.GetAsync("/issues?project=PLAN&wait=0", Ct), HttpStatusCode.BadRequest, "validation");
+        await ProjectEndpointTests.Problem(
+            await admin.GetAsync("/issues?project=PLAN&wait=3601", Ct), HttpStatusCode.UnprocessableEntity, "wait-too-long");
+    }
+
     private static async Task<string[]> Keys(HttpClient client, string url)
     {
         var page = await client.GetFromJsonAsync<JsonElement>(url, Ct);

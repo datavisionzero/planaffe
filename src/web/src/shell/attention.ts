@@ -9,6 +9,11 @@ import { createContext } from "react";
  * addressed at anybody, and there is no read state. The number is read from
  * the "Needs you" list itself and never from a counter of its own, so that the
  * day the list learns an addressee, the number learns it in the same move.
+ *
+ * It stays current by itself, on the wake channel `pa needs-you --wait` uses
+ * (`docs/api.md`, Waiting) — the web application is that mechanism's second
+ * user and not a second mechanism. The connection is held here, once per
+ * project and tab, so that the sidebar and the screen share one.
  */
 export type Attention = {
   /**
@@ -18,11 +23,11 @@ export type Attention = {
    */
   needsYou: number | null;
   /**
-   * What the "Needs you" screen just read. That screen asks the same endpoint
-   * for the same list, so it hands its total back here instead of a second
-   * request asking the same question.
+   * Counts the times the instance said this project's work list changed. It
+   * carries no state — like the channel it comes from, it only says "ask
+   * again" — and a screen that reads the same list watches it to do so.
    */
-  note: (project: string, needsYou: number) => void;
+  pulse: number;
 };
 
 export const AttentionContext = createContext<Attention | null>(null);

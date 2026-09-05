@@ -1,5 +1,6 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { installInstance, renderAt } from "@/shared/testing";
@@ -32,19 +33,27 @@ const fourReasons = {
   agents: 1,
 };
 
-/** The frame's number, which this screen feeds rather than letting it ask again. */
+/**
+ * The frame around the screen: the number it draws, and the wake pulse both
+ * share. The returned function is the instance saying the list changed.
+ */
 function renderNeedsYou() {
-  const noted: { project: string; needsYou: number }[] = [];
-  const attention = { needsYou: null, note: (project: string, needsYou: number) => { noted.push({ project, needsYou }); } };
+  let woken!: (pulse: number) => void;
 
-  renderAt(
-    "/PLAN/needs-you",
-    <AttentionContext.Provider value={attention}>
-      <Routes><Route path="/:project/needs-you" element={<NeedsYouView />} /></Routes>
-    </AttentionContext.Provider>,
-  );
+  function Frame() {
+    const [pulse, setPulse] = useState(0);
+    woken = setPulse;
 
-  return noted;
+    return (
+      <AttentionContext.Provider value={{ needsYou: null, pulse }}>
+        <Routes><Route path="/:project/needs-you" element={<NeedsYouView />} /></Routes>
+      </AttentionContext.Provider>
+    );
+  }
+
+  renderAt("/PLAN/needs-you", <Frame />);
+
+  return (pulse: number) => act(() => woken(pulse));
 }
 
 it("shows the four groups, why each row is there, and the action that resolves it", async () => {
@@ -81,7 +90,7 @@ it("sets ready in place and reads the list again", async () => {
     },
     "PATCH /issues/PLAN-3": { body: anIssue("PLAN-3", "Never triaged", { ready: true }) },
   });
-  const noted = renderNeedsYou();
+  renderNeedsYou();
   const user = userEvent.setup();
 
   const row = (await screen.findByText("Never triaged")).closest("li")!;
@@ -98,9 +107,58 @@ it("sets ready in place and reads the list again", async () => {
   await vi.waitFor(() => expect(screen.queryByText("Never triaged")).toBeNull());
   expect(screen.queryByRole("heading", { name: /Not ready/ })).not.toBeInTheDocument();
   expect(asked).toBe(2);
-  // The number in the navigation comes from this read, so it moves with it and
-  // the frame never asks the same question a second time.
-  await vi.waitFor(() => expect(noted).toEqual([{ project: "PLAN", needsYou: 4 }, { project: "PLAN", needsYou: 3 }]));
+});
+
+it("reads the list again when the frame's wake pulse says it changed", async () => {
+  let asked = 0;
+  installInstance({
+    "GET /projects/PLAN/needs-you": () => {
+      asked += 1;
+      return asked === 1 ? fourReasons : { ...fourReasons, items: fourReasons.items.slice(0, 1), total: 1 };
+    },
+  });
+  const pulse = renderNeedsYou();
+
+  expect(await screen.findByText("Never triaged")).toBeInTheDocument();
+
+  // The instance woke the frame; the screen asks its own question again rather
+  // than being handed the frame's answer, which is one item long.
+  pulse(1);
+
+  await vi.waitFor(() => expect(screen.queryByText("Never triaged")).toBeNull());
+  expect(asked).toBe(2);
+  expect(screen.getByText("Asked something")).toBeInTheDocument();
+});
+
+// The row types nothing, so a stale refusal has nothing to lose — but it still
+// may not be a dead end: without the version the refusal carried, every further
+// press sends the version the list was read at and is refused for the same
+// reason (PLAN-35).
+it("takes the version a stale triage refusal carried and lets the next press through", async () => {
+  const current = { ...anIssue("PLAN-3", "Never triaged"), updated_at: "2026-08-04T10:00:00Z" };
+  let patched = 0;
+  const instance = installInstance({
+    "GET /projects/PLAN/needs-you": fourReasons,
+    "PATCH /issues/PLAN-3": () =>
+      ++patched === 1
+        ? { status: 412, body: { type: "/problems/stale", detail: "PLAN-3 changed at …", current } }
+        : { body: { ...current, ready: true } },
+  });
+  renderNeedsYou();
+  const user = userEvent.setup();
+
+  const row = (await screen.findByText("Never triaged")).closest("li")!;
+  await user.click(within(row).getByRole("button", { name: "Set ready" }));
+
+  expect(await within(row).findByRole("alert")).toHaveTextContent("It changed since this list was read.");
+  await user.click(within(row).getByRole("button", { name: "Set ready" }));
+
+  const second = await vi.waitFor(() => {
+    const calls = instance.calls.filter((call) => call.method === "PATCH");
+    if (calls.length < 2) throw new Error("no second PATCH yet");
+    return calls[1]!;
+  });
+  expect(second.headers.get("If-Match")).toBe("2026-08-04T10:00:00Z");
 });
 
 it("says why a refused triage did not happen and leaves the row where it is", async () => {

@@ -46,6 +46,14 @@ public static class HistoryField
     public const string Release = "release";
 
     public const string Deleted = "deleted";
+
+    /// <summary>
+    /// A comment its author corrected, or somebody took away (ADR 0022). The
+    /// entry names which comment and which of the two it was, never the text:
+    /// a history that kept what was withdrawn would keep exactly the thing the
+    /// withdrawal was for.
+    /// </summary>
+    public const string Comment = "comment";
 }
 
 /// <summary>
@@ -61,4 +69,10 @@ public static class HistoryNote
 
     /// <summary>On a claim taken with <c>--force</c>.</summary>
     public const string Forced = "forced";
+
+    /// <summary>On the <c>comment</c> entry of a comment its author rewrote.</summary>
+    public const string Edited = "edited";
+
+    /// <summary>On the <c>comment</c> entry of a comment somebody took away.</summary>
+    public const string Withdrawn = "withdrawn";
 }

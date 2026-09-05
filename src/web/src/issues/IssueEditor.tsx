@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { api, codeOf, describe, type Issue, type Problem, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { useLabels } from "@/projects/useLabels";
 import { Markdown } from "@/shared/Markdown";
 import { useAbandon } from "@/shared/abandon";
 import { PageHeader } from "@/shared/PageHeader";
+import { stale } from "@/shared/stale";
 import { keyPath } from "@/shell/views";
 import { AssigneePicker, EpicPicker, IssuePicker } from "./pickers";
 import { priorityLabel } from "./priorityLabel";
@@ -52,16 +53,65 @@ export function NewIssueView() {
 export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSaved: (issue: Issue) => void; onCancel: () => void }) {
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<Refusal>();
+  // The version the next write is guarded with, and the issue a refusal handed
+  // back. Keeping the version the form opened with is what left a person stuck:
+  // every further save carried it and was refused for the same reason, and the
+  // only way out was to throw away what had been typed.
+  const [version, setVersion] = useState(issue.updated_at);
+  const [conflict, setConflict] = useState<Issue>();
   async function save(draft: IssueDraft) {
-    setSaving(true); setRefused(undefined);
+    setSaving(true); setRefused(undefined); setConflict(undefined);
     const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: draft.labels, epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), ...(parkable(issue) && draft.status !== issue.status ? { status: draft.status } : {}) };
     try {
-      const { data, error: problem, response } = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: body as never });
-      if (!data) { setRefused(refusal(problem, response.status)); return; }
-      onSaved(data);
+      const answer = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": version }, body: body as never });
+      const current = stale<Issue>(answer);
+      if (current !== undefined) { setConflict(current); setVersion(current.updated_at); return; }
+      if (!answer.data) { setRefused(refusal(answer.error, answer.response.status)); return; }
+      onSaved(answer.data);
     } catch { setRefused({ fields: {}, why: "The instance did not answer." }); } finally { setSaving(false); }
   }
-  return <IssueForm initial={issue} submit="Save changes" saving={saving} refused={refused} onSubmit={save} onCancel={onCancel} />;
+  return <IssueForm initial={issue} submit="Save changes" saving={saving} refused={refused} notice={conflict === undefined ? undefined : <Conflict opened={issue} current={conflict} />} onSubmit={save} onCancel={onCancel} />;
+}
+
+/** The fields of the issue a person edits here, in the order the form has them. */
+const edited: Array<{ name: string; of: (issue: Issue) => string }> = [
+  { name: "priority", of: (issue) => priorityLabel(issue.priority) },
+  { name: "status", of: (issue) => issue.status },
+  { name: "ready", of: (issue) => (issue.ready ? "yes" : "no") },
+  { name: "labels", of: (issue) => issue.labels.map((label) => label.name).join(", ") },
+  { name: "epic", of: (issue) => issue.epic?.key ?? "" },
+  { name: "parent issue", of: (issue) => issue.parent?.key ?? "" },
+  { name: "assignee", of: (issue) => issue.assignee?.name ?? "" },
+];
+
+/**
+ * What a stale refusal means, in the words it means it. The typed text is
+ * still in the fields above; this says what the other version holds, so it can
+ * be merged by hand, and that the next save is now an overwrite of it.
+ *
+ * An issue is not an epic: beside the two fields somebody types into it
+ * carries seven that are chosen from a list, and saving writes all of them.
+ * The text is shown to be merged from, and the rest is named — not shown,
+ * because a person about to overwrite a label somebody else set needs to know
+ * that, and does not need a second copy of the form to read it in.
+ */
+function Conflict({ opened, current }: { opened: Issue; current: Issue }) {
+  const also = edited.filter((field) => field.of(opened) !== field.of(current)).map((field) => field.name);
+
+  return (
+    <div role="alert" className="grid gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+      <p>
+        <span className="font-medium">{current.key} was changed while you were editing it.</span>{" "}
+        Your text is kept. Saving now writes it over the version below.
+      </p>
+      {also.length > 0 && <p className="text-xs text-muted-foreground">Changed there as well, and overwritten too: {also.join(", ")}.</p>}
+      <details className="text-xs">
+        <summary className="cursor-pointer text-muted-foreground">The issue as it stands, saved {new Date(current.updated_at).toLocaleString()}</summary>
+        <p className="mt-2 font-medium">{current.title}</p>
+        <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-muted p-2 font-mono whitespace-pre-wrap">{current.description}</pre>
+      </details>
+    </div>
+  );
 }
 
 /**
@@ -112,7 +162,7 @@ function startingDraft(initial: Issue | undefined, epic: string | undefined): Is
   return { title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name) ?? [], epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []) ?? [], status: initial?.status === "backlog" ? "backlog" : "todo" };
 }
 
-function IssueForm({ initial, epic, submit, saving, refused, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; onSubmit: (draft: IssueDraft) => void; onCancel: () => void }) {
+function IssueForm({ initial, epic, submit, saving, refused, notice, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; notice?: ReactNode; onSubmit: (draft: IssueDraft) => void; onCancel: () => void }) {
   const [start] = useState(() => startingDraft(initial, epic));
   const [draft, setDraft] = useState<IssueDraft>(start);
   const { leave, dialog } = useAbandon(JSON.stringify(draft) !== JSON.stringify(start), onCancel);
@@ -140,7 +190,9 @@ function IssueForm({ initial, epic, submit, saving, refused, onSubmit, onCancel 
     <LabelPicker label="Labels" labels={labels} value={draft.labels} onChange={(names) => set("labels", names)} onCreate={create} error={at.labels} />
     <div className="grid gap-3 sm:grid-cols-2"><EpicPicker epics={epics} value={draft.epic} onChange={(key) => set("epic", key)} error={at.epic} /><IssuePicker label="Parent issue" project={project} exclude={initial ? [initial.key] : []} value={draft.parent === "" ? [] : [draft.parent]} onChange={(keys) => set("parent", keys[0] ?? "")} error={at.parent} /><AssigneePicker project={project} value={draft.assignee} onChange={(name) => set("assignee", name)} error={at.assignee} />{!initial && <IssuePicker label="Blocked by" project={project} multiple value={draft.blockedBy} onChange={(keys) => set("blockedBy", keys)} error={at.blocked_by} />}</div>
     {reopens && <p role="status" className="text-sm text-brand">{reopens}</p>}
-    {refused?.why && <p role="alert" className="text-sm text-destructive">{refused.why}</p>}
+    {/* A conflict says everything the refusal's own sentence says, and says
+        what to do about it, so it stands in its place rather than beside it. */}
+    {notice ?? (refused?.why && <p role="alert" className="text-sm text-destructive">{refused.why}</p>)}
     <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={leave}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button></div>
     {dialog}
   </form>;
