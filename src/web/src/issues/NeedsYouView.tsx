@@ -47,7 +47,10 @@ const actions: Record<Because, string> = {
  */
 export function NeedsYouView() {
   const { project } = useParams();
-  const { note } = useAttention();
+  // The wake pulse of the frame, not a second connection: the number in the
+  // navigation and this screen read the same list, and a screen that stood
+  // still beside a number that moved would contradict it.
+  const { pulse } = useAttention();
   const [known, setKnown] = useState<{ of: string | undefined; page: Page } | null>(null);
   const [again, setAgain] = useState(0);
   const [more, setMore] = useState<{ busy: boolean; why?: string }>({ busy: false });
@@ -85,18 +88,10 @@ export function NeedsYouView() {
     return () => {
       current = false;
     };
-  }, [again, ask, project]);
-
-  // The number in the navigation is this list's total. The frame does not ask
-  // for it again while this screen is open — it is told, from the read that
-  // happened anyway, including after an answer or a review took a row off.
-  const total = page.at === "known" ? page.total : null;
-
-  useEffect(() => {
-    if (project !== undefined && total !== null) {
-      note(project, total);
-    }
-  }, [note, project, total]);
+    // A pulse is read from the top: the change it announces may have moved
+    // rows into and out of every group, and pages loaded under the old list
+    // are pages of a list that is gone.
+  }, [again, ask, project, pulse]);
 
   async function loadMore(cursor: string) {
     setMore({ busy: true });

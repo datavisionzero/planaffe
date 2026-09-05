@@ -76,6 +76,15 @@ error. The count is read from the "Needs you" list itself rather than from a
 counter of its own, and it belongs to the name of the link, so a screen reader
 says "Needs you, 3" instead of reading two fragments in a row.
 
+It stays current without anybody reloading the page. The frame holds one read
+against the wake channel `pa needs-you --wait` uses (`docs/api.md`, Waiting) —
+one connection per project and tab, which the "Needs you" screen shares rather
+than opening a second, and which is given up while the tab is in the background
+and taken up again the moment it is looked at. Where the instance stops
+answering, the number stays as it last was and the loop tries again with a
+growing pause: a navigation that flickered at every hiccup would be worse than
+one that is a few seconds behind.
+
 The overview is a dialog rather than a screen, so that a key can be looked up
 without leaving the list it is about. It is reached three ways — `?`, the
 command palette, and an entry in the account menu — because a list of shortcuts
