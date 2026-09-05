@@ -13,7 +13,14 @@ import {
 import { Input } from "@/components/ui/input";
 
 type ActionDialogProps = {
-  trigger: ReactElement;
+  /**
+   * The control that opens it. A dialog opened from a menu has none: the menu
+   * closes on the click and would take its own trigger down with it, so the
+   * caller keeps the open state and this stays mounted beside the menu.
+   */
+  trigger?: ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   title: string;
   description: string;
   confirmLabel: string;
@@ -23,15 +30,17 @@ type ActionDialogProps = {
 };
 
 /** A focused, reversible confirmation surface for consequential actions. */
-export function ActionDialog({ trigger, title, description, confirmLabel, confirmVariant = "destructive", onConfirm }: ActionDialogProps) {
-  const [open, setOpen] = useState(false);
+export function ActionDialog({ trigger, open: controlled, onOpenChange, title, description, confirmLabel, confirmVariant = "destructive", onConfirm }: ActionDialogProps) {
+  const [uncontrolled, setUncontrolled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const open = controlled ?? uncontrolled;
 
   function changeOpen(next: boolean) {
     if (busy) return;
     setError(undefined);
-    setOpen(next);
+    if (controlled === undefined) setUncontrolled(next);
+    onOpenChange?.(next);
   }
 
   async function confirm() {
@@ -39,7 +48,8 @@ export function ActionDialog({ trigger, title, description, confirmLabel, confir
     setError(undefined);
     try {
       await onConfirm();
-      setOpen(false);
+      if (controlled === undefined) setUncontrolled(false);
+      onOpenChange?.(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The instance did not answer.");
     } finally {
@@ -49,7 +59,7 @@ export function ActionDialog({ trigger, title, description, confirmLabel, confir
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogTrigger render={trigger} />
+      {trigger !== undefined && <DialogTrigger render={trigger} />}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

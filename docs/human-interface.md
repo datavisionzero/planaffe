@@ -22,7 +22,7 @@ available in the browser.
 | `/:project/in-progress` | In progress | shared issue list filtered to active claims | two-line rows, no horizontal scroll |
 | `/:project/needs-you` | Needs you | question, review, unready and stuck reasons | reason and next action stay visible |
 | `/:project/issues` | All issues | shared issue list and all URL filters | filters open as a dismissible sheet |
-| `/:project/issues/:number` | Issue | situational action, fields, relations, comments and history | one column; action precedes description |
+| `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs | one column; metadata as chips under the title |
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
 | `/:project/epics/:number` | Epic | Markdown description, progress and issue list | one column |
 | `/:project/releases` | Releases | `unreleased`, then published releases newest first | stacked summaries |
@@ -78,10 +78,23 @@ its own key already filled in, and the command palette carries all three:
 issue, epic and project.
 
 The detail screen first presents what the issue needs now: an answer field for
-an open question; the result and `done`, `canceled`, or reopen for review; open
-blockers when blocked; the holder and age when claimed. A long description is
-collapsed initially. The complete description, result, comments, relationships
-and history remain available below.
+an open question; the result, `canceled` and reopen for review; open blockers
+when blocked; the holder and age when claimed.
+
+Acting on an issue never means scrolling past it. The header carries the one
+action the status calls for — claim, hand in for review, accept, reopen — with
+`Edit` beside it and every other verb, deletion included, behind an overflow
+menu; it stays in view while the page scrolls. The description is never folded
+away: a long one is capped at a readable height behind a fade until somebody
+asks for the rest. Below that, conversation, relationships and history share one
+tabbed area, each tab carrying its count, with the conversation open by default;
+a comment or a question opens its field on a button inside that tab rather than
+standing open beside the actions. Adding and removing a blocker lives in the
+relationships tab.
+
+Narrow screens get status, priority, `ready` and the epic as a chip line
+directly under the title; the metadata column itself starts at the medium
+breakpoint and carries the rest.
 
 ## Action matrix
 

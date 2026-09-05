@@ -23,10 +23,13 @@ const issue = {
   created_at: "2026-09-03T10:00:00Z", updated_at: "2026-09-04T10:00:00Z", closed_at: null,
 };
 
+/** The same issue, open and free: what the header offers there is Claim. */
+const free = { ...issue, status: "todo", claim: null, result: null, questions: [] };
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the human-first issue detail", () => {
-  it("puts current attention before context and loads the full history", async () => {
+  it("puts current attention before context and never folds the description away", async () => {
     installInstance({
       "GET /issues/PLAN-9": issue,
       "GET /issues/PLAN-9/history": [{ id: 1, actor: person, at: "2026-09-03T10:00:00Z", field: "created", old_value: null, new_value: null, note: null }],
@@ -39,18 +42,32 @@ describe("the human-first issue detail", () => {
     expect(within(attention).getByText("Blocked")).toBeInTheDocument();
     expect(within(attention).getByText("In progress")).toBeInTheDocument();
     expect(attention.compareDocumentPosition(screen.getByText("Description")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByText("Show full description").closest("details")).not.toHaveAttribute("open");
-    expect(screen.getByText((_, element) => element?.tagName === "LI" && element.textContent?.includes("maintainer created the issue") === true)).toBeInTheDocument();
+    // Long, so it is capped and offers the rest — but it is on the page either way.
+    const description = screen.getByText("Description").closest("section")!;
+    expect(within(description).getByText(/Long context\./)).toBeInTheDocument();
+    expect(within(description).getByRole("button", { name: "Show more" })).toBeInTheDocument();
   });
 
-  it("keeps relationships, comments, and inaccessible blockers readable", async () => {
-    installInstance({ "GET /issues/PLAN-9": issue, "GET /issues/PLAN-9/history": [] });
+  // The three long lists used to stack, so acting on an issue meant scrolling
+  // past all of them. Conversation is what an open issue is opened for.
+  it("shares one tabbed area between conversation, relationships and history", async () => {
+    installInstance({
+      "GET /issues/PLAN-9": issue,
+      "GET /issues/PLAN-9/history": [{ id: 1, actor: person, at: "2026-09-03T10:00:00Z", field: "created", old_value: null, new_value: null, note: null }],
+    });
     renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
 
+    expect(await screen.findByRole("tab", { name: "Conversation 2" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("A comment.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Relationships 4" }));
     expect(await screen.findByRole("link", { name: /^PLAN-1 ·/ })).toHaveAttribute("href", "/PLAN/issues/1");
     expect(screen.getByRole("link", { name: /^PLAN-10 ·/ })).toBeInTheDocument();
     expect(screen.getByText("Issue outside your project access")).toBeInTheDocument();
-    expect(screen.getByText("A comment.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "History 1" }));
+    expect(await screen.findByText((_, element) => element?.tagName === "LI" && element.textContent?.includes("maintainer created the issue") === true)).toBeInTheDocument();
   });
 
   // The address carries the number alone, so a link may not take the project
@@ -63,11 +80,16 @@ describe("the human-first issue detail", () => {
     };
     installInstance({ "GET /issues/PLAN-9": across, "GET /issues/PLAN-9/history": [] });
     renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
 
+    await user.click(await screen.findByRole("tab", { name: /Relationships/ }));
     for (const link of await screen.findAllByRole("link", { name: /^OTHER-7 ·/ })) {
       expect(link).toHaveAttribute("href", "/OTHER/issues/7");
     }
-    expect(screen.getByRole("link", { name: "OTHER-E2" })).toHaveAttribute("href", "/OTHER/epics/E2");
+    // The chip line and the metadata column both name the epic.
+    for (const link of screen.getAllByRole("link", { name: "OTHER-E2" })) {
+      expect(link).toHaveAttribute("href", "/OTHER/epics/E2");
+    }
   });
 
   it("answers the action that needs attention without leaving the issue", async () => {
@@ -81,6 +103,53 @@ describe("the human-first issue detail", () => {
 
     expect(await screen.findByText("Use the browser path.")).toBeInTheDocument();
     expect(await instance.calls.at(-1)!.json()).toEqual({ answer: "Use the browser path." });
+  });
+
+  // The action used to sit below description, relationships and conversation:
+  // one had to scroll past everything the issue says in order to act on it.
+  it("offers the one action the status calls for in the header", async () => {
+    const instance = installInstance({ "GET /issues/PLAN-9": issue, "GET /issues/PLAN-9/history": [], "POST /issues/PLAN-9/close": { ...issue, status: "done" } });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    const header = (await screen.findByRole("heading", { name: /Human-first issue/ })).parentElement!.parentElement!;
+    await user.click(within(header).getByRole("button", { name: "Accept as done" }));
+
+    expect(await instance.calls.at(-1)!.json()).toEqual({ status: "done", result: issue.result });
+  });
+
+  it("offers Claim on a free issue and keeps the rest of the verbs in the overflow", async () => {
+    const instance = installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [], "POST /issues/PLAN-9/claim": { ...free, claim: { holder: person, since: "2026-09-05T08:00:00Z", expires_at: null } } });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Claim" }));
+    expect(await instance.calls.at(-1)!.json()).toEqual({ force: false });
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "Release claim" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Clear ready" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Delete issue" })).toBeInTheDocument();
+  });
+
+  // An always-open comment box invites the comment nobody needed, and it sat
+  // under the actions rather than under the thread it belongs to.
+  it("opens the comment field on a button, inside the conversation", async () => {
+    const comment = { id: "0199a000-0000-7000-8000-000000000005", author: person, body: "Looked at it.", created_at: "2026-09-05T10:00:00Z" };
+    const instance = installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [], "POST /issues/PLAN-9/comments": { body: comment } });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("button", { name: "Add comment" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Add comment")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add comment" }));
+    await user.type(await screen.findByLabelText("Add comment"), "Looked at it.");
+    await user.click(screen.getByRole("button", { name: "Add comment" }));
+
+    expect(await screen.findByText("Looked at it.")).toBeInTheDocument();
+    expect(await instance.calls.at(-1)!.json()).toEqual({ body: "Looked at it." });
   });
 
   // `GET /issues/{key}` answers 404 `deleted` in the grace period and the view
@@ -116,7 +185,8 @@ describe("the human-first issue detail", () => {
     renderAt("/PLAN/issues/9", routedIssue);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("button", { name: "Delete issue" }));
+    await user.click(await screen.findByRole("button", { name: "More actions" }));
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Delete issue" }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete issue" }));
 
     expect(await screen.findByRole("button", { name: "Restore issue" })).toHaveFocus();
