@@ -89,7 +89,7 @@ func newRoot(env Env) *cobra.Command {
 		return &config.UsageError{Message: err.Error()}
 	})
 
-	root.AddCommand(newNext(g), newNeedsYou(g), newExport(g), newIssue(g), newQuestion(g), newProject(g), newLabel(g), newEpic(g), newRelease(g))
+	root.AddCommand(newInit(g), newNext(g), newNeedsYou(g), newExport(g), newIssue(g), newQuestion(g), newProject(g), newLabel(g), newEpic(g), newRelease(g))
 	root.AddCommand(identityCommands(g)...)
 	return root
 }
@@ -128,6 +128,15 @@ func (g *globals) loadForWait(seconds int) (config.Config, *client.Client, error
 
 	c, err := client.New(cfg, httpClient)
 	return cfg, c, err
+}
+
+// dir is the repository pa was run in.
+func (g *globals) dir() string {
+	if g.env.Dir != "" {
+		return g.env.Dir
+	}
+	dir, _ := os.Getwd()
+	return dir
 }
 
 // requireProject is the one thing a command in a repository never has to say.

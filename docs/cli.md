@@ -61,6 +61,23 @@ The table of `docs/api.md`, derived from the status and the problem document:
 
 ## Verbs
 
+Connecting a repository is the one step before the rest:
+
+```
+pa init                      # the key from the directory name; creates the project or takes it
+pa init PLAN [--name planaffe] [--force] [--json]
+```
+
+It checks the two variables one after the other and says which of them was
+wrong, because that is the mistake a newcomer makes first: an address nothing
+answered at is exit 10 naming `PLANAFFE_URL`, a token the instance does not
+know is exit 7 naming `PLANAFFE_TOKEN`. Then it takes the project of that key
+or creates it, writes the `.planaffe` — over an existing one only with
+`--force` — and prints what is left for a person: the two variables in the
+shell, and the `AGENTS.md` block of [`agents-md.md`](./agents-md.md). Nothing
+is asked: a directory whose name makes no key is an error saying so, not a
+prompt (VISION 6.1).
+
 ```
 pa next                      # the ready-for-agents list, in the order next hands out
 pa next --claim              # take the highest-ranked workable issue and claim it
