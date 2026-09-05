@@ -44,3 +44,6 @@ logs/
 
 # The Go client of the contract, generated before every build (ADR 0005)
 src/cli/internal/api/client.gen.go
+
+# The local instance on this machine: Mailpit, and what only this host needs.
+deploy/docker-compose.local.yml
