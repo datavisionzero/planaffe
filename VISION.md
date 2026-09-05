@@ -69,7 +69,7 @@ That is the promise the CLI carries for the whole product: **the unit of measure
 ## 5. Non-Goals (Deliberate Boundaries)
 
 - No helpdesk or ticketing for end customers.
-- No product management for non-technical users (roadmaps, OKRs, portfolios).
+- No fully-fledged project management: no roadmap as an object of its own, no OKRs, no portfolio levels. Non-technical people are welcome to read along in the tracker and in its pages (7.) — building the product *for* them is what we do not do.
 - No sprint or capacity planning in the MVP — the work is done by agents, not by humans in two-week rhythms.
 - No custom fields, no configurable workflow engines, no automation rules in the MVP.
 - No native mobile app. The web app is responsive and works well on a phone — nothing more.
@@ -181,6 +181,7 @@ History               (on issues, written by the system)
 Questions             (on issues, open or answered)
 Labels                (defined per project)
 Releases              (per project, across epics)
+Pages                 (per project, a flat wiki)
 Users                 (human or agent)
 ```
 
@@ -296,6 +297,36 @@ Epic and release are orthogonal and do not fight: the **epic says what belongs t
 | Portfolio levels (initiative, objective) | Consistently the most expensive features of the comparison systems. Irrelevant for 1–5 people. |
 | Groups above projects | Only GitLab has this, and warns about deep nesting itself. A flat project list is enough. |
 | Boards as a persisted level | A board is a saved view, not a membership — not a data model. |
+
+### The Page
+
+Everything above either is an issue or brackets one. A project also holds knowledge that is no assignment at all: the architecture, the conventions, what an operator has to know, the reasoning nobody wants to reconstruct twice. That is the **page** — a flat wiki, one per project.
+
+Two reasons put it here rather than in the repository, and 2.1 already made both of them for the tracker itself. **In a public repository every half-thought is public**, which is the problem planaffe exists for. And **whoever may see the tickets may see the knowledge**: project access is one rule, and a second place with a second permission model is one rule too many — that is, after all, why wikis exist next to trackers at all.
+
+A third reason only became visible while this was being decided. **planaffe has places for work and none for thinking.** A thing passes through three states — a thought, a plan, the work — and only the last one has a home here. The thought is the stub (15.4). The plan in between has nothing: too early for the repository, not yet cut into tickets. So it lives in a file on one machine, where no second agent finds it and no human sees it, and it is lost by the next session. A page is neither of those: on the instance, versioned, and shared with whoever else works on the project.
+
+| Field | |
+|---|---|
+| `slug` | unique within the project, and the address: `/PLAN/pages/architecture` |
+| `title` | one line |
+| `body` | Markdown — this is the whole content |
+| `labels` | optional, the project's ordinary labels |
+| History | who changed what, when — as on an issue |
+
+**The slug is the address, not a key.** Everything else in the product is reached through a project-scoped key, and "Number" in `CONTEXT.md` says why. The page is the deliberate exception: it is referred to by name in running text, not by number. Renaming is allowed, the old slug does not redirect — a redirect table is the first stage of the sprawl this section is written against — and the rename is in the history.
+
+**`updated_at` is the version**, as on an issue and an epic, so a page inherits the `If-Match` guard the epic's living description already needs (`docs/api.md`, "Concurrency on text fields") instead of getting a mechanism of its own. Human and agent edit the same text here, and both may: an agent that may write tickets may write pages.
+
+**Flat, and it stays flat.** No tree, no hierarchy, no table of contents — the full-text search is the navigation, and it already exists. No permission per page beyond project access, no attachments or images (guiding principle 6), no comments on a page, no templates, no draft-versus-published state. Whoever has something that has to be done writes a ticket; everything else in section 7 is for that.
+
+**What a page replaces:**
+
+| Instead of | |
+|---|---|
+| A roadmap as an object of its own | It would collide with three things that exist: the **epic** is the theme, the **release** is what shipped, **priority** and `backlog` say when. What is left over is time and commitment — and a date wakes nobody without a notification (17.), so a roadmap entity would drag that question in through the back door. The narrated roadmap is a page. The structured one is a label group `horizon` on epics, which costs no schema at all. |
+| A second place for ideas | An idea that wants to become a ticket is the stub (15.4), and the stub has a queue. One that never will is a line on a page. An entity in between would have no queue — which is exactly how it becomes a graveyard. |
+| Project-wide instructions as a field on the project (15.3) | Those instructions are one page with a switch, not a second kind of Markdown hanging on the project. 15.3 is absorbed here. |
 
 ## 8. Issue Fields
 
@@ -569,6 +600,8 @@ CLI or the interface.
 
 This is the scope of version 1.0, not the order it is built in. It is built in three cuts, the first of which ends when the maintainer's own file-based tracker can be deleted ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)).
 
+The page (7.) is the one item decided after those three cuts had been designed. It does not belong to any of them and is built after them; ADR 0009 orders everything before it and is not contradicted by this.
+
 **Included:**
 
 - Create, switch, manage projects, with the two switches *triage required* and *review required*
@@ -586,6 +619,7 @@ This is the scope of version 1.0, not the order it is built in. It is built in t
 - Password sign-in, revocable browser sessions, email invitation and password recovery
 - A complete CLI with machine-readable output
 - A responsive web interface
+- Pages: the project's flat wiki — Markdown addressed by a slug, with history and in the search (see 7.)
 - A Docker Compose setup and documentation
 
 **Not included (deliberately deferred):**
@@ -623,6 +657,8 @@ What that is good for: what does an epic really cost? Which model handles which 
 - The schema stays fixed and small — no custom-field construction kit through the back door (guiding principle 3).
 
 ### 15.3 Project-wide instructions for agents
+
+> **Absorbed into the page (7.), 5 September 2026.** These instructions are one page with a switch, not a second kind of Markdown on the project, and building them separately would leave the product with two of them. What follows is the reasoning, which stands; only the place has changed.
 
 The user stores a text on the project that is delivered to every agent with every ticket — a kind of system prompt for the project. "Tests run with `just test`", "no new dependencies without asking", "migrations always reversible".
 

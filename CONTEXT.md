@@ -120,6 +120,14 @@ no name until publishing names it, freezes it and opens the next; a sub-issue
 ships with its parent.
 _Avoid_: milestone, version, sprint, iteration
 
+**Page**:
+A Markdown document in a project, addressed by its **Slug**: the project's flat
+wiki, and the place a plan lives until tickets are cut from it. Ordinary labels,
+history like an issue's, and `updated_at` as its version. No hierarchy, no
+comments, no attachments, no per-page access — whoever reaches the project reaches
+its pages.
+_Avoid_: wiki page, document, article, note, knowledge base
+
 **Label**:
 A free tag defined per project, optionally carrying a one-line description of
 what it means there, and the only extensibility the product offers.
@@ -163,6 +171,13 @@ _Avoid_: id, number, ticket number, reference
 The project-scoped identifier of an epic, e.g. `PLAN-E3`, drawn from a sequence
 of its own.
 _Avoid_: id, number, reference
+
+**Slug**:
+The name that identifies a **Page** within its project and is its address,
+`/PLAN/pages/architecture`. The one thing in the product not reached through a
+key, because a page is named in running text rather than numbered. It is
+renameable, and the old slug leads nowhere afterwards.
+_Avoid_: key, name, path, permalink, handle
 
 **Number**:
 The part of a key after its project prefix — `42` in `PLAN-42`, `E3` in
