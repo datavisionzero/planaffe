@@ -8,7 +8,9 @@ defined in [`api.md`](./api.md).
 Bulk issue changes, export and all three waiting operations remain CLI work.
 There is no board, dashboard or rich-text editor. Every Markdown editor is a
 text area with a preview, and every ordinary human action on one issue is
-available in the browser.
+available in the browser. Enter in that text area is a line break where it is
+read, so nothing has to be known about Markdown to write one
+([ADR 0020](./adr/0020-a-newline-is-a-line-break-and-stored-text-is-not-hard-wrapped.md)).
 
 ## Screen matrix
 

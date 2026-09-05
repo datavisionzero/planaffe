@@ -12,6 +12,16 @@ describe("the Markdown pipeline (ADR 0007)", () => {
     expect(screen.getByText("gone").tagName).toBe("DEL");
   });
 
+  // ADR 0020: the one departure from CommonMark. A person types into a text
+  // area and presses Enter; nothing that reaches here is hard-wrapped, so a
+  // newline is only ever meant.
+  it("makes a line break of a single newline", () => {
+    const { container } = render(<Markdown>{"Zeile eins\nZeile zwei\n\nAbsatz zwei"}</Markdown>);
+
+    expect(container.querySelectorAll("br")).toHaveLength(1);
+    expect(container.querySelectorAll("p")).toHaveLength(2);
+  });
+
   it("never interprets HTML", () => {
     const { container } = render(
       <Markdown>{'before <img src="x" onerror="alert(1)"> <script>alert(1)</script> after'}</Markdown>,

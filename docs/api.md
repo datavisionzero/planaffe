@@ -22,6 +22,11 @@ flags, output — is PLAN-0012's; what it can do is decided here.
 - **JSON in, JSON out**, `snake_case` fields, timestamps as RFC 3339 in UTC with
   microseconds (`2026-09-02T14:03:07.123456Z`). Markdown fields are plain
   strings, never rendered by the server ([ADR 0007](./adr/0007-markdown-is-rendered-in-the-browser-and-never-as-html.md)).
+- **A newline in a Markdown field is a line break**, and a blank line separates
+  paragraphs, so a paragraph is sent as one line however long it is. Text that
+  arrives hard-wrapped is stored and returned exactly as it was sent — the
+  server changes nothing — and renders as the staircase it now says it is
+  ([ADR 0020](./adr/0020-a-newline-is-a-line-break-and-stored-text-is-not-hard-wrapped.md)).
 - **No version in the path** ([ADR 0011](./adr/0011-the-api-carries-no-version-and-migrations-only-run-forward.md)).
   Every response carries `Planaffe-Version: <semver>`, `GET /version` returns
   the same, and the CLI sends `User-Agent: pa/<semver> (<os>/<arch>)`. The

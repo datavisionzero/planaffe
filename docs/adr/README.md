@@ -43,3 +43,4 @@ material value to understanding the decision.
 - [0017 – The web application is drawn by Tailwind and Base UI, in components the repository owns](./0017-the-web-application-is-drawn-by-tailwind-and-base-ui-components-the-repository-owns.md)
 - [0018 – Transactional email is an optional instance capability](./0018-transactional-email-is-an-optional-instance-capability.md)
 - [0019 – Triage required selects, it does not permit](./0019-triage-required-selects-it-does-not-permit.md)
+- [0020 – A newline is a line break, and stored text is not hard-wrapped](./0020-a-newline-is-a-line-break-and-stored-text-is-not-hard-wrapped.md)

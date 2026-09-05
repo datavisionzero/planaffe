@@ -1,5 +1,6 @@
 import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { admitUrl } from "./links";
@@ -9,6 +10,11 @@ import { admitUrl } from "./links";
  * to a component tree, with raw HTML skipped — never interpreted, never set as
  * innerHTML — because what it renders was written by agents quoting things
  * nobody vetted (VISION 13).
+ *
+ * `remark-breaks` is the third plugin and the one that is not CommonMark: a
+ * single newline is a line break rather than a space, because this text is
+ * typed into a text area by people who press Enter and expect a break, and
+ * because nothing that reaches here is hard-wrapped any more (ADR 0020).
  *
  * Links are foreign links. The library's default admits `irc`, `ircs` and
  * `xmpp` beside the three below; ADR 0007 admits exactly `http`, `https` and
@@ -109,7 +115,7 @@ function languageOf(children: ReactNode): string | undefined {
 export function Markdown({ children, className }: { children: string; className?: string }) {
   return (
     <div className={cn("text-sm", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml urlTransform={admitUrl} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} skipHtml urlTransform={admitUrl} components={components}>
         {children}
       </ReactMarkdown>
     </div>
