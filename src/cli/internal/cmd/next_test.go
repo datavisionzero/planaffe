@@ -23,6 +23,9 @@ type fake struct {
 	bodies   []string
 	answer   func(r *http.Request) (int, string)
 	headers  func(r *http.Request) map[string]string
+	// What a success is served as, where the test is about an answer that is
+	// not JSON; empty means the ordinary application/json.
+	contentType string
 }
 
 func (f *fake) handler() http.Handler {
@@ -37,9 +40,12 @@ func (f *fake) handler() http.Handler {
 				w.Header().Set(name, value)
 			}
 		}
-		if status >= 400 {
+		switch {
+		case status >= 400:
 			w.Header().Set("Content-Type", "application/problem+json")
-		} else {
+		case f.contentType != "":
+			w.Header().Set("Content-Type", f.contentType)
+		default:
 			w.Header().Set("Content-Type", "application/json")
 		}
 		w.WriteHeader(status)

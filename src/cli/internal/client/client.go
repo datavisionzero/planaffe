@@ -10,11 +10,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/datavisionzero/planaffe/src/cli/internal/api"
@@ -99,7 +101,8 @@ func ForWait(seconds int) *http.Client {
 
 // Check turns a response into a Failure when it is one: the version skew first,
 // because a skewed instance's refusal may be about a shape pa does not know;
-// then the problem document by the table of docs/api.md.
+// then a success that is not the JSON it claims to be; then the problem
+// document by the table of docs/api.md.
 func Check(resp *http.Response, body []byte) error {
 	if resp == nil {
 		return &Failure{Code: exit.Unexpected, Message: "no response"}
@@ -110,7 +113,7 @@ func Check(resp *http.Response, body []byte) error {
 	}
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
+		return notJSON(resp, body)
 	}
 
 	p := problem.Parse(body)
@@ -121,6 +124,47 @@ func Check(resp *http.Response, body []byte) error {
 	}
 
 	return &Failure{Code: code, Message: message, Problem: p}
+}
+
+// notJSON catches a success that is not the shape the contract promises, and
+// it is the one answer pa cannot tell from a good one by its status alone.
+//
+// The instance serves the web application from the same port and falls back to
+// `index.html` for every path no endpoint took (`docs/codebase.md`). So an
+// endpoint this build of pa knows and that instance does not answers 200 with
+// a page of HTML — a success, to every check there was. Every verb then
+// dereferenced the JSON the generated client had not filled in, and pa died on
+// a nil pointer instead of saying what was wrong. Ninety-nine of those
+// dereferences: the guard belongs here rather than at each of them.
+func notJSON(resp *http.Response, body []byte) error {
+	// A 204 and anything else that answers with nothing is a fine success.
+	if len(body) == 0 {
+		return nil
+	}
+
+	kind, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err == nil && (kind == "application/json" || strings.HasSuffix(kind, "+json")) {
+		return nil
+	}
+
+	where := ""
+	if resp.Request != nil && resp.Request.URL != nil {
+		where = " for " + resp.Request.URL.Path
+	}
+
+	return &Failure{
+		Code: exit.Unexpected,
+		Message: fmt.Sprintf(
+			"the instance answered %s%s with %s, not JSON — most likely it does not have this endpoint yet; `pa version` says what it is",
+			resp.Status, where, described(kind)),
+	}
+}
+
+func described(kind string) string {
+	if kind == "" {
+		return "something else"
+	}
+	return kind
 }
 
 // Transport turns an error from the HTTP client into the Failure it is: the

@@ -192,3 +192,61 @@ func TestPageEditIsExitSixWhenSomebodyCameBetween(t *testing.T) {
 		t.Errorf("stderr %q", stderr)
 	}
 }
+
+// The instance serves the web application from the same port and falls back to
+// `index.html` for every path no endpoint took, so an endpoint this build of pa
+// knows and the instance does not answers 200 with a page of HTML. That is a
+// success to every check there was, and every verb then dereferenced JSON the
+// generated client had not filled in. Reported against `pa page list`; it was
+// never about the list being empty.
+func TestAnEndpointTheInstanceDoesNotHaveIsNotACrash(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) {
+		return 200, "<!doctype html><html><body>planaffe</body></html>"
+	}, contentType: "text/html; charset=utf-8"}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, repository(t, "project = PLAN\n"), "page", "list")
+
+	if code != exit.Unexpected {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if out != "" {
+		t.Errorf("nothing goes to stdout: %q", out)
+	}
+	for _, want := range []string{"text/html", "/projects/PLAN/pages", "pa version"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr %q lacks %q", stderr, want)
+		}
+	}
+}
+
+// An empty list is an ordinary answer and stays one — this is what the report
+// guessed the crash was, and it is worth holding still.
+func TestAnEmptyWikiIsNotAnError(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) { return 200, `[]` }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, repository(t, "project = PLAN\n"), "page", "list", "--project", "PLAN")
+
+	if code != exit.OK || out != "" || stderr != "" {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out, stderr)
+	}
+}
+
+// A 204 carries no body and is not an unparsable answer.
+func TestADeleteWithNoBodyIsStillASuccess(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) { return 204, "" }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, repository(t, "project = PLAN\n"), "page", "delete", "architecture")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if !strings.Contains(out, "deleted") {
+		t.Errorf("stdout %q", out)
+	}
+}

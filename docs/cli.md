@@ -40,6 +40,11 @@ silently did nothing would send every command to the wrong project.
   instance's `Planaffe-Version` compared on every answer: a `pa` of another major,
   or older than the instance's minor, stops with exit 9 and says which of the two
   moves (ADR 0011). A development build of either side is not checked.
+- **A success has to be the shape the contract promises.** The instance serves
+  the web application from the same port and falls back to `index.html` for
+  every path no endpoint took, so an endpoint this `pa` knows and that instance
+  does not answers `200` with a page of HTML. That is exit 1 saying so, never a
+  crash: a body that is not JSON is not a success, whatever the status says.
 
 ## Exit codes
 
