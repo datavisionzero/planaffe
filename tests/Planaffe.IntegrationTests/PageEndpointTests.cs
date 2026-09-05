@@ -183,6 +183,35 @@ public sealed class PageEndpointTests(PostgresFixture postgres)
     }
 
     /// <summary>
+    /// The search is what the flat wiki has instead of a hierarchy (VISION 7),
+    /// so it has to find what the navigation would have led to.
+    /// </summary>
+    [Fact]
+    public async Task The_search_finds_a_page_by_its_title_and_by_its_body()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await admin.PostAsJsonAsync("/projects/PLAN/pages", new { slug = "architecture", title = "Architecture", body = "Dependencies point inward and only inward." }, Ct);
+        await admin.PostAsJsonAsync("/projects/PLAN/pages", new { slug = "onboarding", title = "Onboarding", body = "Start with docker compose up." }, Ct);
+
+        Assert.Equal(["architecture"], await Found(admin, "inward"));
+        Assert.Equal(["architecture"], await Found(admin, "Architecture"));
+        Assert.Equal(["onboarding"], await Found(admin, "\"docker compose\""));
+
+        // The `simple` configuration, so an identifier survives being searched for.
+        Assert.Equal(["onboarding"], await Found(admin, "-inward compose"));
+        Assert.Empty(await Found(admin, "nothing here"));
+
+        // A filter, not a ranking: the order stays the slug's, and the label
+        // filter still narrows what the words found.
+        Assert.Equal(["architecture", "onboarding"], await Found(admin, "docker OR inward"));
+
+        // A deleted page is not found while it is in its grace period (ADR 0013).
+        await admin.DeleteAsync("/projects/PLAN/pages/architecture", Ct);
+        Assert.Empty(await Found(admin, "inward"));
+    }
+
+    /// <summary>
     /// The wiki is project content, so the project scope is what decides who
     /// sees it — one rule, no second permission model (VISION 7).
     /// </summary>
@@ -202,6 +231,10 @@ public sealed class PageEndpointTests(PostgresFixture postgres)
             await stranger.PostAsJsonAsync("/projects/PLAN/pages", new { slug = "sneaky", title = "Sneaky" }, Ct),
             HttpStatusCode.NotFound, "not-found");
     }
+
+    private static async Task<string[]> Found(HttpClient client, string query) =>
+        [.. (await client.GetFromJsonAsync<JsonElement>($"/projects/PLAN/pages?q={Uri.EscapeDataString(query)}", Ct))
+            .EnumerateArray().Select(p => p.GetProperty("slug").GetString()!)];
 
     private static async Task<HttpClient> Project(AnInstance instance)
     {

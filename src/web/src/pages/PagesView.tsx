@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { api, describe, type Schemas } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { LabelPicker } from "@/components/ui/label-picker";
 import { useLabels } from "@/projects/useLabels";
 import { PageHeader } from "@/shared/PageHeader";
@@ -23,10 +24,22 @@ export function PagesView() {
   // The filter lives in the URL, as every other list's does here: a pasted
   // link says what it shows.
   const labels = params.getAll("label");
+  const query = params.get("q") ?? "";
   const filter = labels.join("\u0000");
   const [asked, setAsked] = useState<{ of: string; loaded: Loaded } | null>(null);
-  const at = `${project}/${filter}`;
+  const searchId = useId();
+  const at = `${project}/${query}/${filter}`;
   const loaded: Loaded = asked !== null && asked.of === at ? asked.loaded : { at: "asking" };
+
+  const filtered = query !== "" || labels.length > 0;
+
+  // One place writes the URL, so the two filters cannot drop each other.
+  const set = (name: string, values: string[]) => {
+    const kept = new URLSearchParams(params);
+    kept.delete(name);
+    for (const value of values) kept.append(name, value);
+    setParams(kept, { replace: true });
+  };
 
   useEffect(() => {
     let current = true;
@@ -37,7 +50,10 @@ export function PagesView() {
         const { data, error, response } = await api.GET("/projects/{key}/pages", {
           params: {
             path: { key: project! },
-            query: filter === "" ? undefined : { label: filter.split("\u0000") },
+            query: {
+              q: query === "" ? undefined : query,
+              label: filter === "" ? undefined : filter.split("\u0000"),
+            },
           },
         });
 
@@ -54,24 +70,32 @@ export function PagesView() {
     return () => {
       current = false;
     };
-  }, [at, filter, project]);
+  }, [at, filter, project, query]);
 
   return (
     <>
       <PageHeader title="Pages" meta={loaded.at === "known" ? `${loaded.items.length}` : undefined}>
         <Button size="sm" render={<Link to={`/${project}/pages/new`} />}>New page</Button>
       </PageHeader>
-      <div className="border-b px-4 py-2">
+      <div className="grid gap-2 border-b px-4 py-2 sm:grid-cols-[1fr_2fr]">
+        {/* The search is what this wiki has instead of a tree, so it stands
+            above the list rather than behind a filter sheet. */}
+        <div className="grid gap-1 text-sm font-medium">
+          <label htmlFor={searchId}>Search</label>
+          <Input
+            id={searchId}
+            name="q"
+            type="search"
+            placeholder="Words in the title or the body"
+            value={query}
+            onChange={(event) => set("q", event.target.value === "" ? [] : [event.target.value])}
+          />
+        </div>
         <LabelPicker
           label="Labels"
           labels={known.labels}
           value={labels}
-          onChange={(next) => {
-            const kept = new URLSearchParams(params);
-            kept.delete("label");
-            for (const name of next) kept.append("label", name);
-            setParams(kept, { replace: true });
-          }}
+          onChange={(next) => set("label", next)}
         />
       </div>
       {loaded.at === "failed" && <p className="p-4 text-sm text-destructive">{loaded.why}</p>}
@@ -80,8 +104,8 @@ export function PagesView() {
           yet, the other is a filter that matched nothing. */}
       {loaded.at === "known" && loaded.items.length === 0 && (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-          <p className="font-medium">{labels.length === 0 ? "No pages yet." : "No page carries all of those labels."}</p>
-          {labels.length === 0 && (
+          <p className="font-medium">{filtered ? "Nothing matches." : "No pages yet."}</p>
+          {!filtered && (
             <p className="max-w-md text-sm text-muted-foreground">
               A page is what a project knows and no ticket asks for: the architecture, the conventions, what an
               operator has to know — and the plan tickets are cut from later.

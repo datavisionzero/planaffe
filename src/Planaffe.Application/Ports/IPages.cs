@@ -23,8 +23,12 @@ public interface IPages
     /// <summary>By slug, deleted or not — for the <c>deleted</c> answer and for restore.</summary>
     Task<Page?> FindAnyAsync(Guid projectId, string slug, CancellationToken cancellationToken);
 
-    /// <summary>Every live page of the project, by slug; every label named has to be on it.</summary>
-    Task<IReadOnlyList<Page>> ListAsync(Guid projectId, IReadOnlyList<string> labelNames, CancellationToken cancellationToken);
+    /// <summary>
+    /// Every live page of the project, by slug; every label named has to be on
+    /// it, and <paramref name="search"/> filters by the words in the title and
+    /// the body.
+    /// </summary>
+    Task<IReadOnlyList<Page>> ListAsync(Guid projectId, IReadOnlyList<string> labelNames, string? search, CancellationToken cancellationToken);
 
     /// <summary>The row, tracked and locked for the rest of the transaction.</summary>
     Task<Page?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken);

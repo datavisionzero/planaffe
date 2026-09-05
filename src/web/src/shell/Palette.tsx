@@ -1,7 +1,7 @@
 import { ArrowRightIcon, SearchIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
-import { api, type IssueSummary, type Project } from "@/api/client";
+import { api, type IssueSummary, type Project, type Schemas } from "@/api/client";
 import { useTheme } from "@/components/theme-provider";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { rememberProject } from "@/projects/useProjects";
@@ -9,7 +9,9 @@ import { useSession } from "@/session/useSession";
 import { cn } from "@/lib/utils";
 import { Keys } from "./ShortcutsDialog";
 import { is } from "./shortcuts";
-import { keyPath, keyPattern, viewPath, views } from "./views";
+import { keyPath, keyPattern, pagePath, viewPath, views } from "./views";
+
+type PageSummary = Schemas["PageSummary"];
 
 type Command = {
   id: string;
@@ -32,6 +34,12 @@ const settle = 150;
  * which is the fastest way from a chat to a ticket. Words rather than a key ask
  * the instance: a few full-text matches, and the row that opens all of them as
  * a filtered list.
+ *
+ * It asks about issues and about pages, under headings that say which is
+ * which. A hit that does not say what kind of thing it is is a poor hit, and
+ * for the wiki this is more than a nicety: the pages are flat because the
+ * search is what a hierarchy would have been, so this is how one is found at
+ * all.
  *
  * Owned rather than imported (ADR 0017): a filtered list with a roving index
  * inside a Base UI dialog, which is what a palette is before it does more.
@@ -73,7 +81,7 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
   const { signOut } = useSession();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
-  const [found, setFound] = useState<{ of: string; items: IssueSummary[] }>({ of: "", items: [] });
+  const [found, setFound] = useState<{ of: string; issues: IssueSummary[]; pages: PageSummary[] }>({ of: "", issues: [], pages: [] });
   const searchId = useId();
 
   const needle = query.trim();
@@ -94,14 +102,24 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const { data } = await api.GET("/issues", {
-            params: { query: { project: projectKey, q: needle, limit: matches } },
-            signal: controller.signal,
-          });
+          // Two lists, one question. Neither waits for the other to fail: a
+          // wiki that answers while the issue list is slow still shows up.
+          const [issues, pages] = await Promise.all([
+            api.GET("/issues", {
+              params: { query: { project: projectKey, q: needle, limit: matches } },
+              signal: controller.signal,
+            }),
+            api.GET("/projects/{key}/pages", {
+              params: { path: { key: projectKey }, query: { q: needle } },
+              signal: controller.signal,
+            }),
+          ]);
 
-          if (data !== undefined) {
-            setFound({ of: needle, items: data.items });
-          }
+          setFound({
+            of: needle,
+            issues: issues.data?.items ?? [],
+            pages: (pages.data ?? []).slice(0, matches),
+          });
         } catch {
           // Nothing found is what the palette shows; the commands remain.
         }
@@ -138,7 +156,9 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
     }
 
     if (searching && projectKey !== undefined) {
-      for (const issue of found.of === needle ? found.items : []) {
+      const hits = found.of === needle ? found : { issues: [], pages: [] };
+
+      for (const issue of hits.issues) {
         list.push({
           id: `found:${issue.key}`,
           label: issue.title,
@@ -156,6 +176,17 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
         run: go(`/${projectKey}/issues?q=${encodeURIComponent(needle)}`),
         found: true,
       });
+
+      for (const page of hits.pages) {
+        list.push({
+          id: `found:page:${page.slug}`,
+          label: page.title,
+          hint: page.slug,
+          group: "Pages",
+          run: go(pagePath(projectKey, page.slug)),
+          found: true,
+        });
+      }
     }
 
     if (current !== undefined) {

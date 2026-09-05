@@ -49,6 +49,18 @@ function shell(path: string) {
       next_cursor: null,
     },
     "GET /projects/PLAN/labels": [{ name: "feature", group: "kind", description: null }],
+    "GET /projects/PLAN/pages": (request) =>
+      new URL(request.url).searchParams.get("q") === "shell"
+        ? [{
+            slug: "architecture",
+            project: "PLAN",
+            title: "The shell before it is a screen",
+            labels: [],
+            updated_by: { id: aUser.id, kind: "user", name: aUser.name },
+            created_at: "2026-09-02T10:00:00Z",
+            updated_at: "2026-09-02T10:00:00Z",
+          }]
+        : [],
   });
 
   renderAt(
@@ -293,7 +305,7 @@ describe("the shell (ADR 0006)", () => {
     expect(await screen.findByRole("heading", { name: "Create issue" })).toBeInTheDocument();
   });
 
-  it("offers the three things that can be created from the palette", async () => {
+  it("offers the four things that can be created from the palette", async () => {
     shell("/PLAN/ready");
     const user = userEvent.setup();
     await screen.findByText("The web shell");
@@ -301,7 +313,7 @@ describe("the shell (ADR 0006)", () => {
     await user.keyboard("{Meta>}k{/Meta}");
     await user.type(await screen.findByRole("combobox", { name: /command/i }), "create");
 
-    for (const what of ["Create issue", "Create epic", "Create project"]) {
+    for (const what of ["Create issue", "Create epic", "Create page", "Create project"]) {
       expect(await screen.findByRole("option", { name: new RegExp(what) })).toBeInTheDocument();
     }
 
@@ -397,6 +409,38 @@ describe("the shell (ADR 0006)", () => {
     await user.click(match);
 
     expect(await screen.findByRole("heading", { name: /PLAN-13/ })).toBeInTheDocument();
+  });
+
+  /**
+   * The wiki is flat because the search is what a hierarchy would have been
+   * (VISION 7), so this is how a page is found at all — and the heading says
+   * it is a page, because a hit that does not say what kind of thing it is is
+   * a poor hit.
+   */
+  it("finds pages as well as issues, under headings that say which is which", async () => {
+    const { calls } = shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    await user.type(await screen.findByRole("combobox", { name: /command/i }), "shell");
+
+    const page = await screen.findByRole("option", { name: /The shell before it is a screen/ });
+    expect(within(page).getByText("architecture")).toBeInTheDocument();
+    // Inside the palette, the one "Pages" that is not itself a row is the
+    // heading over the hits; the other is the row that opens the wiki.
+    const listbox = screen.getByRole("listbox");
+    expect(within(listbox).getAllByText("Pages").filter((element) => element.closest('[role="option"]') === null)).toHaveLength(1);
+    expect(within(listbox).getByText("Issues")).toBeInTheDocument();
+
+    await waitFor(() => {
+      const asked = calls.map((call) => new URL(call.url)).find((url) => url.pathname === "/projects/PLAN/pages" && url.searchParams.get("q") === "shell");
+      expect(asked).toBeDefined();
+    });
+
+    await user.click(page);
+
+    expect(await screen.findByRole("heading", { name: /architecture/ })).toBeInTheDocument();
   });
 
   it("lands on the filtered list from the last row of the matches", async () => {

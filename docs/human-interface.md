@@ -111,6 +111,11 @@ contents, because the full-text search is what a hierarchy would have been for.
 The screen is therefore a list and a document, and the editor is a text area
 with a preview like every other Markdown field here — no toolbar, no WYSIWYG.
 
+The search stands above the list rather than behind a filter sheet, and it and
+the label filter both live in the URL, so a pasted link says what it shows. An
+empty wiki and a filter that matched nothing are different states: the first
+says what a page is for, the second says nothing matched.
+
 Two acts are not fields in that form. **Renaming** moves the address, and
 nothing forwards: it is a dialog that says so, because a link written to the old
 slug stops working and whoever renames should be told once. **Deleting** says
@@ -126,7 +131,9 @@ virtualized component. Search, status, priority, label, epic, assignee, claim,
 author, blocked, `ready`, sort and order live in the URL. The server supplies
 filter choices. An empty project and an empty filtered result are distinct
 states. The command palette shows a few full-text matches and links to the full
-filtered list.
+filtered list. It searches pages as well as issues, under headings that say
+which is which — a hit that does not say what kind of thing it is is a poor
+hit.
 
 Sorting by epic groups the list. It groups by sorting rather than by cutting up
 the page it happens to hold — the epic is the first sort key on the server

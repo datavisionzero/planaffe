@@ -4686,13 +4686,20 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Every page of the project as a slim PageSummary, by slug, without the bodies. Not paginated; `label` repeats.",
+        "summary": "Every page of the project as a slim PageSummary, by slug, without the bodies. `q` is the full-text filter over title and body; not paginated, and `label` repeats.",
         "operationId": "ListPages",
         "parameters": [
           {
             "name": "key",
             "in": "path",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
             "schema": {
               "type": "string"
             }

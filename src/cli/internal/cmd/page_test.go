@@ -136,12 +136,25 @@ func TestPageWritesSendWhatTheFlagsSay(t *testing.T) {
 		t.Error("no --if-match, no header")
 	}
 
-	// The label filter is repeated on the list, as everywhere.
-	if code, _, _ = run(t, server, dir, "page", "list", "--label", "reference", "--label", "cut-1"); code != exit.OK {
+	// The label filter is repeated on the list, as everywhere, and `-q` is the
+	// same full-text filter the issue list has.
+	if code, _, _ = run(t, server, dir, "page", "list", "--label", "reference", "--label", "cut-1", "-q", `"four layers"`); code != exit.OK {
 		t.Fatalf("code %d", code)
 	}
-	if got := f.requests[len(f.requests)-1].URL.Query()["label"]; len(got) != 2 || got[0] != "reference" {
+	query := f.requests[len(f.requests)-1].URL.Query()
+	if got := query["label"]; len(got) != 2 || got[0] != "reference" {
 		t.Errorf("label = %v", got)
+	}
+	if got := query.Get("q"); got != `"four layers"` {
+		t.Errorf("q = %q", got)
+	}
+
+	// Nothing typed, nothing sent: an empty filter is not a filter.
+	if code, _, _ = run(t, server, dir, "page", "list"); code != exit.OK {
+		t.Fatalf("code %d", code)
+	}
+	if f.requests[len(f.requests)-1].URL.Query().Has("q") {
+		t.Error("an empty -q is not sent")
 	}
 }
 

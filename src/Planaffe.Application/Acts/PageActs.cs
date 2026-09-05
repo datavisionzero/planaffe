@@ -135,15 +135,20 @@ public static class PageLookup
     }
 }
 
-/// <summary>Every page of the project, by slug, without the bodies. Not paginated: the wiki is flat and small.</summary>
+/// <summary>
+/// Every page of the project, by slug, without the bodies. Not paginated: the
+/// wiki is flat and small, and <c>q</c> is what a reader navigates it by, since
+/// the search is what the product put in a hierarchy's place (VISION 7).
+/// </summary>
 public sealed class ListPages(IProjects projects, ProjectScope scope, IPages pages, PageAssembler assembler, InstanceSettings settings)
 {
     public async Task<IReadOnlyList<PageSummaryShape>> ExecuteAsync(
-        string projectKey, IReadOnlyList<string> labelNames, CancellationToken cancellationToken)
+        string projectKey, IReadOnlyList<string> labelNames, string? search, CancellationToken cancellationToken)
     {
         var project = await projects.ProjectAsync(scope, projectKey, settings, cancellationToken);
+        var rows = await pages.ListAsync(project.Id, labelNames, search, cancellationToken);
 
-        return await assembler.SummariesAsync(project, await pages.ListAsync(project.Id, labelNames, cancellationToken), cancellationToken);
+        return await assembler.SummariesAsync(project, rows, cancellationToken);
     }
 }
 

@@ -32,6 +32,7 @@ func printPage(g *globals, cmd *cobra.Command, page api.Page) error {
 
 func newPageList(g *globals) *cobra.Command {
 	var labels []string
+	var query string
 	cmd := &cobra.Command{
 		Use: "list", Short: "Every page of the project, by slug, without the bodies.", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -43,7 +44,11 @@ func newPageList(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListPagesWithResponse(cmd.Context(), project, repeated("label", labels))
+			params := &api.ListPagesParams{Q: optional(query)}
+			if len(labels) > 0 {
+				params.Label = &labels
+			}
+			resp, err := c.ListPagesWithResponse(cmd.Context(), project, params)
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -58,6 +63,7 @@ func newPageList(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringArrayVar(&labels, "label", nil, "only pages carrying this label; repeatable, all must match")
+	cmd.Flags().StringVarP(&query, "query", "q", "", "full text in the title and the body")
 	return cmd
 }
 

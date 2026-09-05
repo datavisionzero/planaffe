@@ -566,7 +566,7 @@ you" list, with the blocker-chain rule, is `GET /projects/{key}/needs-you`.
 
 | method | path | who | does |
 |---|---|---|---|
-| `GET` | `/projects/{key}/pages` | any | every page of the project as `PageSummary`, by slug, without the bodies; `label` repeatable, all must match. Not paginated |
+| `GET` | `/projects/{key}/pages` | any | every page of the project as `PageSummary`, by slug, without the bodies; `q` is the full-text filter over title and body, `label` repeatable and all must match. Not paginated |
 | `GET` | `/projects/{key}/pages/{slug}` | any | `Page` |
 | `POST` | `/projects/{key}/pages` | any | `{ slug, title, body?, labels? }` → 201 `Page`; the slug is given, never derived from the title (ADR 0021) |
 | `PATCH` | `/projects/{key}/pages/{slug}` | any | `{ slug?, title?, body?, labels? }`, `If-Match` honoured; `slug` renames, `body` set to `null` empties the document, `labels` replaces the whole set with the groups enforced as on an issue |
@@ -700,13 +700,22 @@ the claim and waits for the answer, for at most the rest of the claim (VISION
 
 ### Search
 
-`q` on `GET /issues` and `GET /questions`: a full-text filter in the words a
-search box takes — `claim expired`, `"for update"`, `-flaky` — matched with
-`websearch_to_tsquery` against the `simple` configuration, so identifiers
-survive (`docs/storage.md`, Full-text search). On issues it matches the title,
-the description, the result, and the issue's comments and questions; on
-questions the question and its answer. A filter, not a ranking: the list keeps
-its order. The CLI: `pa issue list -q "…"`, `pa question list -q "…"`.
+`q` on `GET /issues`, `GET /questions` and `GET /projects/{key}/pages`: a
+full-text filter in the words a search box takes — `claim expired`,
+`"for update"`, `-flaky` — matched with `websearch_to_tsquery` against the
+`simple` configuration, so identifiers survive (`docs/storage.md`, Full-text
+search). On issues it matches the title, the description, the result, and the
+issue's comments and questions; on questions the question and its answer; on
+pages the title and the body. A filter, not a ranking: the list keeps its
+order. The CLI: `pa issue list -q "…"`, `pa question list -q "…"`,
+`pa page list -q "…"`.
+
+**A page has to be findable this way**, more than anything else here does: the
+wiki is flat because the search is what replaces the navigation a hierarchy
+would have given it (VISION 7). The command palette therefore asks both lists
+and shows the hits under headings that say which is which, because a hit that
+does not say what kind of thing it is is a poor hit. Deleted pages are absent
+from it as they are from every other read (ADR 0013).
 
 ### The agent's metadata
 

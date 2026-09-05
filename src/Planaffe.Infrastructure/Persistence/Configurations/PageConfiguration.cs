@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using NpgsqlTypes;
 using Planaffe.Domain.Identities;
 using Planaffe.Domain.Pages;
 using Planaffe.Domain.Projects;
@@ -40,6 +41,13 @@ public sealed class PageConfiguration : IEntityTypeConfiguration<Page>
             .HasColumnName("body")
             .HasDefaultValue(string.Empty)
             .IsRequired();
+
+        // The wiki is flat because the search replaces the navigation a tree
+        // would have been (VISION 7), so the search has to know it.
+        builder.Property<NpgsqlTsVector>("Search")
+            .HasColumnName("search")
+            .HasComputedColumnSql("to_tsvector('simple', title || ' ' || body)", stored: true);
+        builder.HasIndex("Search").HasMethod("GIN").HasDatabaseName("page_search");
 
         builder.Property(p => p.CreatedBy).HasColumnName("created_by").IsRequired();
         builder.HasOne<Identity>()

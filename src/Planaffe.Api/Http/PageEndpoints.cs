@@ -83,10 +83,10 @@ public static class PageEndpoints
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        door.MapGet(string.Empty, (string key, HttpRequest http, ListPages list, CancellationToken cancellationToken) =>
-                list.ExecuteAsync(key, [.. http.Query["label"].OfType<string>()], cancellationToken))
+        door.MapGet(string.Empty, (string key, string? q, HttpRequest http, ListPages list, CancellationToken cancellationToken) =>
+                list.ExecuteAsync(key, [.. http.Query["label"].OfType<string>()], q, cancellationToken))
             .WithName("ListPages")
-            .WithSummary("Every page of the project as a slim PageSummary, by slug, without the bodies. Not paginated; `label` repeats.")
+            .WithSummary("Every page of the project as a slim PageSummary, by slug, without the bodies. `q` is the full-text filter over title and body; not paginated, and `label` repeats.")
             .AddOpenApiOperationTransformer(RepeatableLabel);
 
         door.MapPost(string.Empty, async (string key, CreatePageRequest? request, CreatePage create, CancellationToken cancellationToken) =>

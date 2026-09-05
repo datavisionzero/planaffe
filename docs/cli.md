@@ -152,7 +152,7 @@ pa epic edit PLAN-E2 --description-file - --if-match "<updated_at>"
 pa epic close PLAN-E2 [--cancel-open | --park-open]   # lists what is still open; cancels or parks it on a flag, never interactively
 pa epic reopen PLAN-E2 · pa epic delete PLAN-E2 · pa epic restore PLAN-E2
 
-pa page list [--label reference]           # the flat wiki: slug, when it last moved, title
+pa page list [-q "four layers"] [--label reference]  # the flat wiki: slug, when it last moved, title
 pa page view architecture                  # the head, then the Markdown exactly as it is stored
 pa page create architecture --title "Architecture" --body-file - --label reference
 pa page edit architecture --body-file - --if-match "<updated_at>"

@@ -55,7 +55,7 @@ it("filters by label out of the URL and says which empty it is", async () => {
   });
   renderAt("/PLAN/pages?label=reference", <Routes><Route path="/:project/pages" element={<PagesView />} /></Routes>);
 
-  expect(await screen.findByText("No page carries all of those labels.")).toBeInTheDocument();
+  expect(await screen.findByText("Nothing matches.")).toBeInTheDocument();
   const asked = instance.calls.find((call) => new URL(call.url).pathname === "/projects/PLAN/pages")!;
   expect(new URL(asked.url).searchParams.getAll("label")).toEqual(["reference"]);
 });
@@ -67,6 +67,31 @@ it("says what a page is for while there are none", async () => {
   renderAt("/PLAN/pages", <Routes><Route path="/:project/pages" element={<PagesView />} /></Routes>);
 
   expect(await screen.findByText("No pages yet.")).toBeInTheDocument();
+});
+
+// The wiki is flat because the search replaces the navigation a tree would
+// have been, so the search stands over the list rather than behind a sheet.
+it("searches the wiki out of the URL, and says when nothing matched", async () => {
+  const instance = installInstance({
+    "GET /projects/PLAN/labels": [],
+    "GET /projects/PLAN/pages": (request) =>
+      new URL(request.url).searchParams.get("q") === "inward" ? [summary] : [],
+  });
+  renderAt("/PLAN/pages", <Routes><Route path="/:project/pages" element={<PagesView />} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.type(await screen.findByLabelText("Search"), "inward");
+
+  expect(await screen.findByRole("link", { name: /architecture/ })).toBeInTheDocument();
+  await vi.waitFor(() => {
+    const asked = instance.calls.map((call) => new URL(call.url)).find((url) => url.searchParams.get("q") === "inward");
+    expect(asked?.pathname).toBe("/projects/PLAN/pages");
+  });
+
+  await user.clear(screen.getByLabelText("Search"));
+  await user.type(screen.getByLabelText("Search"), "nothing");
+
+  expect(await screen.findByText("Nothing matches.")).toBeInTheDocument();
 });
 
 it("opens the page itself: the Markdown, the labels and who changed it last", async () => {

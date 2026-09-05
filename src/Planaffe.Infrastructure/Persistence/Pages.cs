@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NpgsqlTypes;
 using Planaffe.Application.Ports;
 using Planaffe.Domain.Pages;
 
@@ -13,9 +14,17 @@ public sealed class Pages(PlanaffeDbContext context) : IPages
     public Task<Page?> FindAnyAsync(Guid projectId, string slug, CancellationToken cancellationToken) =>
         context.Pages.SingleOrDefaultAsync(p => p.ProjectId == projectId && p.Slug == slug, cancellationToken);
 
-    public async Task<IReadOnlyList<Page>> ListAsync(Guid projectId, IReadOnlyList<string> labelNames, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Page>> ListAsync(Guid projectId, IReadOnlyList<string> labelNames, string? search, CancellationToken cancellationToken)
     {
         var rows = context.Pages.Where(p => p.ProjectId == projectId && p.DeletedAt == null);
+
+        // The same `simple` configuration and the same words a search box
+        // takes as everywhere else (docs/storage.md, Full-text search): a
+        // filter, not a ranking, so the order stays the slug's.
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            rows = rows.Where(p => EF.Property<NpgsqlTsVector>(p, "Search").Matches(EF.Functions.WebSearchToTsQuery("simple", search)));
+        }
 
         foreach (var name in labelNames)
         {

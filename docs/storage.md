@@ -625,10 +625,13 @@ alter table comment add column search tsvector
     generated always as (to_tsvector('simple', body)) stored;
 alter table question add column search tsvector
     generated always as (to_tsvector('simple', question || ' ' || coalesce(answer, ''))) stored;
+alter table page add column search tsvector
+    generated always as (to_tsvector('simple', title || ' ' || body)) stored;
 
 create index issue_search    on issue    using gin (search);
 create index comment_search  on comment  using gin (search);
 create index question_search on question using gin (search);
+create index page_search     on page     using gin (search);
 ```
 
 `simple`, not `english`: ticket text is written in whatever language the
@@ -857,6 +860,11 @@ the list would be a join for a fact the row can carry.
 
 Labels are the ordinary ones through `page_label`, under the same group rule
 and through the same code as the issue's and the epic's.
+
+**The page is in the full-text search**, over its title and its body, with the
+column and the index the section above describes. That is not a nicety: the
+wiki is flat because the search is what a hierarchy would have been for, so a
+page nothing finds is a page nothing leads to.
 
 ## Bootstrap
 
