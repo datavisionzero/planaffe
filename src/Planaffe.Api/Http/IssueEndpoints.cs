@@ -56,8 +56,9 @@ public static class IssueEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
-        door.MapGet(string.Empty, (
+        door.MapGet(string.Empty, async (
                 HttpRequest http,
+                HttpResponse response,
                 string? project,
                 bool? ready,
                 int? priority_min,
@@ -74,9 +75,11 @@ public static class IssueEndpoints
                 string? order,
                 string? cursor,
                 int? limit,
+                int? wait,
                 ListIssues list,
                 CancellationToken cancellationToken) =>
-                list.ExecuteAsync(
+            {
+                var answer = await list.WaitAsync(
                     new IssueListRequest(
                         project,
                         [.. http.Query["status"].OfType<string>()],
@@ -84,12 +87,20 @@ public static class IssueEndpoints
                         priority_min,
                         priority_max,
                         [.. http.Query["label"].OfType<string>()],
-                        epic, assignee, claimed, author, blocked, has_open_question, q, deleted, sort, order, cursor, limit),
-                    cancellationToken))
+                        epic, assignee, claimed, author, blocked, has_open_question, q, deleted, sort, order, cursor, limit, wait),
+                    http.Headers.IfNoneMatch,
+                    cancellationToken);
+                response.Headers.ETag = answer.ETag;
+                return answer.Page is null ? Results.StatusCode(StatusCodes.Status304NotModified) : Results.Ok(answer.Page);
+            })
             .WithName("ListIssues")
             .WithSummary("A page of slim issues, filtered and sorted; `status` and `label` repeat.")
             .AddOpenApiOperationTransformer(RepeatableFilters)
-            .ProducesProblem(StatusCodes.Status400BadRequest);
+            .Produces<IssuePage>()
+            .Produces(StatusCodes.Status304NotModified)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         door.MapPatch(string.Empty, async (HttpRequest http, ChangeIssue change, CancellationToken cancellationToken) =>
             {
@@ -311,6 +322,25 @@ public static class IssueEndpoints
                 Items = new OpenApiSchema { Type = JsonSchemaType.String },
             },
         });
+
+        operation.Parameters.Add(new OpenApiParameter
+        {
+            Name = "If-None-Match",
+            In = ParameterLocation.Header,
+            Description = "The ETag of the last page; with wait, return when that page changes.",
+            Schema = new OpenApiSchema { Type = JsonSchemaType.String },
+        });
+
+        foreach (var status in new[] { "200", "304" })
+        {
+            var response = (OpenApiResponse)operation.Responses![status];
+            response.Headers ??= new Dictionary<string, IOpenApiHeader>();
+            response.Headers["ETag"] = new OpenApiHeader
+            {
+                Description = "Validator for this page of issues.",
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String },
+            };
+        }
 
         return Task.CompletedTask;
     }

@@ -72,7 +72,7 @@ public sealed class NeedsYou(
         if (wait is null)
         {
             var immediate = await ExecuteAsync(projectKey, cursor, requestedLimit, cancellationToken);
-            return new NeedsYouAnswer(immediate, ETag(immediate));
+            return new NeedsYouAnswer(immediate, Waits.ETag(immediate));
         }
 
         var project = await projects.LiveForReadAsync(projectKey, settings, cancellationToken);
@@ -94,12 +94,12 @@ public sealed class NeedsYou(
 
             var changed = changes.WaitAsync(project.Id, waiting.Token);
             var page = await ExecuteAsync(projectKey, cursor, requestedLimit, cancellationToken);
-            var tag = ETag(page);
+            var tag = Waits.ETag(page);
 
             // `Agents` is part of the validator through the serialized page, so
             // an instance that gains or loses its last agent is a change the
             // holder of a long poll is told about like any other.
-            if (baseline is null && page.Items.Count > 0 || baseline is not null && !Matches(baseline, tag))
+            if (baseline is null && page.Items.Count > 0 || baseline is not null && !Waits.Matches(baseline, tag))
             {
                 await waiting.CancelAsync();
                 return new NeedsYouAnswer(page, tag);
@@ -121,17 +121,12 @@ public sealed class NeedsYou(
         string projectKey, string? cursor, int? limit, string? baseline, CancellationToken cancellationToken)
     {
         var page = await ExecuteAsync(projectKey, cursor, limit, cancellationToken);
-        var tag = ETag(page);
-        return baseline is not null && Matches(baseline, tag)
+        var tag = Waits.ETag(page);
+        return baseline is not null && Waits.Matches(baseline, tag)
             ? new NeedsYouAnswer(null, tag)
             : new NeedsYouAnswer(page, tag);
     }
 
-    private static string ETag(NeedsYouPage page) =>
-        $"\"{Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(page)))}\"";
-
-    private static bool Matches(string candidates, string tag) =>
-        candidates.Split(',').Select(candidate => candidate.Trim()).Any(candidate => candidate == tag || candidate == "*");
 }
 
 /// <summary>An opaque, project-bound keyset cursor for the needs-you order.</summary>

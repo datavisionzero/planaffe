@@ -255,6 +255,19 @@ internal static class Waits
 {
     public const int MaximumSeconds = 3600;
 
+    /// <summary>
+    /// The validator of a page, which is the hash of the page as it goes on the
+    /// wire. It makes no assumption about what a change is, which is what lets
+    /// the coarse wake channel of <see cref="IChanges"/> stay coarse: a caller
+    /// woken by somebody else's change asks again and is answered <c>304</c>.
+    /// </summary>
+    public static string ETag<T>(T page) =>
+        $"\"{Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(page)))}\"";
+
+    /// <summary>Whether an <c>If-None-Match</c> header covers this validator.</summary>
+    public static bool Matches(string candidates, string tag) =>
+        candidates.Split(',').Select(candidate => candidate.Trim()).Any(candidate => candidate == tag || candidate == "*");
+
     public static void Validate(int? wait)
     {
         if (wait is <= 0)

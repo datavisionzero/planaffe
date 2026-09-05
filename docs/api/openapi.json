@@ -2624,6 +2624,22 @@
               "type": "integer",
               "format": "int32"
             }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "description": "The ETag of the last page; with wait, return when that page changes.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2639,6 +2655,14 @@
           },
           "200": {
             "description": "OK",
+            "headers": {
+              "ETag": {
+                "description": "Validator for this page of issues.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2647,8 +2671,39 @@
               }
             }
           },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "description": "Validator for this page of issues.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "400": {
             "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
             "content": {
               "application/problem+json": {
                 "schema": {
