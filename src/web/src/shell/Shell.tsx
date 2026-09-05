@@ -8,6 +8,7 @@ import { EpicsView } from "@/epics/EpicsView";
 import { IssueListView } from "@/issues/IssueListView";
 import { NeedsYouView } from "@/issues/NeedsYouView";
 import { NewIssueView } from "@/issues/IssueEditor";
+import { PagesView } from "@/pages/PagesView";
 import { LabelsView } from "@/projects/LabelsView";
 import { ProjectSwitcher } from "@/projects/ProjectSwitcher";
 import { NewProjectView } from "@/projects/NewProjectView";
@@ -32,6 +33,8 @@ const IssueView = lazy(() => import("@/issues/IssueView").then((module) => ({ de
 const EpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.EpicView })));
 const NewEpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.NewEpicView })));
 const ReleaseView = lazy(() => import("@/releases/ReleaseView").then((module) => ({ default: module.ReleaseView })));
+const PageView = lazy(() => import("@/pages/PageView").then((module) => ({ default: module.PageView })));
+const NewPageView = lazy(() => import("@/pages/PageView").then((module) => ({ default: module.NewPageView })));
 
 /**
  * The application shell of ADR 0006: the frame every screen sits in, rendered
@@ -172,6 +175,9 @@ export function Shell() {
             <Route path="epics" element={<EpicsView />} />
             <Route path="epics/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewEpicView /></Suspense>} />
             <Route path="epics/:number" element={<Suspense fallback={<Busy title="Loading the screen…" />}><EpicView /></Suspense>} />
+            <Route path="pages" element={<PagesView />} />
+            <Route path="pages/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewPageView /></Suspense>} />
+            <Route path="pages/:slug" element={<Suspense fallback={<Busy title="Loading the screen…" />}><PageView /></Suspense>} />
             <Route path="releases" element={<ReleasesView />} />
             <Route path="releases/:name" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ReleaseView /></Suspense>} />
             <Route path="labels" element={<LabelsView />} />

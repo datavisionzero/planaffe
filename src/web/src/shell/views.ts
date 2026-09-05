@@ -1,6 +1,7 @@
 import {
   BookOpenIcon,
   CircleDotIcon,
+  FileTextIcon,
   HandIcon,
   LayersIcon,
   ListIcon,
@@ -81,6 +82,14 @@ export const views: View[] = [
     hint: "What belongs together, with progress.",
   },
   {
+    id: "pages",
+    label: "Pages",
+    path: "pages",
+    icon: FileTextIcon,
+    group: "structure",
+    hint: "What the project knows and no ticket asks for.",
+  },
+  {
     id: "releases",
     label: "Releases",
     path: "releases",
@@ -133,6 +142,15 @@ export function keyPath(key: string): string {
  */
 export function releasePath(project: string, name: string): string {
   return `/${project}/releases/${encodeURIComponent(name)}`;
+}
+
+/**
+ * The address of a page. A page is the one object reached by a name rather than
+ * a key (ADR 0021), so the slug is what the path carries — escaped, because it
+ * is the author's word and not a generated one.
+ */
+export function pagePath(project: string, slug: string): string {
+  return `/${project}/pages/${encodeURIComponent(slug)}`;
 }
 
 /** The key a `/:project/issues/:number` address names — the way back from `keyPath`. */

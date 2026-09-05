@@ -29,6 +29,9 @@ read, so nothing has to be known about Markdown to write one
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
 | `/:project/epics/new` | Create epic | title, Markdown description and the label choice | one column; the same form the epic screen edits in place |
 | `/:project/epics/:number` | Epic | Markdown description, progress and issue list; editing it is guarded and a conflict is shown, not lost | one column |
+| `/:project/pages` | Pages | the project's flat wiki, by slug, with who touched what last | the slug and the title stay, the rest folds away |
+| `/:project/pages/new` | Create page | the slug, the title, the Markdown body and the label choice | one column; the same form the page screen edits in place |
+| `/:project/pages/:slug` | Page | the rendered Markdown, then renaming and deleting; editing it is guarded and a conflict is shown, not lost | one column |
 | `/:project/releases` | Releases | `unreleased`, then published releases newest first | stacked summaries |
 | `/:project/releases/:name` | Release | notes, exact issue membership and publish/copy actions; on the open release each row can be taken out, on the newest publication rename and take back | one column |
 | `/:project/labels` | Labels | the project's set, grouped where its labels exclude one another, with the create line above it | the row stacks: the name and what it means above the two acts |
@@ -47,6 +50,10 @@ read, so nothing has to be known about Markdown to write one
 `PLAN-42` is at `/PLAN/issues/42`, `PLAN-E3` at `/PLAN/epics/E3`. A link to an
 issue or an epic takes its project from the key it names and not from the
 address it sits on, so a blocker in another project leads to that project.
+`:slug` is the exception the product has exactly one of
+([ADR 0021](./adr/0021-a-pages-address-is-its-slug-not-a-key.md)): a page is
+addressed by its name, so `/PLAN/pages/architecture` is the whole address and
+there is no number to look up.
 
 The application shell persists around every project route. Its project switcher
 contains only projects the caller can access. The shell binds five shortcuts:
@@ -93,7 +100,24 @@ the form sends `If-Match` with the version it opened with. A refusal is not a
 dead end: the typed text stays in the field, the version the instance handed
 back is adopted for the next attempt, and the other version's description is
 shown so it can be merged by hand. Saving again is then a decision to overwrite
-it rather than a request that can only fail.
+it rather than a request that can only fail. The page editor is the same
+mechanism on the same reasoning, and for the same reason: a wiki is the text two
+people are most likely to be in at once.
+
+## Pages
+
+The wiki is flat and stays flat: a list ordered by slug, no tree and no table of
+contents, because the full-text search is what a hierarchy would have been for.
+The screen is therefore a list and a document, and the editor is a text area
+with a preview like every other Markdown field here — no toolbar, no WYSIWYG.
+
+Two acts are not fields in that form. **Renaming** moves the address, and
+nothing forwards: it is a dialog that says so, because a link written to the old
+slug stops working and whoever renames should be told once. **Deleting** says
+that the slug stays taken while the page can still come back, which is what
+keeps a restore from landing on a name somebody else took. Both stand under the
+document rather than in the header, where the thing one usually wants is
+"Edit".
 
 ## Issue list and detail
 

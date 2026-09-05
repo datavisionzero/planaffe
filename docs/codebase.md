@@ -153,8 +153,8 @@ published output.
 
 Its own layout follows the shell
 ([ADR 0006](./adr/0006-the-web-application-is-a-shell-before-it-is-a-screen.md)):
-one folder per area — `shell`, `issues`, `epics`, `releases`, `projects`,
-`settings`, `session`, `shared`, `api` — where each area owns its screens and
+one folder per area — `shell`, `issues`, `epics`, `pages`, `releases`,
+`projects`, `settings`, `session`, `shared`, `api` — where each area owns its screens and
 `shell/Shell.tsx` owns the routes. Every key the application binds is declared
 once in `shell/shortcuts.ts`, which the handlers in the shell, the list and the
 palette compare against and which `shell/ShortcutsDialog.tsx` draws, so the
