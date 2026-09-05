@@ -128,6 +128,21 @@ and has its own endpoint.
 counts issues that are not deleted; the issues themselves are
 `GET /issues?epic=PLAN-E2`.
 
+`PageSummary` and `Page`:
+
+```json
+{ "slug": "architecture", "project": "PLAN", "title": "Architecture",
+  "labels": ["reference"],
+  "updated_by": { "id": "…", "kind": "user", "name": "maintainer" },
+  "created_at": "…", "updated_at": "…" }
+```
+
+`Page` adds `body` — the Markdown — `author`, and the full label objects. The
+summary carries no body on purpose: a wiki of thirty pages would otherwise be a
+context eater for anything that only wanted to know what is there
+(ADR 0012). `updated_by` is in both, because the list is read for who touched
+what last.
+
 `Project`:
 
 ```json
@@ -288,14 +303,14 @@ the same.
 
 ## Concurrency on text fields
 
-An issue's and an epic's `updated_at` is the object's version. A `PATCH` may
+An issue's, an epic's and a page's `updated_at` is the object's version. A `PATCH` may
 carry `If-Match: "<updated_at>"` — the value as the client last read it,
 quoted — and is refused with `stale` when the object has changed since,
 carrying the current object so the client can merge and try again. Without the
 header the write goes through.
 
-This is the guard the epic's description needs as a living document that
-several agents edit (VISION 7): a read-modify-write with the header cannot
+This is the guard the epic's description and a page's body need as living
+documents that several agents — and a human in the browser — edit (VISION 7): a read-modify-write with the header cannot
 silently overwrite what another agent wrote in between. `updated_at` moves on
 every change to the object and its attachments — a comment on the issue moves
 the issue's — so a stale refusal can be a false alarm; re-reading costs one
@@ -308,8 +323,8 @@ The permission model is the coarse one of VISION 12, with one dividing line,
 one role and project access:
 
 - **An agent works in projects; a user administers them.** An agent may create,
-  read, change, comment on, close, claim and delete issues, epics, labels and
-  questions in every project, and read projects and its own identity. It may
+  read, change, comment on, close, claim and delete issues, epics, pages, labels
+  and questions in every project, and read projects and its own identity. It may
   not create or change a project, a user, an agent or a token, and may not
   list agents or tokens ([ADR 0015](./adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)).
 - **A user may do everything an agent may**, plus create projects and change
@@ -546,6 +561,40 @@ you" list, with the blocker-chain rule, is `GET /projects/{key}/needs-you`.
 | `POST` | `/epics/{key}/reopen` | any | back to `open` |
 | `DELETE` | `/epics/{key}` | any | soft delete, refused with `has-issues` while any issue, deleted ones included, references it |
 | `POST` | `/epics/{key}/restore` | any | back |
+
+### Pages
+
+| method | path | who | does |
+|---|---|---|---|
+| `GET` | `/projects/{key}/pages` | any | every page of the project as `PageSummary`, by slug, without the bodies; `label` repeatable, all must match. Not paginated |
+| `GET` | `/projects/{key}/pages/{slug}` | any | `Page` |
+| `POST` | `/projects/{key}/pages` | any | `{ slug, title, body?, labels? }` → 201 `Page`; the slug is given, never derived from the title (ADR 0021) |
+| `PATCH` | `/projects/{key}/pages/{slug}` | any | `{ slug?, title?, body?, labels? }`, `If-Match` honoured; `slug` renames, `body` set to `null` empties the document, `labels` replaces the whole set with the groups enforced as on an issue |
+| `DELETE` | `/projects/{key}/pages/{slug}` | any | soft delete; 204 |
+| `POST` | `/projects/{key}/pages/{slug}/restore` | any | back, under the slug it kept |
+
+The page sits under the project rather than at `/pages` because it is named
+within a project instead of carrying a key that already says which one — the
+same place labels and releases have, for the same reason.
+
+**The list is not paginated and takes no cursor.** The wiki is flat by decision
+(VISION 7), a project's pages are few, and what would make a list expensive is
+the body, which is not in it. The full-text search is what replaces navigation
+here, not a page of results.
+
+**A taken slug is `validation` on `slug`**, and a slug belonging to a deleted
+page says so — it stays spent until the purge, so that a restore can never land
+on a name somebody else took in the meantime. A slug that could not be one
+(`Not A Slug`) is `not-found` rather than `validation` when it arrives in the
+path: nothing is named there, and the path is not a field.
+
+**A rename leaves nothing behind.** The old address is gone the moment the
+`PATCH` returns, nothing forwards, and the history's `slug` entry with both
+values is the one place the old name survives (ADR 0021).
+
+There is no comment endpoint and no history endpoint on a page. Whoever has
+something to do makes a ticket, which is what keeps the discussion in one place;
+the history is written and read from the database, as an epic's is.
 
 ## What cut two adds
 

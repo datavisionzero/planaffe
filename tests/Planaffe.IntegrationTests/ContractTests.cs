@@ -51,6 +51,7 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/me", "/me/email", "/me/metadata", "/me/password", "/password-recovery", "/password-recovery/complete",
                 "/projects", "/projects/{key}", "/projects/{key}/labels", "/projects/{key}/labels/{name}",
                 "/projects/{key}/labels/{name}/restore", "/projects/{key}/needs-you", "/projects/{key}/next",
+                "/projects/{key}/pages", "/projects/{key}/pages/{slug}", "/projects/{key}/pages/{slug}/restore",
                 "/projects/{key}/releases", "/projects/{key}/releases/publish", "/projects/{key}/releases/{name}",
                 "/projects/{key}/releases/{name}/issues/{issue}", "/projects/{key}/releases/{name}/retract", "/projects/{key}/restore",
                 "/projects/{key}/users", "/projects/{key}/users/{id}",

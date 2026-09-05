@@ -1,0 +1,55 @@
+using Microsoft.EntityFrameworkCore;
+using Planaffe.Application.Ports;
+using Planaffe.Domain.Pages;
+
+namespace Planaffe.Infrastructure.Persistence;
+
+/// <summary>The page rows, ordered by the slug — the only order a flat wiki has.</summary>
+public sealed class Pages(PlanaffeDbContext context) : IPages
+{
+    public Task<Page?> FindLiveAsync(Guid projectId, string slug, CancellationToken cancellationToken) =>
+        context.Pages.SingleOrDefaultAsync(p => p.ProjectId == projectId && p.Slug == slug && p.DeletedAt == null, cancellationToken);
+
+    public Task<Page?> FindAnyAsync(Guid projectId, string slug, CancellationToken cancellationToken) =>
+        context.Pages.SingleOrDefaultAsync(p => p.ProjectId == projectId && p.Slug == slug, cancellationToken);
+
+    public async Task<IReadOnlyList<Page>> ListAsync(Guid projectId, IReadOnlyList<string> labelNames, CancellationToken cancellationToken)
+    {
+        var rows = context.Pages.Where(p => p.ProjectId == projectId && p.DeletedAt == null);
+
+        foreach (var name in labelNames)
+        {
+            rows = rows.Where(p => context.PageLabels.Any(pl =>
+                pl.PageId == p.Id && context.Labels.Any(l => l.Id == pl.LabelId && l.Name == name && l.DeletedAt == null)));
+        }
+
+        return await rows.OrderBy(p => p.Slug).ToListAsync(cancellationToken);
+    }
+
+    public async Task<Page?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A row is loaded for writing inside a transaction, or the lock is worth nothing.");
+        }
+
+        await context.Database.ExecuteSqlRawAsync("select id from page where id = {0} for update", [id], cancellationToken);
+        return await context.Pages.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PageLabelRow>> LabelsOfAsync(IReadOnlyCollection<Guid> pageIds, CancellationToken cancellationToken) =>
+        await (
+            from pl in context.PageLabels
+            join l in context.Labels on pl.LabelId equals l.Id
+            where pageIds.Contains(pl.PageId) && l.DeletedAt == null
+            select new PageLabelRow(pl.PageId, l)).ToListAsync(cancellationToken);
+
+    public void Add(Page page) => context.Pages.Add(page);
+
+    public void Attach(PageLabel attachment) => context.PageLabels.Add(attachment);
+
+    public Task DetachAsync(Guid pageId, Guid labelId, CancellationToken cancellationToken) =>
+        context.PageLabels.Where(pl => pl.PageId == pageId && pl.LabelId == labelId).ExecuteDeleteAsync(cancellationToken);
+
+    public Task SaveAsync(CancellationToken cancellationToken) => context.SaveChangesAsync(cancellationToken);
+}
