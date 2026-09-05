@@ -81,6 +81,11 @@ monospace on its own ground with the word the fence named printed above it, and
 the mapping in `Markdown.tsx` is the single place a later decision would put a
 highlighter behind a dynamic import.
 
+**The refusals here are measurements, not a policy.** Each of them turned on
+what a particular library costs this application, and none of them is a rule
+about dependencies in general. How a new one is proposed, licensed and weighed
+is [ADR 0023](./0023-a-dependency-is-a-decision-a-human-takes.md).
+
 **`react-markdown` needs a `urlTransform` of ours.** Its default admits `irc`,
 `ircs` and `xmpp` beside `http`, `https` and `mailto`;
 [ADR 0007](./0007-markdown-is-rendered-in-the-browser-and-never-as-html.md)

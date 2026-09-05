@@ -25,6 +25,11 @@ local and never pushed (see below).
 - **Decisions**: [`docs/adr/`](docs/adr/) holds the architecture decisions. Read
   the ones that touch the area you are about to work in, and say so explicitly
   when your work contradicts one instead of silently overriding it.
+- **Dependencies**: a new one is approved by a human before it is added, never
+  by an agent in passing. What it does, what it pulls in with it, what its
+  licence is and — where it reaches the browser — what it weighs belong in the
+  question, not in the commit
+  ([ADR 0023](docs/adr/0023-a-dependency-is-a-decision-a-human-takes.md)).
 - Contributions arrive as pull requests from forks. Maintainers may push to
   `main` directly.
 - Commit and push only when asked to.

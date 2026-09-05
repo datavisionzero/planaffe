@@ -24,9 +24,13 @@ block is what agents fill tickets with.
 
 ## Consequences
 
-**No WYSIWYG editor.** Editing is a text area over Markdown, which is what the
-humans in the target group want and the only thing an agent can write anyway
-(VISION 3, 6.1).
+**No WYSIWYG editor.** What is stored is Markdown, and what is edited is
+Markdown — which is what the humans in the target group want and the only thing
+an agent can write anyway (VISION 3, 6.1). That is a decision about the form of
+editing and not about libraries: an editor that edits Markdown as source and
+helps while doing it keeps it; one that holds HTML or a document model of its
+own and derives Markdown on save does not. How a dependency for such an editor
+is decided is [ADR 0023](./0023-a-dependency-is-a-decision-a-human-takes.md).
 
 **Rendering cost sits on the client**, which is fine for one issue and would not
 be for a list — so lists show titles and metadata, never rendered bodies, and a
