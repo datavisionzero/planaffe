@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.OpenApi;
+using Microsoft.OpenApi;
 using Planaffe.Application.Acts;
 
 namespace Planaffe.Api.Http;
@@ -84,7 +86,8 @@ public static class PageEndpoints
         door.MapGet(string.Empty, (string key, HttpRequest http, ListPages list, CancellationToken cancellationToken) =>
                 list.ExecuteAsync(key, [.. http.Query["label"].OfType<string>()], cancellationToken))
             .WithName("ListPages")
-            .WithSummary("Every page of the project as a slim PageSummary, by slug, without the bodies. Not paginated.");
+            .WithSummary("Every page of the project as a slim PageSummary, by slug, without the bodies. Not paginated; `label` repeats.")
+            .AddOpenApiOperationTransformer(RepeatableLabel);
 
         door.MapPost(string.Empty, async (string key, CreatePageRequest? request, CreatePage create, CancellationToken cancellationToken) =>
             {
@@ -132,5 +135,30 @@ public static class PageEndpoints
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// <c>label</c> is read from the query rather than bound, so the contract
+    /// is told about it here — otherwise neither generated client can send it
+    /// and both would have to build the URL by hand.
+    /// </summary>
+    private static Task RepeatableLabel(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)
+    {
+        operation.Parameters ??= [];
+        operation.Parameters.Add(new OpenApiParameter
+        {
+            Name = "label",
+            In = ParameterLocation.Query,
+            Description = "A label the page carries; repeat the parameter for several, all of which it must carry.",
+            Style = ParameterStyle.Form,
+            Explode = true,
+            Schema = new OpenApiSchema
+            {
+                Type = JsonSchemaType.Array,
+                Items = new OpenApiSchema { Type = JsonSchemaType.String },
+            },
+        });
+
+        return Task.CompletedTask;
     }
 }

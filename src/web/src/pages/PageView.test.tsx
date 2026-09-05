@@ -37,7 +37,7 @@ function renderPage(routes: Parameters<typeof installInstance>[0] = {}) {
 }
 
 it("lists the wiki flat, by slug, and says who touched what last", async () => {
-  installInstance({ "GET /projects/PLAN/pages": [summary] });
+  installInstance({ "GET /projects/PLAN/pages": [summary], "GET /projects/PLAN/labels": [] });
   renderAt("/PLAN/pages", <Routes><Route path="/:project/pages" element={<PagesView />} /></Routes>);
 
   expect(await screen.findByRole("link", { name: /architecture/ })).toHaveAttribute("href", "/PLAN/pages/architecture");
@@ -45,10 +45,25 @@ it("lists the wiki flat, by slug, and says who touched what last", async () => {
   expect(screen.getByRole("link", { name: "New page" })).toHaveAttribute("href", "/PLAN/pages/new");
 });
 
+// The filter lives in the URL, as every other list's does, and a filter that
+// matched nothing is a different state from a wiki nobody has written in yet.
+it("filters by label out of the URL and says which empty it is", async () => {
+  const instance = installInstance({
+    "GET /projects/PLAN/labels": [{ name: "reference", group: null, description: null }],
+    "GET /projects/PLAN/pages": (request) =>
+      new URL(request.url).searchParams.getAll("label").includes("reference") ? [] : [summary],
+  });
+  renderAt("/PLAN/pages?label=reference", <Routes><Route path="/:project/pages" element={<PagesView />} /></Routes>);
+
+  expect(await screen.findByText("No page carries all of those labels.")).toBeInTheDocument();
+  const asked = instance.calls.find((call) => new URL(call.url).pathname === "/projects/PLAN/pages")!;
+  expect(new URL(asked.url).searchParams.getAll("label")).toEqual(["reference"]);
+});
+
 // The wiki is flat, so an empty one has to say what a page is for; a list that
 // is simply empty teaches nobody what the screen is.
 it("says what a page is for while there are none", async () => {
-  installInstance({ "GET /projects/PLAN/pages": [] });
+  installInstance({ "GET /projects/PLAN/pages": [], "GET /projects/PLAN/labels": [] });
   renderAt("/PLAN/pages", <Routes><Route path="/:project/pages" element={<PagesView />} /></Routes>);
 
   expect(await screen.findByText("No pages yet.")).toBeInTheDocument();

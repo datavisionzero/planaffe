@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { api, describe, type Schemas } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LabelPicker } from "@/components/ui/label-picker";
+import { useLabels } from "@/projects/useLabels";
 import { PageHeader } from "@/shared/PageHeader";
 import { pagePath } from "@/shell/views";
 
@@ -16,17 +18,27 @@ type Loaded = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; 
  */
 export function PagesView() {
   const { project } = useParams();
-  const [known, setKnown] = useState<{ of: string | undefined; loaded: Loaded } | null>(null);
-  const loaded: Loaded = known !== null && known.of === project ? known.loaded : { at: "asking" };
+  const [params, setParams] = useSearchParams();
+  const known = useLabels(project);
+  // The filter lives in the URL, as every other list's does here: a pasted
+  // link says what it shows.
+  const labels = params.getAll("label");
+  const filter = labels.join("\u0000");
+  const [asked, setAsked] = useState<{ of: string; loaded: Loaded } | null>(null);
+  const at = `${project}/${filter}`;
+  const loaded: Loaded = asked !== null && asked.of === at ? asked.loaded : { at: "asking" };
 
   useEffect(() => {
     let current = true;
-    const setLoaded = (loaded: Loaded) => setKnown({ of: project, loaded });
+    const setLoaded = (loaded: Loaded) => setAsked({ of: at, loaded });
 
     void (async () => {
       try {
         const { data, error, response } = await api.GET("/projects/{key}/pages", {
-          params: { path: { key: project! } },
+          params: {
+            path: { key: project! },
+            query: filter === "" ? undefined : { label: filter.split("\u0000") },
+          },
         });
 
         if (current) {
@@ -42,21 +54,39 @@ export function PagesView() {
     return () => {
       current = false;
     };
-  }, [project]);
+  }, [at, filter, project]);
 
   return (
     <>
       <PageHeader title="Pages" meta={loaded.at === "known" ? `${loaded.items.length}` : undefined}>
         <Button size="sm" render={<Link to={`/${project}/pages/new`} />}>New page</Button>
       </PageHeader>
+      <div className="border-b px-4 py-2">
+        <LabelPicker
+          label="Labels"
+          labels={known.labels}
+          value={labels}
+          onChange={(next) => {
+            const kept = new URLSearchParams(params);
+            kept.delete("label");
+            for (const name of next) kept.append("label", name);
+            setParams(kept, { replace: true });
+          }}
+        />
+      </div>
       {loaded.at === "failed" && <p className="p-4 text-sm text-destructive">{loaded.why}</p>}
+      {/* An empty project and an empty filtered result are different states,
+          as they are on the issue list: one is a wiki nobody has written in
+          yet, the other is a filter that matched nothing. */}
       {loaded.at === "known" && loaded.items.length === 0 && (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-          <p className="font-medium">No pages yet.</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            A page is what a project knows and no ticket asks for: the architecture, the conventions, what an
-            operator has to know — and the plan tickets are cut from later.
-          </p>
+          <p className="font-medium">{labels.length === 0 ? "No pages yet." : "No page carries all of those labels."}</p>
+          {labels.length === 0 && (
+            <p className="max-w-md text-sm text-muted-foreground">
+              A page is what a project knows and no ticket asks for: the architecture, the conventions, what an
+              operator has to know — and the plan tickets are cut from later.
+            </p>
+          )}
         </div>
       )}
       {loaded.at === "known" && loaded.items.length > 0 && (

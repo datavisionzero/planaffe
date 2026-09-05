@@ -4686,7 +4686,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Every page of the project as a slim PageSummary, by slug, without the bodies. Not paginated.",
+        "summary": "Every page of the project as a slim PageSummary, by slug, without the bodies. Not paginated; `label` repeats.",
         "operationId": "ListPages",
         "parameters": [
           {
@@ -4695,6 +4695,17 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "description": "A label the page carries; repeat the parameter for several, all of which it must carry.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         ],
