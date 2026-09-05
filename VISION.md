@@ -314,7 +314,7 @@ A third reason only became visible while this was being decided. **planaffe has 
 | `labels` | optional, the project's ordinary labels |
 | History | who changed what, when — as on an issue |
 
-**The slug is the address, not a key.** Everything else in the product is reached through a project-scoped key, and "Number" in `CONTEXT.md` says why. The page is the deliberate exception: it is referred to by name in running text, not by number. Renaming is allowed, the old slug does not redirect — a redirect table is the first stage of the sprawl this section is written against — and the rename is in the history.
+**The slug is the address, not a key.** Everything else in the product is reached through a project-scoped key, and "Number" in `CONTEXT.md` says why. The page is the deliberate exception: it is referred to by name in running text, not by number. Renaming is allowed, the old slug does not redirect — a redirect table is the first stage of the sprawl this section is written against — and the rename is in the history ([ADR 0021](docs/adr/0021-a-pages-address-is-its-slug-not-a-key.md)).
 
 **`updated_at` is the version**, as on an issue and an epic, so a page inherits the `If-Match` guard the epic's living description already needs (`docs/api.md`, "Concurrency on text fields") instead of getting a mechanism of its own. Human and agent edit the same text here, and both may: an agent that may write tickets may write pages.
 

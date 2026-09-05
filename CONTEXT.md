@@ -176,7 +176,7 @@ _Avoid_: id, number, reference
 The name that identifies a **Page** within its project and is its address,
 `/PLAN/pages/architecture`. The one thing in the product not reached through a
 key, because a page is named in running text rather than numbered. It is
-renameable, and the old slug leads nowhere afterwards.
+renameable, and the old slug leads nowhere afterwards (ADR 0021).
 _Avoid_: key, name, path, permalink, handle
 
 **Number**:
