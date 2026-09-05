@@ -4,6 +4,10 @@ How an instance is run, upgraded and configured. Operations are meant to consist
 of Postgres backups and nothing else (VISION 16); everything else here is one
 command.
 
+Installing for the first time is [`install.md`](./install.md): a sequence from
+nothing to the first ticket, written for an agent to execute. This document is
+the reference beside it, and what you come back to afterwards.
+
 ## Running
 
 ```sh

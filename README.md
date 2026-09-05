@@ -43,19 +43,32 @@ prose and [`docs/storage.md`](docs/storage.md) what it stands on.
 
 ## Running it
 
-One `docker compose up`, against the image the trunk publishes:
+**Have your agent do it.** Give it this address and nothing else:
+
+```
+https://github.com/datavisionzero/planaffe/blob/main/docs/install.md
+```
+
+[`docs/install.md`](docs/install.md) is a sequence from nothing to the first
+ticket, written for an agent to execute: one command per step, the output that
+means it worked, and the condition under which it stops and asks you. The four
+things only a person can decide — the administrator's email, a password, DNS, a
+certificate — are marked as exactly that. It names no agent and no harness.
+
+Or type it yourself. It is two commands:
 
 ```sh
-cp deploy/.env.example deploy/.env      # set POSTGRES_PASSWORD and the two bootstrap values
+cp deploy/.env.example deploy/.env      # set POSTGRES_PASSWORD and the three bootstrap values
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
 The instance applies its own migrations and, on the first start, creates the
-first administrator and their token from `PLANAFFE_BOOTSTRAP_ADMIN` and
-`PLANAFFE_BOOTSTRAP_TOKEN`. From there, `pa project create` and `pa issue
-create` are the fifth minute — once the CLI exists. Until then the API is what
-there is; [`docs/operations.md`](docs/operations.md) has every variable, the
-upgrade and the backup.
+first administrator and their token from `PLANAFFE_BOOTSTRAP_ADMIN`,
+`PLANAFFE_BOOTSTRAP_EMAIL` and `PLANAFFE_BOOTSTRAP_TOKEN`. From there, `pa init`
+connects a repository to the instance and `pa issue create` is the fifth minute;
+[`docs/cli.md`](docs/cli.md) has the CLI and
+[`docs/operations.md`](docs/operations.md) every variable, the upgrade and the
+backup.
 
 ## Working on it
 
