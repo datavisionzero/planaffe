@@ -37,11 +37,19 @@ issue or an epic takes its project from the key it names and not from the
 address it sits on, so a blocker in another project leads to that project.
 
 The application shell persists around every project route. Its project switcher
-contains only projects the caller can access. The shell binds three shortcuts:
-`⌘K` opens the command palette, `⌘B` folds the sidebar, and `p` opens the
-project switcher — a bare key, because `⌘P` belongs to the browser's print
-dialog and an issue tracker is worth printing. Non-administrators do not see the
-admin entry, but hiding navigation is never the authorization check.
+contains only projects the caller can access. The shell binds four shortcuts:
+`⌘K` opens the command palette, `⌘B` folds the sidebar, `p` opens the project
+switcher, and `?` opens the overview of every key the application binds. `p` and
+`?` are bare keys, because `⌘P` belongs to the browser's print dialog and an
+issue tracker is worth printing. Non-administrators do not see the admin entry,
+but hiding navigation is never the authorization check.
+
+The overview is a dialog rather than a screen, so that a key can be looked up
+without leaving the list it is about. It is reached three ways — `?`, the
+command palette, and an entry in the account menu — because a list of shortcuts
+reachable only by a shortcut does not help the reader who has not found one yet.
+It draws `⌘` on a Mac and `Ctrl` elsewhere, and it is generated from the one
+list the handlers themselves read, so a key that changes changes there.
 The Labels navigation entry required by ADR 0006 opens the labels section of
 project settings; labels do not need a second management screen.
 
@@ -55,7 +63,8 @@ states. The command palette shows a few full-text matches and links to the full
 filtered list.
 
 `j` and `k` move the active row, `Enter` opens it, `c` creates, `/` focuses
-search and `Escape` closes the topmost filter or preview. Focus and the active
+search and `Escape` closes the topmost filter or preview — the same list `?`
+shows. Focus and the active
 row remain visible. Returning from a detail screen restores filters and scroll
 position.
 

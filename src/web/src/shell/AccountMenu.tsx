@@ -1,4 +1,4 @@
-import { CheckIcon, LogOutIcon, MonitorIcon, MoonIcon, SettingsIcon, ShieldIcon, SunIcon } from "lucide-react";
+import { CheckIcon, KeyboardIcon, LogOutIcon, MonitorIcon, MoonIcon, SettingsIcon, ShieldIcon, SunIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/session/useSession";
+import { Keys } from "./ShortcutsDialog";
 
 /**
  * Top right, where every reader of a web application looks for it (ADR 0006):
- * who is signed in, the theme, settings, sign out.
+ * who is signed in, the theme, the keys, settings, sign out.
+ *
+ * The overview of the keys is here rather than in the sidebar because the
+ * sidebar carries the views of one project and the keys belong to the whole
+ * application — and because a list of shortcuts reachable only by a shortcut
+ * helps nobody who has not found one yet.
  */
-export function AccountMenu() {
+export function AccountMenu({ onShortcuts }: { onShortcuts: () => void }) {
   const { me, signOut } = useSession();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
@@ -61,6 +67,11 @@ export function AccountMenu() {
           ))}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onShortcuts}>
+          <KeyboardIcon />
+          Keyboard shortcuts
+          <Keys id="global:shortcuts" className="ml-auto" />
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => void navigate("/settings")}>
           <SettingsIcon />
           Settings

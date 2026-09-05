@@ -2,7 +2,6 @@ import { CommandIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { matchPath, Navigate, Route, Routes, useLocation } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { EpicsView } from "@/epics/EpicsView";
@@ -21,6 +20,8 @@ import { ProjectSettingsView } from "@/settings/ProjectSettingsView";
 import { AccountMenu } from "./AccountMenu";
 import { AppSidebar } from "./AppSidebar";
 import { Palette } from "./Palette";
+import { Keys, ShortcutsDialog } from "./ShortcutsDialog";
+import { is, overlaid, typing } from "./shortcuts";
 import { views } from "./views";
 
 // The Markdown pipeline of ADR 0007 weighs more than the shell; it arrives
@@ -42,6 +43,7 @@ export function Shell() {
   const projects = list.projects;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const match = matchPath("/:project/*", location.pathname);
   const projectKey = match?.params.project;
@@ -58,35 +60,36 @@ export function Shell() {
     }
   }, [current]);
 
-  // The two shortcuts the frame itself owns. `p` for the switcher is a bare
-  // key on purpose: ⌘P is the browser's print, and taking printing away from
+  // The keys the frame itself owns, read from `shortcuts.ts` so that this
+  // handler and the overview it feeds cannot come apart. `p` and `?` are bare
+  // keys on purpose: ⌘P is the browser's print, and taking printing away from
   // an issue tracker costs more than the switcher gains. Bare keys are what
-  // the lists already use — `j`, `k`, `c`, `/` — so the switcher joins that
-  // alphabet instead of fighting the browser for a modifier.
+  // the lists already use — `j`, `k`, `c`, `/` — so both join that alphabet
+  // instead of fighting the browser for a modifier.
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if (is("global:palette", event)) {
         event.preventDefault();
+        // One dialog at a time: the palette arrives over whatever the overview
+        // was explaining, not behind it.
+        setShortcutsOpen(false);
         setPaletteOpen((open) => !open);
-        return;
-      }
-
-      if (event.metaKey || event.ctrlKey || event.altKey || event.key.toLowerCase() !== "p") {
         return;
       }
 
       // Not while something is being typed, and not while a menu or a dialog
       // has the focus — those close with Escape, as they always did.
-      const target = event.target as HTMLElement | null;
-      if (target?.matches("input, textarea, select, [contenteditable=true]") === true) {
-        return;
-      }
-      if (target?.closest('[role="menu"], [role="dialog"]') != null) {
+      if (typing(event) || overlaid(event)) {
         return;
       }
 
-      event.preventDefault();
-      setSwitcherOpen(true);
+      if (is("global:projects", event)) {
+        event.preventDefault();
+        setSwitcherOpen(true);
+      } else if (is("global:shortcuts", event)) {
+        event.preventDefault();
+        setShortcutsOpen(true);
+      }
     }
 
     window.addEventListener("keydown", onKeyDown);
@@ -123,7 +126,7 @@ export function Shell() {
           >
             <CommandIcon className="size-3.5" />
             <span className="text-xs">Search or jump…</span>
-            <Kbd>⌘K</Kbd>
+            <Keys id="global:palette" />
           </Button>
           <Button
             variant="ghost"
@@ -134,7 +137,7 @@ export function Shell() {
           >
             <CommandIcon />
           </Button>
-          <AccountMenu />
+          <AccountMenu onShortcuts={() => setShortcutsOpen(true)} />
         </header>
 
         <Routes>
@@ -163,7 +166,14 @@ export function Shell() {
         </Routes>
       </SidebarInset>
 
-      <Palette open={paletteOpen} onOpenChange={setPaletteOpen} projects={known} current={current} />
+      <Palette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        projects={known}
+        current={current}
+        onShortcuts={() => setShortcutsOpen(true)}
+      />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </SidebarProvider>
     </ProjectsContext.Provider>
   );

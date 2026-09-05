@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/session/Session";
 import { aProject, aUser, installInstance, renderAt } from "@/shared/testing";
 import { Shell } from "./Shell";
+import { drawn, shortcuts } from "./shortcuts";
 import { views } from "./views";
 
 const other = { ...aProject, key: "LOG", name: "logaffe" };
@@ -359,5 +360,58 @@ describe("the shell (ADR 0006)", () => {
 
     expect(await screen.findByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
     expect(screen.getByText(/administrator/)).toBeInTheDocument();
+  });
+  // The application binds a dozen keys and used to explain exactly one of them,
+  // on the palette button. The overview is the one place that says all of them,
+  // and `shortcuts.ts` is the one place they are written down.
+  it("opens the overview of the keys on ?, and draws every key it binds", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.keyboard("?");
+
+    const overview = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    for (const shortcut of shortcuts) {
+      const row = within(overview).getByText(shortcut.what).closest("div")!;
+      for (const cap of drawn(shortcut.id)) {
+        expect(within(row).getByText(cap)).toBeInTheDocument();
+      }
+    }
+  });
+
+  it("leaves ? alone while something is being typed", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.type(screen.getByRole("textbox", { name: "Search issues" }), "why?");
+
+    expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).not.toBeInTheDocument();
+  });
+
+  // A list of shortcuts reachable only by a shortcut helps nobody who has not
+  // found one yet: the menu is the way in for a reader who never presses a key.
+  it("offers the overview from the account menu", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Account: maintainer" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Keyboard shortcuts/ }));
+
+    expect(await screen.findByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
+  });
+
+  it("offers the overview from the palette, and steps aside for it", async () => {
+    shell("/PLAN/ready");
+    const user = userEvent.setup();
+    await screen.findByText("The web shell");
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    await user.type(await screen.findByRole("combobox", { name: /command/i }), "keyboard");
+    await user.click(await screen.findByRole("option", { name: /Keyboard shortcuts/ }));
+
+    expect(await screen.findByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: /command/i })).not.toBeInTheDocument());
   });
 });

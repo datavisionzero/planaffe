@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/shared/PageHeader";
+import { is, typing } from "@/shell/shortcuts";
 import { keyPath, type View } from "@/shell/views";
 import { priorityLabel } from "./priority";
 import { StatusDot } from "./status";
@@ -97,16 +98,19 @@ export function IssueListView({ view }: { view: View }) {
 
   useEffect(() => setActive((value) => Math.min(value, Math.max(0, page.items.length - 1))), [page.items.length]);
   useEffect(() => {
+    // The keys of the list, as `shortcuts.ts` binds them and the ? overview
+    // shows them. Escape is the exception that also answers while typing: it
+    // closes the filters the search sits in.
     function onKeyDown(event: KeyboardEvent) {
-      const editing = (event.target as HTMLElement | null)?.matches("input, textarea, select, [contenteditable=true]");
-      if (event.key === "/" && !editing) { event.preventDefault(); document.querySelector<HTMLInputElement>("[data-issue-search]")?.focus(); }
-      else if (!editing && (event.key === "j" || event.key === "k")) {
+      const editing = typing(event);
+      if (is("list:search", event) && !editing) { event.preventDefault(); document.querySelector<HTMLInputElement>("[data-issue-search]")?.focus(); }
+      else if (!editing && (is("list:next", event) || is("list:previous", event))) {
         event.preventDefault();
-        const next = Math.max(0, Math.min(page.items.length - 1, active + (event.key === "j" ? 1 : -1)));
+        const next = Math.max(0, Math.min(page.items.length - 1, active + (is("list:next", event) ? 1 : -1)));
         setActive(next); virtualizer.scrollToIndex(next, { align: "auto" });
-      } else if (!editing && event.key === "Enter" && page.items[active]) void navigate(keyPath(page.items[active].key));
-      else if (!editing && event.key === "c") { event.preventDefault(); void navigate(`/${project}/issues/new`); }
-      else if (event.key === "Escape" && filtersOpen) { setFiltersOpen(false); filtersButton.current?.focus(); }
+      } else if (!editing && is("list:open", event) && page.items[active]) void navigate(keyPath(page.items[active].key));
+      else if (!editing && is("list:create", event)) { event.preventDefault(); void navigate(`/${project}/issues/new`); }
+      else if (is("list:close", event) && filtersOpen) { setFiltersOpen(false); filtersButton.current?.focus(); }
     }
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
   }, [active, filtersOpen, navigate, page.items, project, virtualizer]);

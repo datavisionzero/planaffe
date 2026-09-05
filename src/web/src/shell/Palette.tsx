@@ -4,10 +4,11 @@ import { useNavigate } from "react-router";
 import { api, type IssueSummary, type Project } from "@/api/client";
 import { useTheme } from "@/components/theme-provider";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Kbd } from "@/components/ui/kbd";
 import { rememberProject } from "@/projects/useProjects";
 import { useSession } from "@/session/useSession";
 import { cn } from "@/lib/utils";
+import { Keys } from "./ShortcutsDialog";
+import { is } from "./shortcuts";
 import { keyPath, keyPattern, viewPath, views } from "./views";
 
 type Command = {
@@ -40,9 +41,11 @@ type PaletteProps = {
   onOpenChange: (open: boolean) => void;
   projects: Project[];
   current: Project | undefined;
+  /** The overview of the keys, which the palette is one of the ways to. */
+  onShortcuts: () => void;
 };
 
-export function Palette({ open, onOpenChange, projects, current }: PaletteProps) {
+export function Palette({ open, onOpenChange, projects, current, onShortcuts }: PaletteProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg" showCloseButton={false}>
@@ -50,14 +53,21 @@ export function Palette({ open, onOpenChange, projects, current }: PaletteProps)
           <DialogTitle>Command palette</DialogTitle>
           <DialogDescription>Search views, projects and commands, or type an issue key.</DialogDescription>
         </DialogHeader>
-        {open && <PaletteBody onOpenChange={onOpenChange} projects={projects} current={current} />}
+        {open && (
+          <PaletteBody
+            onOpenChange={onOpenChange}
+            projects={projects}
+            current={current}
+            onShortcuts={onShortcuts}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
 /** Mounted while the palette is open, so that its query starts empty every time. */
-function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "open">) {
+function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<PaletteProps, "open">) {
   const navigate = useNavigate();
   const { setTheme } = useTheme();
   const { signOut } = useSession();
@@ -178,12 +188,19 @@ function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "op
       { id: "theme:light", label: "Light theme", group: "Appearance", run: () => { onOpenChange(false); setTheme("light"); } },
       { id: "theme:dark", label: "Dark theme", group: "Appearance", run: () => { onOpenChange(false); setTheme("dark"); } },
       { id: "theme:system", label: "Follow the system", group: "Appearance", run: () => { onOpenChange(false); setTheme("system"); } },
+      {
+        id: "shortcuts",
+        label: "Keyboard shortcuts",
+        hint: "Every key the application binds.",
+        group: "Help",
+        run: () => { onOpenChange(false); onShortcuts(); },
+      },
       { id: "settings", label: "Settings", group: "Account", run: go("/settings") },
       { id: "sign-out", label: "Sign out", group: "Account", run: () => { onOpenChange(false); signOut(); } },
     );
 
     return list;
-  }, [current, found, navigate, needle, onOpenChange, projectKey, projects, searching, setTheme, signOut]);
+  }, [current, found, navigate, needle, onOpenChange, onShortcuts, projectKey, projects, searching, setTheme, signOut]);
 
   const matching = useMemo(() => {
     const lowered = needle.toLowerCase();
@@ -206,13 +223,13 @@ function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "op
   const selected = matching[Math.min(index, Math.max(matching.length - 1, 0))];
 
   function onKeyDown(event: KeyboardEvent) {
-    if (event.key === "ArrowDown") {
+    if (is("palette:next", event)) {
       event.preventDefault();
       setIndex((current) => Math.min(current + 1, matching.length - 1));
-    } else if (event.key === "ArrowUp") {
+    } else if (is("palette:previous", event)) {
       event.preventDefault();
       setIndex((current) => Math.max(current - 1, 0));
-    } else if (event.key === "Enter" && selected !== undefined) {
+    } else if (is("palette:run", event) && selected !== undefined) {
       event.preventDefault();
       selected.run();
     }
@@ -240,7 +257,7 @@ function PaletteBody({ onOpenChange, projects, current }: Omit<PaletteProps, "op
             onKeyDown={onKeyDown}
             className="h-11 flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
           />
-          <Kbd>esc</Kbd>
+          <Keys id="palette:close" />
         </div>
 
         <ul id="palette-commands" role="listbox" className="max-h-80 overflow-y-auto p-1">
