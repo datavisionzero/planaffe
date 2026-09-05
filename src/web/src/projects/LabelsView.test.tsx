@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
@@ -178,8 +178,9 @@ it("still offers the way back when the reload after a delete fails", async () =>
   const restore = await screen.findByRole("button", { name: "Restore web" });
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   // The row the dialog sat in is gone; the offer to undo is where the keyboard
-  // goes, rather than back to the top of the document.
-  expect(restore).toHaveFocus();
+  // goes, rather than back to the top of the document. An effect puts it there
+  // after the button is in the document, so this is waited for.
+  await waitFor(() => expect(restore).toHaveFocus());
 });
 
 // `reload` is run after a write that already succeeded, so a reload that cannot

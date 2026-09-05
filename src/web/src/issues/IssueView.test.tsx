@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -173,7 +173,10 @@ describe("the human-first issue detail", () => {
     const restore = await screen.findByRole("button", { name: "Restore issue" });
     expect(screen.getByRole("status")).toHaveTextContent("deleted and hidden from the project");
     expect(screen.getByText(/It can be restored until .* — 3 days left\./)).toBeInTheDocument();
-    expect(restore).toHaveFocus();
+    // The focus is put there by an effect, which runs after the button is in
+    // the document: waited for, not read once, or the assertion is a race that
+    // only loses on a busy machine.
+    await waitFor(() => expect(restore).toHaveFocus());
 
     await userEvent.setup().click(restore);
 
@@ -189,7 +192,8 @@ describe("the human-first issue detail", () => {
     await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Delete issue" }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete issue" }));
 
-    expect(await screen.findByRole("button", { name: "Restore issue" })).toHaveFocus();
+    const restore = await screen.findByRole("button", { name: "Restore issue" });
+    await waitFor(() => expect(restore).toHaveFocus());
   });
 
   // VISION 7 promises it in as many words: a ticket that has not shipped yet
