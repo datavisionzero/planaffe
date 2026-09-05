@@ -71,13 +71,25 @@ shows. Focus and the active
 row remain visible. Returning from a detail screen restores filters and scroll
 position.
 
-A label is chosen, never typed. Wherever labels are set or filtered on — the
-issue form, the epic form and the list filter — one control shows the project's
-set grouped, with the one-line description each label carries, and holds what is
-chosen as chips a Backspace takes back. Choosing the sibling of a group that is
-already carried replaces it and says so, rather than letting the instance refuse
-the save. A name the project does not have offers itself as one to create, with
-its group and description left to the labels screen.
+Anything that has to exist already is chosen, never typed. One control does it
+everywhere: chips for what is chosen, a field that filters, a list of what
+there is, and the same keys — arrows and Enter choose, Escape closes the list
+before it closes anything around it, Backspace on an empty field takes the last
+chip back. On a narrow screen the chips wrap and the list opens below the field
+rather than over it.
+
+Its fillings are the label set of the project (grouped, each label with the
+one-line description it carries; choosing the sibling of a group already
+carried replaces it and says so, rather than letting the instance refuse the
+save; a name the project does not have offers itself as one to create, with its
+group and description left to the labels screen), the epics of the project
+(with the title beside the key, and a closed one saying so on its row, since
+attaching to it reopens it), the members of the project plus nobody as a row of
+its own, and a search across issues by key or title for a parent and for
+blockers. Labels are chosen on the issue form, the epic form and the list
+filter, where several of them become several `label` values in the address.
+
+A refusal that names a field is shown at that field, not over the form.
 
 Creating is never the key alone. The header of every list that can be added to
 carries the act as a button — New issue on the issue lists and on Needs you,

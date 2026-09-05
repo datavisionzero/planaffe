@@ -1,13 +1,15 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { api, describe, type Issue, type Schemas } from "@/api/client";
+import { api, codeOf, describe, type Issue, type Problem, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LabelPicker } from "@/components/ui/label-picker";
+import { useEpics } from "@/epics/useEpics";
 import { useLabels } from "@/projects/useLabels";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
 import { keyPath } from "@/shell/views";
+import { AssigneePicker, EpicPicker, IssuePicker } from "./pickers";
 import { priorityLabel } from "./priority";
 import { statusLabel } from "./statusLabel";
 
@@ -20,34 +22,34 @@ export function NewIssueView() {
   // an issue is started under is not typed a second time.
   const [search] = useSearchParams();
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
+  const [refused, setRefused] = useState<Refusal>();
 
   async function save(draft: IssueDraft) {
-    setSaving(true); setError(undefined);
+    setSaving(true); setRefused(undefined);
     try {
-      const item: NewIssue = { ref: null, title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: draft.labels, epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), blocked_by: words(draft.blockedBy), blocks: [], status: draft.status };
+      const item: NewIssue = { ref: null, title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: draft.labels, epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), blocked_by: draft.blockedBy, blocks: [], status: draft.status };
       const { data, error: problem, response } = await api.POST("/issues", { body: { project: project!, issues: [item] } });
-      if (!data) { setError(describe(problem, response.status)); return; }
+      if (!data) { setRefused(refusal(problem, response.status)); return; }
       void navigate(keyPath(data.items[0].key), { replace: true });
-    } catch { setError("The instance did not answer."); } finally { setSaving(false); }
+    } catch { setRefused({ fields: {} , why: "The instance did not answer." }); } finally { setSaving(false); }
   }
 
-  return <><PageHeader title="Create issue" /><IssueForm epic={search.get("epic") ?? undefined} submit="Create issue" saving={saving} error={error} onSubmit={save} /></>;
+  return <><PageHeader title="Create issue" /><IssueForm epic={search.get("epic") ?? undefined} submit="Create issue" saving={saving} refused={refused} onSubmit={save} /></>;
 }
 
 export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSaved: (issue: Issue) => void; onCancel: () => void }) {
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
+  const [refused, setRefused] = useState<Refusal>();
   async function save(draft: IssueDraft) {
-    setSaving(true); setError(undefined);
+    setSaving(true); setRefused(undefined);
     const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: draft.labels, epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), ...(parkable(issue) && draft.status !== issue.status ? { status: draft.status } : {}) };
     try {
       const { data, error: problem, response } = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: body as never });
-      if (!data) { setError(describe(problem, response.status)); return; }
+      if (!data) { setRefused(refusal(problem, response.status)); return; }
       onSaved(data);
-    } catch { setError("The instance did not answer."); } finally { setSaving(false); }
+    } catch { setRefused({ fields: {}, why: "The instance did not answer." }); } finally { setSaving(false); }
   }
-  return <IssueForm initial={issue} submit="Save changes" saving={saving} error={error} onSubmit={save} onCancel={onCancel} />;
+  return <IssueForm initial={issue} submit="Save changes" saving={saving} refused={refused} onSubmit={save} onCancel={onCancel} />;
 }
 
 /**
@@ -61,42 +63,63 @@ function parkable(issue: Issue | undefined): boolean {
   return issue === undefined || ((issue.status === "todo" || issue.status === "backlog") && issue.claim === null);
 }
 
-type IssueDraft = { title: string; description: string; priority: number; ready: boolean; labels: string[]; epic: string; parent: string; assignee: string; blockedBy: string; status: "backlog" | "todo" };
+type IssueDraft = { title: string; description: string; priority: number; ready: boolean; labels: string[]; epic: string; parent: string; assignee: string; blockedBy: string[]; status: "backlog" | "todo" };
 
-function IssueForm({ initial, epic, submit, saving, error, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; error?: string; onSubmit: (draft: IssueDraft) => void; onCancel?: () => void }) {
-  const [draft, setDraft] = useState<IssueDraft>({ title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name) ?? [], epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []).join(", ") ?? "", status: initial?.status === "backlog" ? "backlog" : "todo" });
+/**
+ * A refused save, taken apart: what belongs at a field, and what is left for
+ * the form. A refusal over the whole form for a key that was mistyped is what
+ * the pickers exist to end, so a refusal that names a field is shown there.
+ */
+type Refusal = { why?: string; fields: Record<string, string> };
+
+const atField = ["epic", "parent", "assignee", "blocked_by", "labels"];
+
+/** Which refusals name a field, and which field that is. */
+const codeField: Record<string, string> = {
+  "one-level": "parent",
+  "other-project": "parent",
+  "epic-inherited": "epic",
+  cycle: "blocked_by",
+  "unknown-label": "labels",
+};
+
+function refusal(problem: Problem | undefined, status: number): Refusal {
+  // `validation` carries `errors`, field to message (`docs/api.md`, Errors);
+  // it is an extension member, so the generated type does not know it.
+  const errors = (problem as { errors?: Record<string, string> } | undefined)?.errors ?? {};
+  const named = codeField[codeOf(problem) ?? ""];
+  const all = named === undefined ? errors : { ...errors, [named]: describe(problem, status) };
+  const fields = Object.fromEntries(Object.entries(all).filter(([field]) => atField.includes(field)));
+  const rest = Object.keys(all).filter((field) => !atField.includes(field));
+
+  return { fields, why: rest.length > 0 || Object.keys(fields).length === 0 ? describe(problem, status) : undefined };
+}
+
+function IssueForm({ initial, epic, submit, saving, refused, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; onSubmit: (draft: IssueDraft) => void; onCancel?: () => void }) {
+  const [draft, setDraft] = useState<IssueDraft>({ title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name) ?? [], epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []) ?? [], status: initial?.status === "backlog" ? "backlog" : "todo" });
   const set = <K extends keyof IssueDraft>(key: K, value: IssueDraft[K]) => setDraft((old) => ({ ...old, [key]: value }));
-  const [reopens, setReopens] = useState<string>();
   const { project } = useParams();
   const { labels, create } = useLabels(project);
+  const epics = useEpics(project);
+  const at = refused?.fields ?? {};
 
   // Attaching an issue to a closed epic reopens the epic, silently as far as
-  // the HTTP call goes. The human interface asks for the warning, so the epic
-  // that was typed is read when the field is left and says what saving will do.
-  async function askAboutEpic(value: string) {
-    const key = value.trim();
-    setReopens(undefined);
-    if (key === "" || key.toUpperCase() === (initial?.epic?.key ?? "").toUpperCase()) return;
-    setReopens(await warnAboutEpic(key));
-  }
-
-  // An epic that arrived in the address was never typed, so nothing ever
-  // leaves the field and the warning would first appear as a reopened epic.
-  useEffect(() => {
-    if (epic === undefined) return;
-    let current = true;
-    void warnAboutEpic(epic).then((warning) => { if (current) setReopens(warning); });
-    return () => { current = false; };
-  }, [epic]);
+  // the HTTP call goes. The choice says which epics are closed on their own
+  // rows; this is the same fact once one of them is chosen, said as what
+  // saving will do.
+  const chosenEpic = epics.find((known) => known.key === draft.epic);
+  const reopens = chosenEpic?.status === "closed" && chosenEpic.key !== initial?.epic?.key
+    ? `${chosenEpic.key} is closed. Saving attaches this issue and reopens the epic.`
+    : undefined;
 
   return <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => { event.preventDefault(); void onSubmit(draft); }}>
     <label className="grid gap-1 text-sm font-medium">Title<Input required autoFocus value={draft.title} onChange={(e) => set("title", e.target.value)} /></label>
     <MarkdownField label="Description" value={draft.description} onChange={(value) => set("description", value)} />
     <div className="grid gap-3 sm:grid-cols-3"><Select label="Priority" value={draft.priority} onChange={(value) => set("priority", Number(value))}>{[0,1,2,3,4].map((x) => <option key={x} value={x}>{priorityLabel(x)}</option>)}</Select>{parkable(initial) ? <Select label="Status" value={draft.status} onChange={(value) => set("status", value as "backlog" | "todo")}><option value="todo">Todo</option><option value="backlog">Backlog</option></Select> : <Select label="Status" hint="Changed through the issue's own actions" value={initial!.status} disabled onChange={() => undefined}><option value={initial!.status}>{statusLabel(initial!.status)}</option></Select>}<label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={draft.ready} onChange={(e) => set("ready", e.target.checked)} /> Ready</label></div>
-    <LabelPicker label="Labels" labels={labels} value={draft.labels} onChange={(names) => set("labels", names)} onCreate={create} />
-    <div className="grid gap-3 sm:grid-cols-2"><Text label="Epic" value={draft.epic} change={(v) => set("epic", v)} leave={(v) => void askAboutEpic(v)} /><Text label="Parent issue" value={draft.parent} change={(v) => set("parent", v)} /><Text label="Assignee" value={draft.assignee} change={(v) => set("assignee", v)} />{!initial && <Text label="Blocked by" hint="Comma separated issue keys" value={draft.blockedBy} change={(v) => set("blockedBy", v)} />}</div>
+    <LabelPicker label="Labels" labels={labels} value={draft.labels} onChange={(names) => set("labels", names)} onCreate={create} error={at.labels} />
+    <div className="grid gap-3 sm:grid-cols-2"><EpicPicker epics={epics} value={draft.epic} onChange={(key) => set("epic", key)} error={at.epic} /><IssuePicker label="Parent issue" project={project} exclude={initial ? [initial.key] : []} value={draft.parent === "" ? [] : [draft.parent]} onChange={(keys) => set("parent", keys[0] ?? "")} error={at.parent} /><AssigneePicker project={project} value={draft.assignee} onChange={(name) => set("assignee", name)} error={at.assignee} />{!initial && <IssuePicker label="Blocked by" project={project} multiple value={draft.blockedBy} onChange={(keys) => set("blockedBy", keys)} error={at.blocked_by} />}</div>
     {reopens && <p role="status" className="text-sm text-brand">{reopens}</p>}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {refused?.why && <p role="alert" className="text-sm text-destructive">{refused.why}</p>}
     <div className="flex justify-end gap-2">{onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}<Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button></div>
   </form>;
 }
@@ -107,13 +130,5 @@ export function MarkdownField({ label, value, onChange, required }: { label: str
   return <div className="grid gap-1 text-sm font-medium"><span className="flex items-center justify-between"><label htmlFor={id}>{label}</label><button type="button" className="text-xs font-normal text-brand hover:underline" onClick={() => setPreview((x) => !x)}>{preview ? "Edit" : "Preview"}</button></span>{preview ? <div className="min-h-32 rounded-lg border p-3"><Markdown>{value || "_Nothing to preview._"}</Markdown></div> : <textarea id={id} required={required} value={value} onChange={(e) => onChange(e.target.value)} className="min-h-32 rounded-lg border bg-background px-3 py-2 font-mono text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" />}</div>;
 }
 
-function Text({ label, hint, value, change, leave }: { label: string; hint?: string; value: string; change: (value: string) => void; leave?: (value: string) => void }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<Input value={value} onChange={(e) => change(e.target.value)} onBlur={leave && ((e) => leave(e.target.value))} /></label>; }
 function Select({ label, hint, value, disabled, onChange, children }: { label: string; hint?: string; value: string | number; disabled?: boolean; onChange: (value: string) => void; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-medium">{label}{hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}<select className="h-8 rounded-lg border bg-background px-2 disabled:text-muted-foreground" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>{children}</select></label>; }
-/** What saving an issue into that epic would also do, if anything. */
-async function warnAboutEpic(key: string): Promise<string | undefined> {
-  const { data } = await api.GET("/epics/{key}", { params: { path: { key } } });
-  return data?.status === "closed" ? `${data.key} is closed. Saving attaches this issue and reopens the epic.` : undefined;
-}
-
 function blank(value: string) { return value.trim() || null; }
-function words(value: string) { return value.split(",").map((x) => x.trim()).filter(Boolean); }

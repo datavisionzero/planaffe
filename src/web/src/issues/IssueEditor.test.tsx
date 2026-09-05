@@ -101,15 +101,24 @@ const closedEpic = {
   created_at: "2026-08-01T10:00:00Z", updated_at: "2026-08-02T10:00:00Z", closed_at: "2026-08-02T10:00:00Z",
 };
 
+const openEpic = {
+  key: "PLAN-E4", project: "PLAN", title: "The web application", status: "open",
+  labels: [], progress: { total: 4, closed: 1, done: 1, canceled: 0 },
+  created_at: "2026-08-01T10:00:00Z", updated_at: "2026-08-02T10:00:00Z", closed_at: null,
+};
+
+const epicPage = { items: [closedEpic, openEpic], total: 2, next_cursor: null };
+
 // The matrix: adding an issue to a closed epic warns that the epic reopens.
 // The instance does reopen it, and says nothing about it in the answer.
-it("warns that a closed epic reopens when an issue is attached to it", async () => {
-  installInstance({ "GET /epics/PLAN-E1": { body: closedEpic } });
+it("says on the row which epics are closed, and warns once one is chosen", async () => {
+  installInstance({ "GET /epics": epicPage });
   renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /></Routes>);
   const user = userEvent.setup();
 
-  await user.type(screen.getByLabelText("Epic"), "PLAN-E1");
-  await user.tab();
+  await user.click(await screen.findByRole("combobox", { name: "Epic" }));
+  expect(await screen.findByRole("option", { name: /PLAN-E1/ })).toHaveTextContent("closed");
+  await user.click(screen.getByRole("option", { name: /PLAN-E1/ }));
 
   expect(await screen.findByRole("status")).toHaveTextContent(
     "PLAN-E1 is closed. Saving attaches this issue and reopens the epic.",
@@ -117,35 +126,103 @@ it("warns that a closed epic reopens when an issue is attached to it", async () 
 });
 
 // The epic screen leads here with the bracket already decided. Nothing is
-// typed into the field, so nothing ever leaves it, and the warning the matrix
-// asks for would have arrived as a reopened epic.
+// chosen, so the warning has to come from the list itself.
 it("takes the epic from the address and warns about it unasked", async () => {
-  installInstance({ "GET /epics/PLAN-E1": { body: closedEpic } });
+  installInstance({ "GET /epics": epicPage });
   renderAt("/PLAN/issues/new?epic=PLAN-E1", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /></Routes>);
 
-  expect(screen.getByLabelText("Epic")).toHaveValue("PLAN-E1");
   expect(await screen.findByRole("status")).toHaveTextContent(
     "PLAN-E1 is closed. Saving attaches this issue and reopens the epic.",
   );
 });
 
 it("says nothing about an open epic", async () => {
+  installInstance({ "GET /epics": epicPage });
+  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("combobox", { name: "Epic" }));
+  await user.click(await screen.findByRole("option", { name: /PLAN-E4/ }));
+
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+const someIssues = {
+  items: [
+    { key: "PLAN-2", project: "PLAN", title: "The web application", status: "todo", labels: [] },
+    { key: "PLAN-3", project: "PLAN", title: "The console", status: "in_progress", labels: [] },
+  ],
+  total: 2,
+  next_cursor: null,
+};
+
+it("finds a parent by title and sends its key, never what was typed", async () => {
   const instance = installInstance({
-    "GET /epics/PLAN-E4": {
-      body: {
-        key: "PLAN-E4", project: "PLAN", title: "The web application", description: "", status: "open",
-        author: { id: "0199a000-0000-7000-8000-000000000001", name: "maintainer" },
-        labels: [], progress: { total: 4, closed: 1, done: 1, canceled: 0 },
-        created_at: "2026-08-01T10:00:00Z", updated_at: "2026-08-02T10:00:00Z", closed_at: null,
-      },
-    },
+    "GET /issues": someIssues,
+    "POST /issues": { status: 201, body: { items: [{ key: "PLAN-10" }] } },
+  });
+  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /><Route path="/:project/issues/:number" element={<p>Created issue</p>} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.type(screen.getByLabelText("Title"), "Human action");
+  await user.click(screen.getByRole("combobox", { name: "Parent issue" }));
+  await user.click(await screen.findByRole("option", { name: /The web application/ }));
+  await user.click(screen.getByRole("button", { name: "Create issue" }));
+
+  expect(await screen.findByText("Created issue")).toBeInTheDocument();
+  const sent = await instance.calls.find((call) => call.method === "POST")!.json();
+  expect(sent.issues[0]).toMatchObject({ parent: "PLAN-2" });
+});
+
+it("holds several blockers as chips instead of a comma list", async () => {
+  const instance = installInstance({
+    "GET /issues": someIssues,
+    "POST /issues": { status: 201, body: { items: [{ key: "PLAN-10" }] } },
+  });
+  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /><Route path="/:project/issues/:number" element={<p>Created issue</p>} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.type(screen.getByLabelText("Title"), "Human action");
+  const blocked = screen.getByRole("combobox", { name: "Blocked by" });
+  await user.click(blocked);
+  await user.click(await screen.findByRole("option", { name: /PLAN-2/ }));
+  await user.click(await screen.findByRole("option", { name: /PLAN-3/ }));
+  expect(screen.getByRole("button", { name: "Remove PLAN-2" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Create issue" }));
+
+  expect(await screen.findByText("Created issue")).toBeInTheDocument();
+  const sent = await instance.calls.find((call) => call.method === "POST")!.json();
+  expect(sent.issues[0]).toMatchObject({ blocked_by: ["PLAN-2", "PLAN-3"] });
+});
+
+// Nobody is the normal case (VISION 8), so it is a row rather than an empty
+// field somebody has to think to clear.
+it("offers the project's members and nobody among them", async () => {
+  installInstance({
+    "GET /projects/PLAN/users": [{ id: "0199a000-0000-7000-8000-000000000002", kind: "user", name: "maintainer", email: "maintainer@example.test", state: "active", administrator: true, created_at: "2026-08-01T10:00:00Z" }],
   });
   renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /></Routes>);
   const user = userEvent.setup();
 
-  await user.type(screen.getByLabelText("Epic"), "PLAN-E4");
-  await user.tab();
+  await user.click(screen.getByRole("combobox", { name: "Assignee" }));
 
-  await vi.waitFor(() => expect(instance.calls.some((call) => call.url.endsWith("/epics/PLAN-E4"))).toBe(true));
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(await screen.findByRole("option", { name: /maintainer/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /Nobody/ })).toBeInTheDocument();
+});
+
+it("shows a refusal that names a field at that field", async () => {
+  installInstance({
+    "GET /issues": someIssues,
+    "POST /issues": { status: 409, body: { type: "/problems/one-level", title: "refused", status: 409, detail: "PLAN-2 is a sub-issue already." } },
+  });
+  renderAt("/PLAN/issues/new", <Routes><Route path="/:project/issues/new" element={<NewIssueView />} /></Routes>);
+  const user = userEvent.setup();
+
+  await user.type(screen.getByLabelText("Title"), "Human action");
+  await user.click(screen.getByRole("combobox", { name: "Parent issue" }));
+  await user.click(await screen.findByRole("option", { name: /PLAN-2/ }));
+  await user.click(screen.getByRole("button", { name: "Create issue" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("PLAN-2 is a sub-issue already.");
+  expect(screen.getByRole("combobox", { name: "Parent issue" })).toHaveAttribute("aria-invalid", "true");
 });
