@@ -29,7 +29,7 @@ public static class Problems
     {
         RefusalCode.Validation or RefusalCode.UnknownField or RefusalCode.CursorInvalid => StatusCodes.Status400BadRequest,
         RefusalCode.Unauthenticated => StatusCodes.Status401Unauthorized,
-        RefusalCode.Csrf or RefusalCode.Forbidden or RefusalCode.ReadyRequiresUser or RefusalCode.ClaimProtected =>
+        RefusalCode.Csrf or RefusalCode.Forbidden or RefusalCode.ClaimProtected =>
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.Deleted => StatusCodes.Status404NotFound,
         RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.ReleaseExists
@@ -57,7 +57,6 @@ public static class Problems
         RefusalCode.Unauthenticated => "No token, an unknown token, or a revoked one",
         RefusalCode.Csrf => "The browser request failed its CSRF check",
         RefusalCode.Forbidden => "The identity may not do this",
-        RefusalCode.ReadyRequiresUser => "Only a user sets ready where triage is required",
         RefusalCode.ClaimProtected => "Only a user takes over a user's claim",
         RefusalCode.NotFound => "Nothing by that key or id",
         RefusalCode.Deleted => "The issue is deleted and can still be restored",

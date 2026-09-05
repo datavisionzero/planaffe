@@ -115,15 +115,6 @@ public sealed class Issue
         return issue;
     }
 
-    /// <summary>
-    /// Whether <paramref name="by"/> may write <paramref name="ready"/> on an
-    /// issue of a project where triage is <paramref name="triageRequired"/>
-    /// (VISION 10): with the switch on, an agent may clear the flag and never
-    /// set it — `ready` is a human's word there.
-    /// </summary>
-    public static bool ReadyMayBeSetBy(Identities.IdentityKind by, bool triageRequired, bool ready) =>
-        !ready || !triageRequired || by is Identities.IdentityKind.User;
-
     public void Retitle(string title, DateTimeOffset at)
     {
         Title = NormalizeTitle(title);
@@ -155,7 +146,11 @@ public sealed class Issue
         UpdatedAt = at;
     }
 
-    /// <summary>The flag as a statement about the issue; who may say it is <see cref="ReadyMayBeSetBy"/>.</summary>
+    /// <summary>
+    /// The flag as a statement about the issue, and anybody who may change the
+    /// issue may write it: <em>triage required</em> decides what <c>next</c>
+    /// hands out, not who says the word (ADR 0019).
+    /// </summary>
     public void SetReady(bool ready, DateTimeOffset at)
     {
         Ready = ready;

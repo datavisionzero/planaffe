@@ -250,25 +250,40 @@ public sealed class IssueEndpointTests(PostgresFixture postgres)
         Assert.Equal(["assignee", "description", "label", "label", "label", "label", "priority", "ready", "title"], fields.Order().ToArray());
     }
 
+    /// <summary>
+    /// <em>Triage required</em> decides what <c>next</c> hands out and nothing
+    /// else: an agent writes <c>ready</c> in both directions, and the history
+    /// says who did (ADR 0019).
+    /// </summary>
     [Fact]
-    public async Task Under_triage_required_an_agent_may_clear_ready_and_never_set_it()
+    public async Task Under_triage_required_an_agent_writes_ready_both_ways_and_the_flag_still_decides_the_supply()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
         using var admin = await Ready(instance);
         await admin.PatchAsJsonAsync("/projects/PLAN", new { triage_required = true }, Ct);
         using var createdAgent = await admin.PostAsJsonAsync("/agents", new { }, Ct);
-        using var agent = instance.ClientWith((await createdAgent.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
+        var identity = await createdAgent.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        using var agent = instance.ClientWith(identity.GetProperty("token").GetProperty("secret").GetString());
 
-        await ProjectEndpointTests.Problem(
-            await agent.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "Thin", ready = true } } }, Ct),
-            HttpStatusCode.Forbidden, "ready-requires-user");
-
-        using var created = await agent.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "Thin", ready = false } } }, Ct);
+        // Whoever writes the issues says which of them are concrete.
+        using var created = await agent.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new object[] { new { title = "Concrete", ready = true }, new { title = "Thin" } } }, Ct);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.True((await created.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("items")[0].GetProperty("ready").GetBoolean());
 
-        Assert.Equal(HttpStatusCode.OK, (await admin.PatchAsJsonAsync("/issues/PLAN-1", new { ready = true }, Ct)).StatusCode);
+        // And takes it back, and puts it back, without a user in between.
         Assert.Equal(HttpStatusCode.OK, (await agent.PatchAsJsonAsync("/issues/PLAN-1", new { ready = false }, Ct)).StatusCode);
-        await ProjectEndpointTests.Problem(await agent.PatchAsJsonAsync("/issues/PLAN-1", new { ready = true }, Ct), HttpStatusCode.Forbidden, "ready-requires-user");
+        Assert.Equal(HttpStatusCode.OK, (await agent.PatchAsJsonAsync("/issues/PLAN-1", new { ready = true }, Ct)).StatusCode);
+
+        // The switch is untouched where it works: without the flag, nothing is handed out.
+        var page = await agent.GetFromJsonAsync<JsonElement>("/projects/PLAN/next", Ct);
+        Assert.Equal(["PLAN-1"], page.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()));
+        Assert.Equal(1, page.GetProperty("reasons").GetProperty("not_ready").GetInt32());
+
+        // Who set it is in the history, which is where the question is answered now.
+        await using var reader = Migrated.ContextFor(instance.ConnectionString);
+        var agentId = identity.GetProperty("id").GetGuid();
+        var wrote = await reader.History.Where(h => h.Field == "ready").Select(h => h.ActorId).ToListAsync(Ct);
+        Assert.Equal([agentId, agentId], wrote);
     }
 
     [Fact]

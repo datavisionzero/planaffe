@@ -93,12 +93,6 @@ public sealed class CreateIssues(
                 throw new Refusal(RefusalCode.EpicInherited, $"{field}.epic cannot be set on a sub-issue; it follows the parent.");
             }
 
-            var ready = item.Ready ?? false;
-            if (!Issue.ReadyMayBeSetBy(caller.Kind, project.TriageRequired, ready))
-            {
-                throw new Refusal(RefusalCode.ReadyRequiresUser, $"Triage is required in {project.Key}: an agent may clear ready and never set it (VISION 10).");
-            }
-
             plans.Add(new Plan(
                 item,
                 field,

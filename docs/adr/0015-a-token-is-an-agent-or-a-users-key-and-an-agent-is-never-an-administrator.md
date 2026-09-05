@@ -27,9 +27,12 @@ the same mechanism as the agent token, carried the same way, told apart by the
 server.
 
 **Not the agent's token, used by its owner.** Ownership answers *which* human is
-behind a token; it does not make the token's acts a human's acts, and the whole
-point of triage required and review required is that a human's word and an
-agent's word are different things.
+behind a token; it does not make the token's acts a human's acts. Review
+required, the expiring claim and the history all rest on telling the two apart.
+(Triage required did too until
+[ADR 0019](./0019-triage-required-selects-it-does-not-permit.md) — it now
+governs what `next` hands out and not who writes `ready`, which is one place
+fewer where picking a token changes what one may do.)
 
 ## Why an agent is never an administrator
 

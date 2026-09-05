@@ -129,7 +129,7 @@ func newProjectCreate(g *globals) *cobra.Command {
 			return printProject(g, cmd, *resp.JSON201)
 		},
 	}
-	cmd.Flags().BoolVar(&triage, "triage-required", false, "ready becomes a human's word and binding for next")
+	cmd.Flags().BoolVar(&triage, "triage-required", false, "only flagged issues are handed out by next")
 	cmd.Flags().BoolVar(&review, "review-required", false, "every close by an agent lands in review")
 	return cmd
 }

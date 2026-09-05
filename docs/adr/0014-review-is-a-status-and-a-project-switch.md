@@ -65,11 +65,13 @@ than a claim.
   decides where a *plain* close lands; an agent unsure of its work hands the
   issue over for a look in any project, the same way it clears `ready` on an
   issue it wrote and finds thin.
-- **The mirror holds at the entrance.** Under triage required, an agent may
-  clear `ready` and never set it — only a user's flag counts. Without that, the
-  agent that writes seven issues flags seven issues, and the switch guards
-  nothing a human has looked at. The two switches have the same shape: an
-  agent hands in, a human accepts.
+- **The mirror is a shape, not a rule** — amended by
+  [ADR 0019](./0019-triage-required-selects-it-does-not-permit.md). Triage
+  required once carried the same asymmetry as this one, an agent clearing
+  `ready` and never setting it; it now governs only what `next` hands out, and
+  who writes the flag is a convention. The exit keeps the asymmetry, for the
+  reason that ADR gives: a close is a claim about work nobody else will look
+  at, while a wrong `ready` costs one agent one look.
 - **`done` is defined, and it is the project's convention** — merged, pushed,
   tagged, whatever the project calls delivered. planaffe checks none of it; it has
   no repository (VISION 13).

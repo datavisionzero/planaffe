@@ -40,9 +40,6 @@ public enum RefusalCode
     /// <summary>The identity may not do this.</summary>
     Forbidden,
 
-    /// <summary>An agent setting <c>ready</c> where triage is required.</summary>
-    ReadyRequiresUser,
-
     /// <summary>An agent forcing a user's claim.</summary>
     ClaimProtected,
 

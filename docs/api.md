@@ -199,7 +199,7 @@ person. Extension members carry what the code needs — the holder on
 | 400 | `cursor-invalid` | the cursor does not fit the filters or is not one the server issued |
 | 401 | `unauthenticated` | no token, an unknown token, or a revoked one |
 | 403 | `csrf` | a cookie-authenticated write has no CSRF header or the wrong origin |
-| 403 | `forbidden` | the identity may not do this — an agent creating a project, a non-administrator creating a user, an agent setting `ready` under triage required (`ready-requires-user`), an agent forcing a user's claim (`claim-protected`) |
+| 403 | `forbidden` | the identity may not do this — an agent creating a project, a non-administrator creating a user, an agent forcing a user's claim (`claim-protected`) |
 | 404 | `not-found` | the key or id names nothing the caller can see |
 | 404 | `deleted` | the issue exists but is in its grace period; `restorable_until` says how long |
 | 409 | `claim-held` | the issue is held by somebody else and the act needs the claim, or `claim` was called without `force` |
@@ -456,8 +456,10 @@ none, because blockers pointing at issues that do not exist break `next`. The
 the CLI puts it there unless told `--repo none` (VISION 13). Issues are born in
 `todo` (VISION 9); `status: "backlog"` in an item parks it from birth.
 
-Under triage required, an agent's `ready: true` — on create or on `PATCH` — is
-refused as `ready-requires-user`; `ready: false` goes through (VISION 10).
+`ready` is written by anybody who may change the issue, whatever the caller's
+kind and whatever the project's triage switch says: the switch decides what
+`next` hands out, not who writes the flag (ADR 0019). The history records who
+did.
 
 ### The acts on an issue
 

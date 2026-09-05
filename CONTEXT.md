@@ -203,8 +203,9 @@ _Avoid_: resolved, completed, finished, archived
 **Ready**:
 The field, and a statement about the issue rather than a permission: it is
 concrete enough that somebody can implement it without asking first. Whoever
-writes the issue sets it — unless **triage required** is on, when an agent may
-clear it and only a user may set it.
+writes the issue sets it, and anybody who may change the issue may write it —
+the word stays a human's by convention, the way an answer to a question does,
+not by a rule of the server (ADR 0019).
 _Avoid_: approved, groomed, refined, triaged
 
 **Workable**:
@@ -214,11 +215,12 @@ required.
 _Avoid_: ready (that is the field), available, eligible, actionable
 
 **Triage required**:
-The project switch that makes `ready` binding for **workable** and a user's word:
-on, an agent may clear the flag and never set it. Off by default, because a solo
-developer who trusts whoever writes the issues should not have to flag them. It
-guards the entrance; **review required** guards the exit, with the same
-asymmetry — an agent hands in, a human accepts.
+The project switch that makes `ready` binding for **workable**: on, nothing
+without the flag is handed out. Off by default, because a solo developer who
+trusts whoever writes the issues should not have to flag them. It governs the
+selection and not who writes the flag (ADR 0019); **review required** guards
+the exit, and it is the one of the two that still tells a human's word from an
+agent's.
 _Avoid_: review, approval, gate, moderation
 
 **Review required**:

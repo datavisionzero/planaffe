@@ -111,11 +111,6 @@ public sealed class ChangeIssue(
         var project = await projects.FindByIdAsync(before.ProjectId, cancellationToken)
             ?? throw new InvalidOperationException($"Issue {before.Key} has no project row.");
 
-        if (changes.Ready is { } ready && !Issue.ReadyMayBeSetBy(caller.Kind, project.TriageRequired, ready))
-        {
-            throw new Refusal(RefusalCode.ReadyRequiresUser, $"Triage is required in {project.Key}: an agent may clear ready and never set it (VISION 10).");
-        }
-
         var expected = Expected(ifMatch);
         var newLabels = changes.Labels is null ? null : await labels.ResolveLabelsAsync(project, changes.Labels, "labels", cancellationToken);
         var assignee = changes is { AssigneeGiven: true, Assignee: not null }

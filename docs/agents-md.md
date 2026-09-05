@@ -81,8 +81,9 @@ pa issue edit PROJ-42 --ready false     # it turned out to be too vague
 ```
 
 Where the project has triage required switched on, `ready` decides what `next`
-hands out and only a user may set it — an agent may clear the flag and never set
-it. Clear it when a ticket you picked up turns out to be too thin, and say in a
+hands out: an unflagged ticket is never handed to anybody. The flag is a human's
+word by convention rather than by a rule — set it when you are told to, and clear
+it on your own when a ticket you picked up turns out to be too thin, saying in a
 question or a comment what is missing.
 
 ### The commands you need
