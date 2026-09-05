@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { installInstance, renderAt } from "@/shared/testing";
+import { AttentionContext } from "@/shell/attention";
 import { NeedsYouView } from "./NeedsYouView";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -30,8 +31,19 @@ const fourReasons = {
   next_cursor: null,
 };
 
+/** The frame's number, which this screen feeds rather than letting it ask again. */
 function renderNeedsYou() {
-  return renderAt("/PLAN/needs-you", <Routes><Route path="/:project/needs-you" element={<NeedsYouView />} /></Routes>);
+  const noted: { project: string; needsYou: number }[] = [];
+  const attention = { needsYou: null, note: (project: string, needsYou: number) => { noted.push({ project, needsYou }); } };
+
+  renderAt(
+    "/PLAN/needs-you",
+    <AttentionContext.Provider value={attention}>
+      <Routes><Route path="/:project/needs-you" element={<NeedsYouView />} /></Routes>
+    </AttentionContext.Provider>,
+  );
+
+  return noted;
 }
 
 it("shows the four groups, why each row is there, and the action that resolves it", async () => {
@@ -68,7 +80,7 @@ it("sets ready in place and reads the list again", async () => {
     },
     "PATCH /issues/PLAN-3": { body: anIssue("PLAN-3", "Never triaged", { ready: true }) },
   });
-  renderNeedsYou();
+  const noted = renderNeedsYou();
   const user = userEvent.setup();
 
   const row = (await screen.findByText("Never triaged")).closest("li")!;
@@ -85,6 +97,9 @@ it("sets ready in place and reads the list again", async () => {
   await vi.waitFor(() => expect(screen.queryByText("Never triaged")).toBeNull());
   expect(screen.queryByRole("heading", { name: /Not ready/ })).not.toBeInTheDocument();
   expect(asked).toBe(2);
+  // The number in the navigation comes from this read, so it moves with it and
+  // the frame never asks the same question a second time.
+  expect(noted).toEqual([{ project: "PLAN", needsYou: 4 }, { project: "PLAN", needsYou: 3 }]);
 });
 
 it("says why a refused triage did not happen and leaves the row where it is", async () => {

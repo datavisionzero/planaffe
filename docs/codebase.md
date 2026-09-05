@@ -158,7 +158,10 @@ one folder per area — `shell`, `issues`, `epics`, `releases`, `projects`,
 `shell/Shell.tsx` owns the routes. Every key the application binds is declared
 once in `shell/shortcuts.ts`, which the handlers in the shell, the list and the
 palette compare against and which `shell/ShortcutsDialog.tsx` draws, so the
-overview a reader opens cannot drift away from what is bound.
+overview a reader opens cannot drift away from what is bound. What is waiting
+for a human is read once for the whole frame in `shell/useAttention.ts`: the
+count on "Needs you" in the navigation and the screen that lists it are two
+readers of one state, not two requests asking the same question.
 `components/ui/` is what the shadcn CLI
 generated and `index.css` is the token layer; both are the repository's to
 edit. `api/client.ts` is the one way to the instance — `openapi-fetch` over the

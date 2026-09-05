@@ -19,6 +19,8 @@ import { AdminView } from "@/settings/AdminView";
 import { ProjectSettingsView } from "@/settings/ProjectSettingsView";
 import { AccountMenu } from "./AccountMenu";
 import { AppSidebar } from "./AppSidebar";
+import { AttentionContext } from "./attention";
+import { useAttentionState } from "./useAttention";
 import { Palette } from "./Palette";
 import { Keys, ShortcutsDialog } from "./ShortcutsDialog";
 import { is, overlaid, typing } from "./shortcuts";
@@ -49,6 +51,7 @@ export function Shell() {
   const match = matchPath("/:project/*", location.pathname);
   const projectKey = match?.params.project;
   const viewPath = match?.params["*"] ?? "ready";
+  const currentView = viewPath.split("/")[0] || "ready";
 
   const current =
     projects.at === "known" && projectKey !== undefined
@@ -102,6 +105,10 @@ export function Shell() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [current, navigate]);
 
+  // How much is waiting for a human, read once for the frame: the sidebar
+  // draws it and the "Needs you" screen feeds it (epic "Attention").
+  const attention = useAttentionState(current?.key, currentView);
+
   const known = projects.at === "known" ? projects.projects : [];
 
   return (
@@ -109,6 +116,7 @@ export function Shell() {
     // navigation): a screen that adds a project asks the frame to catch up
     // rather than leaving it on a list the new project is not in.
     <ProjectsContext.Provider value={list}>
+    <AttentionContext.Provider value={attention}>
     <SidebarProvider>
       <AppSidebar project={current} />
       <SidebarInset>
@@ -118,7 +126,7 @@ export function Shell() {
           <ProjectSwitcher
             projects={projects}
             current={current}
-            viewPath={viewPath.split("/")[0] || "ready"}
+            viewPath={currentView}
             open={switcherOpen}
             onOpenChange={setSwitcherOpen}
             reload={list.reload}
@@ -181,6 +189,7 @@ export function Shell() {
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </SidebarProvider>
+    </AttentionContext.Provider>
     </ProjectsContext.Provider>
   );
 }

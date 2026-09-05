@@ -59,6 +59,16 @@ worth printing. Creating belongs to the project rather than to a list of it, so
 issue lists. Non-administrators do not see the admin entry,
 but hiding navigation is never the authorization check.
 
+"Needs you" in that navigation carries a count of what is waiting for a human,
+so that a reader standing on another view knows where to look. It is a number on
+a link and not a notification: nothing is sent, nothing is addressed at anybody,
+and there is no read state. At zero there is no badge, because a counter showing
+zero is not a signal; past ninety-nine it says `99+`; and where the instance did
+not answer there is no badge either — the navigation is the frame and carries no
+error. The count is read from the "Needs you" list itself rather than from a
+counter of its own, and it belongs to the name of the link, so a screen reader
+says "Needs you, 3" instead of reading two fragments in a row.
+
 The overview is a dialog rather than a screen, so that a key can be looked up
 without leaving the list it is about. It is reached three ways — `?`, the
 command palette, and an entry in the account menu — because a list of shortcuts

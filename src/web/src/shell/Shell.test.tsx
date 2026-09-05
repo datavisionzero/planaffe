@@ -73,10 +73,57 @@ describe("the shell (ADR 0006)", () => {
     const navigation = await screen.findByRole("navigation");
 
     for (const view of views) {
-      expect(within(navigation).getByRole("link", { name: view.label })).toHaveAttribute(
+      // "Needs you" carries its count in the name of the link, so the label is
+      // the beginning of the name rather than the whole of it.
+      expect(within(navigation).getByRole("link", { name: new RegExp(`^${view.label}`) })).toHaveAttribute(
         "href",
         `/PLAN/${view.path}`,
       );
+    }
+  });
+
+  // The number is a count on a link, not a notification: read from the very
+  // list the screen shows, and gone again when there is nothing on it.
+  it("counts Needs you in the navigation, in the name of the link", async () => {
+    shell("/PLAN/ready");
+
+    const navigation = await screen.findByRole("navigation");
+    const link = await within(navigation).findByRole("link", { name: "Needs you, 1" });
+
+    expect(link).toHaveAttribute("href", "/PLAN/needs-you");
+    // Drawn beside the link and read as part of its name, not twice.
+    expect(within(link.closest("li")!).getByText("1")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("draws no count where nothing needs a human, and none where the instance did not answer", async () => {
+    for (const answer of [
+      { items: [], total: 0, has_more: false, next_cursor: null },
+      { status: 503, body: { detail: "no" } },
+    ]) {
+      const { calls } = installInstance({
+        "GET /projects": [aProject],
+        "GET /issues": { items: [], total: 0, has_more: false, next_cursor: null },
+        "GET /projects/PLAN/labels": [],
+        "GET /projects/PLAN/needs-you": answer,
+      });
+      const { unmount } = renderAt(
+        "/PLAN/ready",
+        <SessionProvider value={{ me: aUser, signOut: vi.fn() }}>
+          <Shell />
+        </SessionProvider>,
+      );
+
+      const navigation = await screen.findByRole("navigation");
+      await waitFor(() =>
+        expect(calls.some((call) => new URL(call.url).pathname === "/projects/PLAN/needs-you")).toBe(true),
+      );
+
+      // The name of the link is the label alone: no badge, no "0", and no
+      // error in the frame either.
+      const link = within(navigation).getByRole("link", { name: "Needs you" });
+      expect(within(link.closest("li")!).queryByText("0")).not.toBeInTheDocument();
+
+      unmount();
     }
   });
 

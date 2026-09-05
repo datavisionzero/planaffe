@@ -4,6 +4,7 @@ import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/shared/PageHeader";
+import { useAttention } from "@/shell/useAttention";
 import { keyPath } from "@/shell/views";
 import { StatusDot } from "./status";
 
@@ -46,6 +47,7 @@ const actions: Record<Because, string> = {
  */
 export function NeedsYouView() {
   const { project } = useParams();
+  const { note } = useAttention();
   const [known, setKnown] = useState<{ of: string | undefined; page: Page } | null>(null);
   const [again, setAgain] = useState(0);
   const [more, setMore] = useState<{ busy: boolean; why?: string }>({ busy: false });
@@ -84,6 +86,17 @@ export function NeedsYouView() {
       current = false;
     };
   }, [again, ask, project]);
+
+  // The number in the navigation is this list's total. The frame does not ask
+  // for it again while this screen is open — it is told, from the read that
+  // happened anyway, including after an answer or a review took a row off.
+  const total = page.at === "known" ? page.total : null;
+
+  useEffect(() => {
+    if (project !== undefined && total !== null) {
+      note(project, total);
+    }
+  }, [note, project, total]);
 
   async function loadMore(cursor: string) {
     setMore({ busy: true });
