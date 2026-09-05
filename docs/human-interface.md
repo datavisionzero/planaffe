@@ -6,11 +6,26 @@ the product intent in [`VISION.md`](../VISION.md); the HTTP operations remain
 defined in [`api.md`](./api.md).
 
 Bulk issue changes, export and all three waiting operations remain CLI work.
-There is no board, dashboard or rich-text editor. Every Markdown editor is a
-text area with a preview, and every ordinary human action on one issue is
-available in the browser. Enter in that text area is a line break where it is
+There is no board, dashboard or rich-text editor. Every Markdown editor is the
+same field over Markdown source, and every ordinary human action on one issue is
+available in the browser. Enter in that field is a line break where it is
 read, so nothing has to be known about Markdown to write one
 ([ADR 0020](./adr/0020-a-newline-is-a-line-break-and-stored-text-is-not-hard-wrapped.md)).
+
+That field is one component, so what is said of it holds in all eight places it
+is used — an issue's description, a comment, a question, an answer, a result, an
+epic's description, a page's body, a release's notes. It shows the structure of
+the text while it is typed, continues a list on Enter and ends it on an empty
+item, and carries a toolbar and the keys for the marks nobody wants to spell
+out; ⌘/Ctrl+Enter saves from inside it, so a comment is written and sent without
+the hands leaving the text. A description or a page body opens as a surface
+rather than as six lines and grows with what is written; a comment opens small
+and grows the same way. The preview stands beside the text where the window is
+wide enough and takes its place where it is not, and a button pulls the same
+field over the whole window with the preview beside it — Escape closes that and
+stops there, because the form behind it answers Escape too. What is edited is
+Markdown and never a document model of its own
+([ADR 0007](./adr/0007-markdown-is-rendered-in-the-browser-and-never-as-html.md)).
 
 ## Screen matrix
 
@@ -24,7 +39,7 @@ read, so nothing has to be known about Markdown to write one
 | `/:project/in-progress` | In progress | shared issue list filtered to active claims | two-line rows, no horizontal scroll |
 | `/:project/needs-you` | Needs you | question, review, unready and stuck reasons, and a line where no agent could pick work up | reason and next action stay visible |
 | `/:project/issues` | All issues | shared issue list, all URL filters, and the four sorts — by epic it groups | filters open as a dismissible sheet |
-| `/:project/issues/new` | Create issue | title, Markdown description, priority, status, `ready`, and the five choices — labels, epic, parent, assignee, blockers | one column throughout; the pairs of fields stack, chips wrap, each suggestion list opens below its field |
+| `/:project/issues/new` | Create issue | title, Markdown description, priority, status, `ready`, and the five choices — labels, epic, parent, assignee, blockers | two columns from `lg`: title and description in the wide one, the eight other controls in a narrow column beside them; one column below that, in the same order, with the pairs stacked, chips wrapped and each suggestion list below its field |
 | `/:project/issues/:number` | Issue | sticky action bar, what needs attention, description and result, then tabs; editing it is guarded and a conflict is shown, not lost; a comment carries its author's edit and delete | one column; metadata as chips under the title |
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
 | `/:project/epics/new` | Create epic | title, Markdown description and the label choice | one column; the same form the epic screen edits in place |
@@ -139,8 +154,9 @@ work the second time.
 
 The wiki is flat and stays flat: a list ordered by slug, no tree and no table of
 contents, because the full-text search is what a hierarchy would have been for.
-The screen is therefore a list and a document, and the editor is a text area
-with a preview like every other Markdown field here — no toolbar, no WYSIWYG.
+The screen is therefore a list and a document, and the body is written in the
+same Markdown field as everything else here — no WYSIWYG, and a page gets no
+editor of its own.
 
 The search stands above the list rather than behind a filter sheet, and it and
 the label filter both live in the URL, so a pasted link says what it shows. An
@@ -225,7 +241,9 @@ Leaving goes back where the form was opened from — the list a create was
 started on, the epic whose key came along in the address — and falls back to
 the epic or the issue list where nothing stands behind it. `Escape` belongs to
 whatever is nearest the keyboard: an open suggestion list or dialog closes
-before the form does.
+before the form does, and a Markdown field pulled over the window is one of
+those. `⌘/Ctrl+Enter` saves from inside a text field, so what was typed does not
+have to be left first.
 
 Creating is never the key alone. The header of every list that can be added to
 carries the act as a button — New issue on the issue lists and on Needs you,
@@ -307,8 +325,13 @@ trigger, to what the screen offers next. The phone layout performs the same acti
 desktop layout.
 
 The shell renders before project data, navigation does not remount it, list rows
-are virtualized, and the Markdown pipeline arrives with the first screen that
-renders Markdown rather than with the frame. Fenced code is not highlighted; it
+are virtualized, and two things arrive after the frame rather than in it: the
+Markdown pipeline with the first screen that renders Markdown, and the editor
+with the first screen that writes it. The editor weighs about three and a half
+times what the pipeline does, which is why it is fetched when a field is first
+put on a screen and why the field is a quiet placeholder for that moment rather
+than a plainer text area that would be swapped out from under somebody who had
+started typing. Fenced code is not highlighted; it
 carries the language its fence named ([ADR 0017](./adr/0017-the-web-application-is-drawn-by-tailwind-and-base-ui-components-the-repository-owns.md)).
 Loading, empty, error and permission states are designed states rather than
 blank screens.

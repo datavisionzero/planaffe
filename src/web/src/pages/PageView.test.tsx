@@ -108,8 +108,8 @@ it("edits the body under If-Match", async () => {
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Edit" }));
-  await user.clear(screen.getByLabelText("Body"));
-  await user.type(screen.getByLabelText("Body"), "Rewritten.");
+  await user.clear(await screen.findByLabelText("Body"));
+  await user.type(await screen.findByLabelText("Body"), "Rewritten.");
   await user.click(screen.getByRole("button", { name: "Save changes" }));
 
   const write = await vi.waitFor(() => instance.calls.find((call) => call.method === "PATCH")!);
@@ -132,8 +132,8 @@ it("keeps what was typed when somebody came between, and shows what they wrote",
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Edit" }));
-  await user.clear(screen.getByLabelText("Body"));
-  await user.type(screen.getByLabelText("Body"), "Mine.");
+  await user.clear(await screen.findByLabelText("Body"));
+  await user.type(await screen.findByLabelText("Body"), "Mine.");
   await user.click(screen.getByRole("button", { name: "Save changes" }));
 
   const alert = await screen.findByRole("alert");
@@ -204,7 +204,7 @@ it("asks for the slug when a page is created", async () => {
 
   await user.type(screen.getByLabelText("Slug"), "architecture");
   await user.type(screen.getByLabelText("Title"), "Architecture");
-  await user.type(screen.getByLabelText("Body"), "# The four layers");
+  await user.type(await screen.findByLabelText("Body"), "# The four layers");
   await user.click(screen.getByRole("button", { name: "Create page" }));
 
   const write = await vi.waitFor(() => instance.calls.find((call) => call.method === "POST")!);

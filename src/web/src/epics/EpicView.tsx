@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LabelPicker } from "@/components/ui/label-picker";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MarkdownField } from "@/issues/IssueEditor";
+import { MarkdownField } from "@/shared/MarkdownField";
 import { StatusDot } from "@/issues/status";
 import { useLabels } from "@/projects/useLabels";
 import { useAbandon } from "@/shared/abandon";

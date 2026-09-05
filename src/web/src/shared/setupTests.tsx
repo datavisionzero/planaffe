@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 
 afterEach(cleanup);
@@ -41,3 +41,19 @@ if (typeof window.localStorage === "undefined" || window.localStorage === null) 
   };
   Object.defineProperty(window, "localStorage", { value: storage, configurable: true });
 }
+
+/**
+ * The Markdown editor stands in for itself here.
+ *
+ * `shared/Editor.tsx` is CodeMirror, which writes on a `contenteditable` and
+ * needs a layout to do it — jsdom lays nothing out, has no `getClientRects` on
+ * a range, and would answer every measurement with zero. Driving it here would
+ * test the emptiness of jsdom rather than the application.
+ *
+ * So every test writes into `StandInEditor` instead: the same accessible name,
+ * the same value, the same ⌘/Ctrl+Enter, and the same toolbar handle. What the
+ * toolbar does is a set of pure functions over a selection
+ * (`shared/markdownCommands.ts`) and is tested as such. What is not covered
+ * here is CodeMirror itself — that is checked in a browser.
+ */
+vi.mock("@/shared/Editor", () => import("./StandInEditor"));

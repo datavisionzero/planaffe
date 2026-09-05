@@ -51,6 +51,6 @@ export default defineConfig({
 
   test: {
     environment: "jsdom",
-    setupFiles: ["./src/shared/setupTests.ts"],
+    setupFiles: ["./src/shared/setupTests.tsx"],
   },
 });

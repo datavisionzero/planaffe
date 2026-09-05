@@ -26,6 +26,7 @@ export type ShortcutId =
   | "list:search"
   | "list:close"
   | "form:cancel"
+  | "form:submit"
   | "palette:next"
   | "palette:previous"
   | "palette:run"
@@ -67,6 +68,9 @@ export const shortcuts: Shortcut[] = [
 
   // The same key the button beside it is: one behaviour, two ways to it.
   { id: "form:cancel", key: "Escape", what: "Leave the form, asking first if anything was written", group: "Forms" },
+  // From inside the text, where leaving it first was the only way to the
+  // button: a comment is written and sent without the hands moving.
+  { id: "form:submit", key: "Enter", mod: true, what: "Save the text you are in", group: "Forms" },
 
   { id: "palette:next", key: "ArrowDown", what: "Next result", group: "Command palette" },
   { id: "palette:previous", key: "ArrowUp", what: "Previous result", group: "Command palette" },

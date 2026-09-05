@@ -170,6 +170,14 @@ tab is hidden — and hands the screen the wake pulse instead of a second
 connection. Neither count writes its filter down again: `shell/views.ts` is
 where a view says what it shows, and `viewOf` is how the number beside a link
 asks the question the link leads to.
+Everything written in the application goes through
+`shared/MarkdownField.tsx`, and only `shared/Editor.tsx` behind it knows
+CodeMirror: the field is what the screens import, the editor is a chunk of its
+own that arrives when a field is first put on a screen (ADR 0006, ADR 0023), and
+what the toolbar does to a selection is a set of pure functions in
+`shared/markdownCommands.ts` so that it can be tested without a browser. jsdom
+lays nothing out, so the tests write into `shared/StandInEditor.tsx` in the
+editor's place; CodeMirror itself is checked in a browser.
 `components/ui/` is what the shadcn CLI
 generated and `index.css` is the token layer; both are the repository's to
 edit. `api/client.ts` is the one way to the instance — `openapi-fetch` over the

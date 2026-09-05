@@ -17,7 +17,8 @@ import { stale } from "@/shared/stale";
 import { keyPath, pathKey } from "@/shell/views";
 import { PriorityMark } from "./priority";
 import { StatusDot } from "./status";
-import { EditIssueForm, MarkdownField } from "./IssueEditor";
+import { MarkdownField } from "@/shared/MarkdownField";
+import { EditIssueForm } from "./IssueEditor";
 
 type Load<T> = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; value: T };
 /** The issue alone can also be gone: deleted, and restorable until a moment. */
@@ -343,7 +344,7 @@ function TextAction({ label, placeholder, multiline, initial, onRun, onChanged, 
   const [text, setText] = useState(initial ?? ""); const [busy, setBusy] = useState(false); const [error, setError] = useState<string>();
   const id = useId();
   async function run() { if (!text.trim()) return; setBusy(true); setError(undefined); try { onChanged(await onRun(text)); setText(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); } finally { setBusy(false); } }
-  return <div className="mt-3 grid max-w-xl gap-2">{multiline ? <MarkdownField label={label} value={text} onChange={setText} /> : <label className="grid gap-1 text-sm font-medium">{label}<Input id={id} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} /></label>}<div className="flex gap-2"><Button size="sm" disabled={busy || !text.trim()} onClick={() => void run()}>{busy ? "Saving…" : label}</Button>{onCancel && <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>}</div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}</div>;
+  return <div className="mt-3 grid max-w-xl gap-2">{multiline ? <MarkdownField label={label} value={text} onChange={setText} size="compact" hint={placeholder} onSubmit={() => void run()} /> : <label className="grid gap-1 text-sm font-medium">{label}<Input id={id} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} /></label>}<div className="flex gap-2"><Button size="sm" disabled={busy || !text.trim()} onClick={() => void run()}>{busy ? "Saving…" : label}</Button>{onCancel && <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>}</div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}</div>;
 }
 
 function History({ loaded }: { loaded: Load<HistoryEntry[]> }) {

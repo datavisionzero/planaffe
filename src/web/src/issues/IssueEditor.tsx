@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { LabelPicker } from "@/components/ui/label-picker";
 import { useEpics } from "@/epics/useEpics";
 import { useLabels } from "@/projects/useLabels";
-import { Markdown } from "@/shared/Markdown";
+import { MarkdownField } from "@/shared/MarkdownField";
 import { useAbandon } from "@/shared/abandon";
 import { PageHeader } from "@/shared/PageHeader";
 import { stale } from "@/shared/stale";
@@ -183,25 +183,26 @@ function IssueForm({ initial, epic, submit, saving, refused, notice, onSubmit, o
     ? `${chosenEpic.key} is closed. Saving attaches this issue and reopens the epic.`
     : undefined;
 
-  return <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => { event.preventDefault(); void onSubmit(draft); }}>
+  // Two columns where there is room: what is written stays wide, and the eight
+  // controls around it stand beside it rather than crowding in above and below
+  // (`docs/human-interface.md`). One column on a phone, in the order below.
+  return <form className="mx-auto grid w-full max-w-6xl gap-4 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6" onSubmit={(event) => { event.preventDefault(); void onSubmit(draft); }}>
+    <div className="grid content-start gap-4">
     <label className="grid gap-1 text-sm font-medium">Title<Input id={titleId} required autoFocus value={draft.title} onChange={(e) => set("title", e.target.value)} /></label>
-    <MarkdownField label="Description" value={draft.description} onChange={(value) => set("description", value)} />
-    <div className="grid gap-3 sm:grid-cols-3"><Select label="Priority" value={draft.priority} onChange={(value) => set("priority", Number(value))}>{[0,1,2,3,4].map((x) => <option key={x} value={x}>{priorityLabel(x)}</option>)}</Select>{parkable(initial) ? <Select label="Status" value={draft.status} onChange={(value) => set("status", value as "backlog" | "todo")}><option value="todo">Todo</option><option value="backlog">Backlog</option></Select> : <Select label="Status" hint="Changed through the issue's own actions" value={initial!.status} disabled onChange={() => undefined}><option value={initial!.status}>{statusLabel(initial!.status)}</option></Select>}<label className="flex items-end gap-2 pb-2 text-sm"><input id={readyId} type="checkbox" checked={draft.ready} onChange={(e) => set("ready", e.target.checked)} /> Ready</label></div>
+    <MarkdownField label="Description" value={draft.description} onChange={(value) => set("description", value)} hint="What has to be true when this is done?" />
+    </div>
+    <div className="grid content-start gap-4">
+    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1"><Select label="Priority" value={draft.priority} onChange={(value) => set("priority", Number(value))}>{[0,1,2,3,4].map((x) => <option key={x} value={x}>{priorityLabel(x)}</option>)}</Select>{parkable(initial) ? <Select label="Status" value={draft.status} onChange={(value) => set("status", value as "backlog" | "todo")}><option value="todo">Todo</option><option value="backlog">Backlog</option></Select> : <Select label="Status" hint="Changed through the issue's own actions" value={initial!.status} disabled onChange={() => undefined}><option value={initial!.status}>{statusLabel(initial!.status)}</option></Select>}<label className="flex items-end gap-2 pb-2 text-sm"><input id={readyId} type="checkbox" checked={draft.ready} onChange={(e) => set("ready", e.target.checked)} /> Ready</label></div>
     <LabelPicker label="Labels" labels={labels} value={draft.labels} onChange={(names) => set("labels", names)} onCreate={create} error={at.labels} />
-    <div className="grid gap-3 sm:grid-cols-2"><EpicPicker epics={epics} value={draft.epic} onChange={(key) => set("epic", key)} error={at.epic} /><IssuePicker label="Parent issue" project={project} exclude={initial ? [initial.key] : []} value={draft.parent === "" ? [] : [draft.parent]} onChange={(keys) => set("parent", keys[0] ?? "")} error={at.parent} /><AssigneePicker project={project} value={draft.assignee} onChange={(name) => set("assignee", name)} error={at.assignee} />{!initial && <IssuePicker label="Blocked by" project={project} multiple value={draft.blockedBy} onChange={(keys) => set("blockedBy", keys)} error={at.blocked_by} />}</div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"><EpicPicker epics={epics} value={draft.epic} onChange={(key) => set("epic", key)} error={at.epic} /><IssuePicker label="Parent issue" project={project} exclude={initial ? [initial.key] : []} value={draft.parent === "" ? [] : [draft.parent]} onChange={(keys) => set("parent", keys[0] ?? "")} error={at.parent} /><AssigneePicker project={project} value={draft.assignee} onChange={(name) => set("assignee", name)} error={at.assignee} />{!initial && <IssuePicker label="Blocked by" project={project} multiple value={draft.blockedBy} onChange={(keys) => set("blockedBy", keys)} error={at.blocked_by} />}</div>
     {reopens && <p role="status" className="text-sm text-brand">{reopens}</p>}
     {/* A conflict says everything the refusal's own sentence says, and says
         what to do about it, so it stands in its place rather than beside it. */}
     {notice ?? (refused?.why && <p role="alert" className="text-sm text-destructive">{refused.why}</p>)}
     <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={leave}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : submit}</Button></div>
+    </div>
     {dialog}
   </form>;
-}
-
-export function MarkdownField({ label, value, onChange, required }: { label: string; value: string; onChange: (value: string) => void; required?: boolean }) {
-  const [preview, setPreview] = useState(false);
-  const id = useId();
-  return <div className="grid gap-1 text-sm font-medium"><span className="flex items-center justify-between"><label htmlFor={id}>{label}</label><button type="button" className="text-xs font-normal text-brand hover:underline" onClick={() => setPreview((x) => !x)}>{preview ? "Edit" : "Preview"}</button></span>{preview ? <div className="min-h-32 rounded-lg border p-3"><Markdown>{value || "_Nothing to preview._"}</Markdown></div> : <textarea id={id} required={required} value={value} onChange={(e) => onChange(e.target.value)} className="min-h-32 rounded-lg border bg-background px-3 py-2 font-mono text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" />}</div>;
 }
 
 function Select({ label, hint, value, disabled, onChange, children }: { label: string; hint?: string; value: string | number; disabled?: boolean; onChange: (value: string) => void; children: React.ReactNode }) {

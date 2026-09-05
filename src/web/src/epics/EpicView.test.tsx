@@ -74,8 +74,8 @@ it("edits the living document under If-Match", async () => {
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Edit" }));
-  await user.clear(screen.getByLabelText("Description"));
-  await user.type(screen.getByLabelText("Description"), "Rewritten.");
+  await user.clear(await screen.findByLabelText("Description"));
+  await user.type(await screen.findByLabelText("Description"), "Rewritten.");
   await user.click(screen.getByRole("button", { name: "Save changes" }));
 
   const request = await vi.waitFor(() => {
@@ -106,8 +106,8 @@ it("keeps the typed text on a stale refusal and lets the next save through", asy
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Edit" }));
-  await user.clear(screen.getByLabelText("Description"));
-  await user.type(screen.getByLabelText("Description"), "Mine.");
+  await user.clear(await screen.findByLabelText("Description"));
+  await user.type(await screen.findByLabelText("Description"), "Mine.");
   await user.click(screen.getByRole("button", { name: "Save changes" }));
 
   const conflict = await screen.findByRole("alert");
@@ -175,7 +175,7 @@ it("creates an epic and opens it", async () => {
   const user = userEvent.setup();
 
   await user.type(screen.getByLabelText("Title"), "The web application");
-  await user.type(screen.getByLabelText("Description"), "React on its own toolchain.");
+  await user.type(await screen.findByLabelText("Description"), "React on its own toolchain.");
   await user.type(await screen.findByRole("combobox", { name: "Labels" }), "cut-3{Enter}");
   await user.click(screen.getByRole("button", { name: "Create epic" }));
 

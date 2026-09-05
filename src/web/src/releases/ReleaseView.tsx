@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MarkdownField } from "@/issues/IssueEditor";
+import { MarkdownField } from "@/shared/MarkdownField";
 import { StatusDot } from "@/issues/status";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { Markdown } from "@/shared/Markdown";

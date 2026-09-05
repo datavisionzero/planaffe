@@ -20,7 +20,7 @@ it("creates one issue with its fields and opens it", async () => {
   const user = userEvent.setup();
 
   await user.type(screen.getByLabelText("Title"), "Human action");
-  await user.type(screen.getByLabelText("Description"), "A **clear** description.");
+  await user.type(await screen.findByLabelText("Description"), "A **clear** description.");
   await user.click(screen.getByRole("button", { name: "Preview" }));
   expect(screen.getByText("clear").tagName).toBe("STRONG");
   await user.click(screen.getByRole("button", { name: "Edit" }));
@@ -123,8 +123,8 @@ it("keeps the typed text on a stale refusal and lets the next save through", asy
   renderAt("/", <EditIssueForm issue={issue} onSaved={saved} onCancel={vi.fn()} />);
   const user = userEvent.setup();
 
-  await user.clear(screen.getByLabelText("Description"));
-  await user.type(screen.getByLabelText("Description"), "My version.");
+  await user.clear(await screen.findByLabelText("Description"));
+  await user.type(await screen.findByLabelText("Description"), "My version.");
   await user.click(screen.getByRole("button", { name: "Save changes" }));
 
   const conflict = await screen.findByRole("alert");

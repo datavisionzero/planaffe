@@ -66,8 +66,8 @@ it("keeps the notes of a published release editable", async () => {
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole("button", { name: "Edit notes" }));
-  await user.clear(screen.getByLabelText("Notes"));
-  await user.type(screen.getByLabelText("Notes"), "The third cut.");
+  await user.clear(await screen.findByLabelText("Notes"));
+  await user.type(await screen.findByLabelText("Notes"), "The third cut.");
   await user.click(screen.getByRole("button", { name: "Save notes" }));
 
   const request = await vi.waitFor(() => instance.calls.find((call) => call.method === "PATCH")!);
@@ -90,7 +90,7 @@ it("shows the name, the notes and what ships before publishing, and lands on the
   await user.click(await screen.findByRole("button", { name: "Publish…" }));
   const dialog = screen.getByRole("dialog");
   expect(within(dialog).getByText("PLAN-41")).toBeInTheDocument();
-  expect(within(dialog).getByLabelText("Notes")).toHaveValue("Everything closed since 0.3.0.");
+  expect(await within(dialog).findByLabelText("Notes")).toHaveValue("Everything closed since 0.3.0.");
   await user.type(within(dialog).getByLabelText("Name"), "0.4.0");
   await user.click(within(dialog).getByRole("button", { name: "Publish release" }));
 
