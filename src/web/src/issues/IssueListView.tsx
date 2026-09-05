@@ -17,7 +17,8 @@ import { PageHeader } from "@/shared/PageHeader";
 import { is, typing } from "@/shell/shortcuts";
 import { keyPath, type View } from "@/shell/views";
 import { AssigneeFilter, AuthorFilter, EpicFilter } from "./pickers";
-import { priorityLabel } from "./priority";
+import { PriorityMark } from "./priority";
+import { priorityLabel } from "./priorityLabel";
 import { StatusDot } from "./status";
 
 type PageState =
@@ -180,6 +181,8 @@ const picker = "w-44 text-xs font-normal text-muted-foreground";
 function FilterBar({ project, search, change, changeAll, labels, epics, clear, className }: { project: string | undefined; search: URLSearchParams; change: (name: string, value?: string) => void; changeAll: (name: string, values: string[]) => void; labels: PickableLabel[]; epics: Schemas["EpicSummary"][]; clear: () => void; className?: string }) {
   return <div className={cn("flex flex-wrap items-end gap-2 border-b bg-muted/30 p-2", className)} role="group" aria-label="Issue filters">
     <Filter label="Status" name="status" value={search.get("status") ?? ""} change={change}><option value="">Any</option>{["backlog", "todo", "in_progress", "review", "done", "canceled"].map((value) => <option key={value}>{value}</option>)}</Filter>
+    {/* A native option holds text and nothing else, so the choice carries the
+        word the row's accessible name carries rather than the mark it draws. */}
     <Filter label="Priority" name="priority" value={search.get("priority") ?? ""} change={change}><option value="">Any</option>{[0, 1, 2, 3, 4].map((value) => <option key={value} value={value}>{priorityLabel(value)}</option>)}</Filter>
     {/* Several labels at once: the query has carried repeated `label` values
         all along, and one text field could only ever say one of them. */}
@@ -206,7 +209,7 @@ function Filter({ label, name, value, change, children }: { label: string; name:
 }
 
 function IssueRow({ issue, active, onActive, style }: { issue: IssueSummary; active: boolean; onActive: () => void; style: React.CSSProperties }) {
-  return <div role="option" aria-selected={active} className="absolute left-0 top-0 w-full border-b" style={style} onMouseMove={onActive}><Link to={keyPath(issue.key)} className={`grid h-full grid-cols-[auto_4.5rem_1fr_auto] items-center gap-x-2 px-3 hover:bg-accent focus-visible:bg-accent focus-visible:outline-hidden sm:grid-cols-[auto_5rem_minmax(8rem,1fr)_auto_auto_auto] ${active ? "bg-accent/70" : ""}`}><StatusDot status={issue.status} /><span className="font-mono text-xs text-muted-foreground">{issue.key}</span><span className="min-w-0 truncate"><span>{issue.title}</span>{issue.deleted_at != null && <span className="text-muted-foreground"> · deleted</span>}<span className="mt-0.5 block truncate text-xs text-muted-foreground sm:hidden">{issue.claim?.holder.name ?? issue.labels.join(" · ")}</span></span><span className="hidden items-center gap-1 md:flex">{issue.labels.slice(0, 3).map((name) => <Badge key={name} variant="secondary" className="font-normal">{name}</Badge>)}</span><span className="hidden max-w-32 truncate text-xs text-muted-foreground sm:inline">{issue.claim?.holder.name ?? issue.assignee?.name}</span><span className="w-6 text-right font-mono text-xs text-muted-foreground">{priorityLabel(issue.priority)}</span></Link></div>;
+  return <div role="option" aria-selected={active} className="absolute left-0 top-0 w-full border-b" style={style} onMouseMove={onActive}><Link to={keyPath(issue.key)} className={`grid h-full grid-cols-[auto_4.5rem_1fr_auto] items-center gap-x-2 px-3 hover:bg-accent focus-visible:bg-accent focus-visible:outline-hidden sm:grid-cols-[auto_5rem_minmax(8rem,1fr)_auto_auto_auto] ${active ? "bg-accent/70" : ""}`}><StatusDot status={issue.status} /><span className="font-mono text-xs text-muted-foreground">{issue.key}</span><span className="min-w-0 truncate"><span>{issue.title}</span>{issue.deleted_at != null && <span className="text-muted-foreground"> · deleted</span>}<span className="mt-0.5 block truncate text-xs text-muted-foreground sm:hidden">{issue.claim?.holder.name ?? issue.labels.join(" · ")}</span></span><span className="hidden items-center gap-1 md:flex">{issue.labels.slice(0, 3).map((name) => <Badge key={name} variant="secondary" className="font-normal">{name}</Badge>)}</span><span className="hidden max-w-32 truncate text-xs text-muted-foreground sm:inline">{issue.claim?.holder.name ?? issue.assignee?.name}</span><span className="flex w-6 justify-end"><PriorityMark priority={issue.priority} /></span></Link></div>;
 }
 
 function Loading() { return <div className="divide-y" aria-busy>{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex h-11 items-center gap-3 px-4"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 flex-1" /></div>)}</div>; }

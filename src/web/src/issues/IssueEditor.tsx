@@ -11,7 +11,7 @@ import { useAbandon } from "@/shared/abandon";
 import { PageHeader } from "@/shared/PageHeader";
 import { keyPath } from "@/shell/views";
 import { AssigneePicker, EpicPicker, IssuePicker } from "./pickers";
-import { priorityLabel } from "./priority";
+import { priorityLabel } from "./priorityLabel";
 import { statusLabel } from "./statusLabel";
 
 type NewIssue = Schemas["NewIssue"];

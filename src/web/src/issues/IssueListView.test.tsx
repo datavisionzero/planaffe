@@ -21,6 +21,11 @@ function anIssue(key: string, title: string, extra: Record<string, unknown> = {}
 
 const onePage = { items: [anIssue("PLAN-1", "The first one")], total: 1, has_more: false, next_cursor: null };
 
+const everyStep = {
+  items: [0, 1, 2, 3, 4].map((priority) => anIssue(`PLAN-${priority + 1}`, `Step ${priority}`, { priority })),
+  total: 5, has_more: false, next_cursor: null,
+};
+
 const anAgent = {
   id: "0199a000-0000-7000-8000-000000000009",
   kind: "agent", name: "builder", owner: { id: "u", kind: "user", name: "maintainer" },
@@ -99,4 +104,38 @@ it("offers users and agents as authors, and no nobody", async () => {
   expect(within(authors).getByText("maintainer")).toBeInTheDocument();
   expect(within(authors).getByText("builder")).toBeInTheDocument();
   expect(within(authors).queryByText("Nobody")).not.toBeInTheDocument();
+});
+
+/**
+ * The row says the step twice, as the status dot beside it does: a mark that is
+ * read at a glance, and the word that is read out. `P0` to `P4` did neither —
+ * one character apart and equally loud, whichever step it was.
+ */
+it("marks the priority of a row with its word, not with a number", async () => {
+  renderList({ "GET /issues": everyStep });
+
+  await screen.findByText("Step 0");
+
+  for (const [priority, word] of [[0, "none"], [1, "low"], [2, "medium"], [3, "high"], [4, "urgent"]] as const) {
+    const row = screen.getByText(`Step ${priority}`).closest<HTMLElement>("[role=option]")!;
+    expect(within(row).getByTitle(`Priority: ${word}`)).toBeInTheDocument();
+    expect(row).toHaveTextContent(`Priority: ${word}`);
+    expect(row).not.toHaveTextContent(`P${priority}`);
+  }
+});
+
+/** Colour is spent once, and `none` is the step that must not draw the eye. */
+it("lights as many bars as the step is high, and colours only urgent", async () => {
+  renderList({ "GET /issues": everyStep });
+
+  await screen.findByText("Step 0");
+
+  for (const priority of [0, 1, 2, 3, 4]) {
+    const row = screen.getByText(`Step ${priority}`).closest<HTMLElement>("[role=option]")!;
+    const bars = Array.from(row.querySelectorAll("[title^='Priority'] span[aria-hidden] > span"));
+
+    expect(bars).toHaveLength(4);
+    expect(bars.filter((bar) => !bar.className.includes("bg-foreground/15"))).toHaveLength(priority);
+    expect(bars.some((bar) => bar.className.includes("bg-destructive"))).toBe(priority === 4);
+  }
 });

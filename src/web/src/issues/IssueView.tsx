@@ -13,7 +13,7 @@ import { Markdown } from "@/shared/Markdown";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
 import { keyPath, pathKey } from "@/shell/views";
-import { priorityLabel } from "./priority";
+import { PriorityMark } from "./priority";
 import { StatusDot } from "./status";
 import { EditIssueForm, MarkdownField } from "./IssueEditor";
 
@@ -188,7 +188,7 @@ function ActionBar({ issue, onEdit, onChanged, onDeleted }: { issue: Issue; onEd
 function Chips({ issue }: { issue: Issue }) {
   return <div className="mb-5 flex flex-wrap items-center gap-2 md:hidden" aria-label="At a glance">
     <Badge variant="outline" className="font-normal"><StatusDot status={issue.status} withLabel /></Badge>
-    <Badge variant="outline" className="font-mono font-normal">{priorityLabel(issue.priority)}</Badge>
+    <Badge variant="outline" className="font-normal"><PriorityMark priority={issue.priority} withLabel /></Badge>
     <Badge variant={issue.ready ? "secondary" : "outline"} className="font-normal">{issue.ready ? "ready" : "not ready"}</Badge>
     {issue.epic && <Badge variant="outline" className="font-normal"><Link className="text-brand hover:underline" to={keyPath(issue.epic.key)}>{issue.epic.key}</Link></Badge>}
   </div>;
@@ -302,7 +302,7 @@ function historyText(x: HistoryEntry) {
 function value(x: unknown) { if (x == null) return null; if (typeof x === "object" && "name" in x && typeof x.name === "string") return x.name; return String(x); }
 
 function Metadata({ issue }: { issue: Issue }) {
-  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l"><Field name="Status" className="max-md:hidden"><StatusDot status={issue.status} withLabel /></Field><Field name="Priority" className="max-md:hidden"><span className="font-mono text-xs">{priorityLabel(issue.priority)}</span></Field><Field name="Ready" className="max-md:hidden">{issue.ready ? "yes" : "no"}</Field>{issue.epic && <Field name="Epic" className="max-md:hidden"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}{issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}{issue.assignee && <Field name="Assignee">{issue.assignee.name}</Field>}{issue.labels.length > 0 && <Field name="Labels"><span className="flex flex-wrap gap-1">{issue.labels.map((x) => <Badge key={x.name} variant="secondary" className="font-normal">{x.name}</Badge>)}</span></Field>}<Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field><Field name="Release">{issue.release === null ? <span className="text-muted-foreground">not in a release</span> : issue.release}</Field></aside>;
+  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l"><Field name="Status" className="max-md:hidden"><StatusDot status={issue.status} withLabel /></Field><Field name="Priority" className="max-md:hidden"><PriorityMark priority={issue.priority} withLabel /></Field><Field name="Ready" className="max-md:hidden">{issue.ready ? "yes" : "no"}</Field>{issue.epic && <Field name="Epic" className="max-md:hidden"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}{issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}{issue.assignee && <Field name="Assignee">{issue.assignee.name}</Field>}{issue.labels.length > 0 && <Field name="Labels"><span className="flex flex-wrap gap-1">{issue.labels.map((x) => <Badge key={x.name} variant="secondary" className="font-normal">{x.name}</Badge>)}</span></Field>}<Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field><Field name="Release">{issue.release === null ? <span className="text-muted-foreground">not in a release</span> : issue.release}</Field></aside>;
 }
 
 /**

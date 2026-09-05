@@ -85,6 +85,15 @@ filter choices. An empty project and an empty filtered result are distinct
 states. The command palette shows a few full-text matches and links to the full
 filtered list.
 
+A row marks the two things that are scales rather than words twice over, so
+that neither rests on colour alone. The status is a dot whose fill says the
+stage — nothing decided is an empty ring, work in flight is half full, what has
+come to rest is solid — and whose hue says which state it is. The priority is
+four bars of rising height with as many lit as the step is high, pale at `none`
+and coloured at `urgent` and nowhere else. Beside each stands its word, read out
+where it is not shown. The choices that set them carry the same words, because a
+native option holds text and nothing else.
+
 `j` and `k` move the active row, `Enter` opens it, `/` focuses
 search and `Escape` closes the topmost filter or preview — the same list `?`
 shows. Focus and the active
