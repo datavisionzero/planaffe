@@ -1,10 +1,27 @@
 import { MoreHorizontalIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Navigate, NavLink, Route, Routes } from "react-router";
+import { Navigate, NavLink, Route, Routes, useLocation, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/shared/PageHeader";
+
+/**
+ * The address of the screen itself.
+ *
+ * Every one of these screens is the element of a splat route, and a relative
+ * link inside a splat route resolves against everything the splat matched:
+ * from `/settings/security` a `to="tokens"` entry led to
+ * `/settings/security/tokens`, which is no area at all. One click was enough
+ * to make every other area unreachable, and the address grew a segment with
+ * each further one. The splat is exactly what the screen is not, so taking it
+ * off the current address leaves the screen.
+ */
+function useScreen() {
+  const here = useLocation().pathname.replace(/\/$/, "").split("/");
+  const inside = useParams()["*"] ?? "";
+  return here.slice(0, here.length - (inside === "" ? 0 : inside.split("/").length)).join("/");
+}
 
 /** One area of an administration screen: a nav entry and the route behind it. */
 export type Area = {
@@ -29,6 +46,8 @@ export type Area = {
  * route, and nothing else moves.
  */
 export function SettingsShell({ title, areas }: { title: string; areas: Area[] }) {
+  const screen = useScreen();
+
   return (
     <>
       <PageHeader title={title} />
@@ -40,7 +59,7 @@ export function SettingsShell({ title, areas }: { title: string; areas: Area[] }
             {areas.map((area) => (
               <li key={area.to}>
                 <NavLink
-                  to={area.to}
+                  to={`${screen}/${area.to}`}
                   className={({ isActive }) =>
                     cn(
                       "block shrink-0 rounded-md px-3 py-1.5 text-sm whitespace-nowrap hover:bg-accent",
@@ -58,7 +77,7 @@ export function SettingsShell({ title, areas }: { title: string; areas: Area[] }
           <Routes>
             {/* The address the screen had before it had areas still works, and
                 lands on the first one. */}
-            <Route index element={<Navigate to={areas[0].to} replace />} />
+            <Route index element={<Navigate to={`${screen}/${areas[0].to}`} replace />} />
             {areas.map((area) => (
               <Route key={area.to} path={area.path ?? area.to} element={area.element} />
             ))}

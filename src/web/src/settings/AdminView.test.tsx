@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Route, Routes } from "react-router";
+import { Route, Routes, useLocation } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/session/Session";
 import { aProject, aUser, installInstance, renderAt } from "@/shared/testing";
@@ -18,8 +18,13 @@ function admin(routes: Parameters<typeof installInstance>[0], at = "/admin/users
     ...routes,
   });
 
-  renderAt(at, <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/admin/*" element={<AdminView />} /></Routes></SessionProvider>);
+  renderAt(at, <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/admin/*" element={<AdminView />} /></Routes><At /></SessionProvider>);
   return instance;
+}
+
+/** Where the click left the reader. */
+function At() {
+  return <span data-testid="at">{useLocation().pathname}</span>;
 }
 
 /** The row's acts live in its menu; opening it is the first half of clicking one. */
@@ -131,4 +136,29 @@ it("asks for a project's access only on the project's own address", async () => 
   await user.click(screen.getByRole("link", { name: "PLAN · planaffe" }));
   expect(await screen.findByRole("button", { name: "Grant access" })).toBeInTheDocument();
   expect(instance.calls.filter((call) => new URL(call.url).pathname.endsWith("/users") && new URL(call.url).pathname.startsWith("/projects/"))).toHaveLength(1);
+});
+
+// The widest of the three areas: `projects/*` matches two segments, so the
+// address of the screen is two segments up rather than one. The nav entries
+// were relative, and a relative link inside a splat route resolves against
+// everything the splat matched: from here "Users" led to
+// `/admin/projects/PLAN/users`, which is no area at all, and every further
+// click added another segment.
+it("leaves a project behind when another area is picked", async () => {
+  admin({ "GET /users": [maintainer], "GET /projects/PLAN/users": [maintainer] }, "/admin/projects/PLAN");
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("link", { name: "Users" }));
+
+  expect(screen.getByTestId("at")).toHaveTextContent("/admin/users");
+  expect(await screen.findByRole("heading", { name: "Users" })).toBeInTheDocument();
+});
+
+// An entry that led somewhere nobody stands never read as the current one
+// either, not even while its own area was open.
+it("marks the area a project is read in as the current one", async () => {
+  admin({ "GET /users": [maintainer], "GET /projects/PLAN/users": [maintainer] }, "/admin/projects/PLAN");
+
+  expect(await screen.findByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("link", { name: "Users" })).not.toHaveAttribute("aria-current");
 });

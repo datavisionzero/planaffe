@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Route, Routes } from "react-router";
+import { Route, Routes, useLocation } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/session/Session";
 import { aUser, installInstance, renderAt } from "@/shared/testing";
@@ -14,6 +14,11 @@ const anAgent = {
   token: { prefix: "pa_wxyz", created_at: "2026-09-02T10:00:00Z", revoked_at: null },
 };
 
+/** Where the click left the reader. */
+function At() {
+  return <span data-testid="at">{useLocation().pathname}</span>;
+}
+
 function settings(routes: Parameters<typeof installInstance>[0] = {}, at = "/settings") {
   const instance = installInstance({
     "GET /sessions": [],
@@ -22,7 +27,7 @@ function settings(routes: Parameters<typeof installInstance>[0] = {}, at = "/set
     ...routes,
   });
 
-  renderAt(at, <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/settings/*" element={<SettingsView />} /></Routes></SessionProvider>);
+  renderAt(at, <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/settings/*" element={<SettingsView />} /></Routes><At /></SessionProvider>);
   return instance;
 }
 
@@ -99,4 +104,24 @@ it("gives each area an address of its own", async () => {
 
   expect(await screen.findByRole("heading", { name: "User tokens" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Profile" })).not.toBeInTheDocument();
+});
+
+// The nav entries were relative, and a relative link inside a splat route
+// resolves against the whole address the splat matched: from
+// `/settings/security` the "User tokens" entry led to
+// `/settings/security/tokens`, which matches no area at all. Every click added
+// a segment, and after the first one no other area could be reached.
+it("moves between areas from an area, without growing the address", async () => {
+  settings({}, "/settings/security");
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("link", { name: "User tokens" }));
+
+  expect(screen.getByTestId("at")).toHaveTextContent("/settings/tokens");
+  expect(await screen.findByRole("heading", { name: "User tokens" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("link", { name: "Profile" }));
+
+  expect(screen.getByTestId("at")).toHaveTextContent("/settings/profile");
+  expect(await screen.findByRole("heading", { name: "Profile" })).toBeInTheDocument();
 });
