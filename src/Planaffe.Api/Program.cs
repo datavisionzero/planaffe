@@ -65,6 +65,7 @@ builder.Services.AddScoped<CreateUser>();
 builder.Services.AddScoped<ListUsers>();
 builder.Services.AddScoped<RenameUser>();
 builder.Services.AddScoped<ResendInvitation>();
+builder.Services.AddScoped<IssueAccessLink>();
 builder.Services.AddScoped<ChangeUserLifecycle>();
 builder.Services.AddScoped<RequestEmailChange>();
 builder.Services.AddScoped<ConfirmEmailChange>();

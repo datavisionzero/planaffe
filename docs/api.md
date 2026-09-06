@@ -384,9 +384,11 @@ Where a rule differs between a user and an agent, the endpoint below says so.
 
 | method | path | who | does |
 |---|---|---|---|
-| `POST` | `/users` | administrator | `{ name, email, administrator? }` → 201 `User`; creates an invited user and sends the activation link. No user token is created |
+| `POST` | `/users` | administrator | `{ name, email, administrator? }` → 201 `User`; creates an invited user and, where SMTP is configured, sends the activation link. No user token is created |
 | `GET` | `/users` | administrator | every user, including invited and deactivated; no pagination, the list is people |
 | `POST` | `/users/{id}/invitation` | administrator | replace the live invitation and send a new link; invited users only → 202 |
+| `POST` | `/users/{id}/invitation-link` | administrator | replace the live invitation and return it as `AccessLink` instead of mailing it; invited users only |
+| `POST` | `/users/{id}/recovery-link` | administrator | issue a one-hour password link and return it as `AccessLink` instead of mailing it; active users only |
 | `POST` | `/users/{id}/deactivate` | administrator | suspend the user, revoke every browser session, and prevent their user and agent tokens from authenticating |
 | `POST` | `/users/{id}/reactivate` | administrator | reactivate a deactivated user; separately revoked tokens stay revoked |
 | `PATCH` | `/users/{id}` | administrator | `{ administrator }` — grant or revoke the instance role; demoting the last active administrator is refused |
@@ -849,11 +851,34 @@ indistinguishable for unknown, invited, deactivated and active addresses. If
 SMTP itself is absent it returns `smtp-not-configured` for every address.
 Passwords never appear in response bodies or logs.
 
+That last case is why the two `-link` endpoints exist. Transactional email is
+optional ([ADR 0018](./adr/0018-transactional-email-is-an-optional-instance-capability.md))
+and there is no second way to a new password, so an instance without SMTP would
+lock out whoever forgot theirs — with no administrator able to help and the last
+active administrator not deactivatable, the instance would be shut with them. An
+invitation has the same hole, and it is closed the same way rather than a second
+one: the very secret the email would have carried is issued and returned, and the
+administrator transports it. An administrator therefore never learns anybody's
+password; only the person themselves sets it.
+
+Neither endpoint is bound to the absence of SMTP. A capability that appears and
+disappears with an operating setting explains itself to nobody, and a link is
+worth having beside a mail that is slow, filtered or misaddressed. Both replace
+whatever live secret of that purpose the user had, exactly as a resend does, so
+a link mailed a minute ago stops working.
+
+`AccessLink` is `{ link, expires_at }`, and `link` is a URI reference: absolute
+where `PLANAFFE_PUBLIC_URL` is set, and the root-relative path otherwise, to be
+resolved against the address the caller reached the instance at. It is never
+assembled from an inbound `Host` header.
+
 ### User lifecycle and project access
 
 | method | path | who | does |
 |---|---|---|---|
 | `POST` | `/users/{id}/invitation` | administrator | replace the live invitation and resend it; 202 |
+| `POST` | `/users/{id}/invitation-link` | administrator | replace the live invitation and return it rather than mail it; invited users only |
+| `POST` | `/users/{id}/recovery-link` | administrator | issue a password link and return it rather than mail it; active users only |
 | `POST` | `/users/{id}/deactivate` | administrator | set `deactivated`, revoke all sessions and suspend user and owned agent authentication; the last active administrator is protected |
 | `POST` | `/users/{id}/reactivate` | administrator | set `active`; separately revoked tokens and agents stay revoked |
 | `PATCH` | `/users/{id}` | administrator | `{ administrator? }`; changing name or email for oneself uses the personal endpoints; the last active administrator is protected |

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Planaffe.Application.Acts;
 using Planaffe.Application.Ports;
 using Planaffe.Domain;
+using Planaffe.Domain.Identities;
 
 namespace Planaffe.Api.Http;
 
@@ -88,6 +89,21 @@ public static class IdentityEndpoints
             { await resend.ExecuteAsync(id, ct); return Results.Accepted(); })
             .WithName("ResendInvitation").WithSummary("Replace and resend an invited user's invitation, by name or id. Administrators only.")
             .Produces(StatusCodes.Status202Accepted).ProducesProblem(StatusCodes.Status404NotFound);
+
+        // The way into an account that does not go through an email. Both are
+        // shown rather than sent, and the administrator carries them over
+        // themselves — so nobody but the person ever knows their password.
+        door.MapPost("/users/{id}/invitation-link", (string id, IssueAccessLink issue, CancellationToken ct) =>
+                issue.ExecuteAsync(id, OneTimeSecretPurpose.Invitation, ct))
+            .WithName("IssueInvitationLink")
+            .WithSummary("Issue an invited user's activation link and return it instead of mailing it, by name or id. Administrators only.")
+            .Produces<AccessLink>().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+
+        door.MapPost("/users/{id}/recovery-link", (string id, IssueAccessLink issue, CancellationToken ct) =>
+                issue.ExecuteAsync(id, OneTimeSecretPurpose.PasswordRecovery, ct))
+            .WithName("IssueRecoveryLink")
+            .WithSummary("Issue an active user's password link and return it instead of mailing it, by name or id. Administrators only.")
+            .Produces<AccessLink>().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         door.MapPost("/users/{id}/deactivate", (string id, ChangeUserLifecycle change, CancellationToken ct) =>
                 change.ExecuteAsync(id, UserLifecycleChange.Deactivate, ct))

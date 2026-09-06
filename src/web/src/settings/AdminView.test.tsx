@@ -229,3 +229,45 @@ it("says that the administration is not this account's instead of redirecting", 
   expect(screen.getByTestId("at")).toHaveTextContent("/admin/users");
   expect(screen.getByRole("link", { name: "Back to your projects" })).toHaveFocus();
 });
+
+// There is no second way into a browser account: a password is recovered
+// through a link in an email, and email is optional. Whoever forgot theirs in
+// an instance without SMTP was locked out for good.
+it("hands over a password link rather than setting a password", async () => {
+  const instance = admin({
+    "GET /users": [maintainer],
+    [`POST /users/${maintainer.id}/recovery-link`]: { link: "/recover?secret=abc", expires_at: "2026-09-06T11:00:00Z" },
+  });
+  const user = userEvent.setup();
+
+  await act(user, "maintainer", "Password link");
+
+  // The instance answered a path, because it has not been told its public
+  // address. The browser is standing at that address and completes it.
+  expect(await screen.findByText(new URL("/recover?secret=abc", window.location.origin).toString())).toBeInTheDocument();
+  expect(instance.calls.some((call) => call.method === "PATCH")).toBe(false);
+});
+
+// An invitation has the same hole without SMTP, and it is closed the same way.
+it("offers the invitation as a link an administrator carries over", async () => {
+  admin({
+    "GET /users": [maintainer, invited],
+    [`POST /users/${invited.id}/invitation-link`]: { link: "https://plan.example.test/activate?secret=xyz", expires_at: "2026-09-13T10:00:00Z" },
+  });
+  const user = userEvent.setup();
+
+  await act(user, "newcomer", "Invitation link");
+
+  expect(await screen.findByText("https://plan.example.test/activate?secret=xyz")).toBeInTheDocument();
+});
+
+// A link is a state and not a favour: an invited user has no password to
+// recover, and an active one has no invitation left to hand over.
+it("offers each user only the link their state has", async () => {
+  admin({ "GET /users": [maintainer, invited] });
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Actions for newcomer" }));
+  expect(await screen.findByRole("menuitem", { name: "Invitation link" })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "Password link" })).not.toBeInTheDocument();
+});

@@ -285,7 +285,7 @@ breakpoint and carries the rest.
 | Label | list and inspect use | create, edit name, group and description, rename or dissolve a group, delete, restore |
 | Project | switch and inspect settings/members/instructions | create; edit name, switches and the instructions page; delete or restore when administrator |
 | Identity | inspect own profile, sessions, tokens and agents | change own name, verified email and password; revoke sessions/tokens; create or revoke own tokens and agents |
-| Administration | inspect all users, project assignments, deleted projects and SMTP status | invite/resend, deactivate/reactivate, change administrator role, assign projects, send test email |
+| Administration | inspect all users, project assignments, deleted projects and SMTP status | invite/resend, hand over an invitation or password link, deactivate/reactivate, change administrator role, assign projects, send test email |
 
 Closing an epic with open issues warns but succeeds. Adding an issue to a closed
 epic warns that the epic reopens. Publishing a release always shows its name,
@@ -310,6 +310,7 @@ who lacks authority for a visible administrative action receives `403`.
 | Manage own password, sessions and user tokens | yes | no | yes, for self |
 | Manage own agents | yes | no | yes, for self |
 | Invite or deactivate users; change administrator role | no | no | yes |
+| Hand over an invitation or password link | no | no | yes |
 | Inspect SMTP status and send a test email | no | no | yes |
 
 An administrator role grants instance administration, not implicit access to
@@ -320,6 +321,15 @@ Deactivating and demoting ask before they act, and the dialog writes the
 consequences out rather than asserting them; reactivating and granting the role
 do not. A question in front of every act is no longer a warning, only a second
 click.
+
+The user administration also hands over the two links that lead into an account:
+an invited user's activation link and an active user's password link. They are
+shown once and carried over by the administrator, who therefore never learns
+anybody's password — the person sets it themselves, which is the difference the
+history could not make visible afterwards. Both are offered whether or not SMTP
+is configured, because a control that appears and disappears with an operating
+setting explains itself to nobody; without SMTP they are the only way in at all
+([ADR 0018](./adr/0018-transactional-email-is-an-optional-instance-capability.md)).
 
 Opening an address that is not the caller's is a permission state and not a
 redirect: `/admin` without the role says that the instance administration

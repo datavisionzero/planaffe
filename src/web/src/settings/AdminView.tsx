@@ -12,6 +12,7 @@ import { date, submitting } from "./forms";
 import { Row, RowMenu, Rows, Said, Section, SettingsShell } from "./SettingsShell";
 
 type User = Schemas["UserSummary"];
+type AccessLink = Schemas["AccessLink"];
 type AdminProject = Schemas["AdminProject"];
 type Smtp = Schemas["SmtpStatus"];
 
@@ -61,6 +62,7 @@ function NotYours() {
 function Users() {
   const [users, setUsers] = useState<User[]>([]);
   const [notice, setNotice] = useState("");
+  const [issued, setIssued] = useState<AccessLink>();
   async function load() { setUsers((await api.GET("/users")).data ?? []); }
   useEffect(() => { void (async () => { await load(); })(); }, []);
   const report = reporting(setNotice, load);
@@ -85,11 +87,36 @@ function Users() {
         <Button type="submit">Invite</Button>
         <label className="flex gap-2 text-sm sm:col-span-3"><input name="administrator" type="checkbox" /> Administrator</label>
       </form>
+      {issued && <Handover issued={issued} />}
       <Rows empty="No users.">
-        {users.map((u) => <UserRow key={u.id} user={u} report={report} />)}
+        {users.map((u) => <UserRow key={u.id} user={u} report={report} onIssued={setIssued} />)}
       </Rows>
       <Said notice={notice} />
     </Section>
+  );
+}
+
+/**
+ * A link an administrator has just been handed, to carry over themselves.
+ *
+ * There is no second way into a browser account: a password is recovered
+ * through a link in an email, and transactional email is optional (ADR 0018).
+ * Whoever forgot their password in an instance without SMTP was locked out for
+ * good, and an administrator could do nothing about it. So the same one-time
+ * secret the email would have carried is shown here instead and passed on by
+ * hand — which is why an administrator never learns anybody's password.
+ *
+ * The instance answers a whole URL where it has been told its public address
+ * and a path where it has not; it never invents a host out of a request
+ * header. The browser is standing at that address either way, so it is the one
+ * that can complete it.
+ */
+function Handover({ issued }: { issued: AccessLink }) {
+  return (
+    <div role="status" className="mb-3 rounded-md border border-brand/40 bg-brand/5 p-3">
+      <p className="text-xs text-muted-foreground">Copy this link now — it will not be shown again — and hand it over yourself. It works once, until {date(issued.expires_at)}.</p>
+      <code className="break-all text-xs">{new URL(issued.link, window.location.origin).toString()}</code>
+    </div>
   );
 }
 
@@ -114,9 +141,14 @@ type Report = ReturnType<typeof reporting>;
  * its own trigger down with it, so the row keeps the open state and the dialog
  * stands beside the menu.
  */
-function UserRow({ user, report }: { user: User; report: Report }) {
+function UserRow({ user, report, onIssued }: { user: User; report: Report; onIssued: (issued: AccessLink) => void }) {
   const [asking, setAsking] = useState<"deactivate" | "demote">();
   const deactivated = user.state === "deactivated";
+
+  async function hand(path: "/users/{id}/invitation-link" | "/users/{id}/recovery-link", said: string) {
+    const link = await report(api.POST(path, { params: { path: { id: user.id } } }), said);
+    if (link) onIssued(link);
+  }
 
   return (
     <Row
@@ -126,6 +158,15 @@ function UserRow({ user, report }: { user: User; report: Report }) {
         <>
           <RowMenu label={`Actions for ${user.name}`}>
             {user.state === "invited" && <DropdownMenuItem onClick={() => void report(api.POST("/users/{id}/invitation", { params: { path: { id: user.id } } }), "Invitation resent.")}>Resend invitation</DropdownMenuItem>}
+            {/* The way in that does not go through an email, and it stands here
+                whether or not SMTP is configured: an entry that appears and
+                disappears with an operating setting explains itself to nobody,
+                and a link is worth having beside a mail that is slow, filtered
+                or misaddressed. Which of the two a row offers is the user's
+                state — an invited user has no password to recover, an active
+                one no invitation left to hand over. */}
+            {user.state === "invited" && <DropdownMenuItem onClick={() => void hand("/users/{id}/invitation-link", `Invitation link for ${user.name} issued.`)}>Invitation link</DropdownMenuItem>}
+            {user.state === "active" && <DropdownMenuItem onClick={() => void hand("/users/{id}/recovery-link", `Password link for ${user.name} issued.`)}>Password link</DropdownMenuItem>}
             {user.administrator
               ? <DropdownMenuItem onClick={() => setAsking("demote")}>Demote</DropdownMenuItem>
               : <DropdownMenuItem onClick={() => void report(api.PATCH("/users/{id}", { params: { path: { id: user.id } }, body: { administrator: true } }), `${user.name} is now an administrator.`)}>Make admin</DropdownMenuItem>}

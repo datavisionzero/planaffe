@@ -36,6 +36,18 @@ recovery and email-change links last one hour. Reissuing one invalidates the
 previous one of the same purpose.
 Delivery failure does not make a secret recoverable; retry issues a new one.
 
+**An administrator can hand a link over instead of mailing it.** Recovery is the
+only way to a new password, so an instance without SMTP would lock out whoever
+forgot theirs, with nobody able to help — and since the last active administrator
+cannot be deactivated, the instance would be shut with them. `POST
+/users/{id}/recovery-link` and `POST /users/{id}/invitation-link` return the very
+secret an email would have carried, for the administrator to transport. An
+administrator never sets somebody else's password; only the person themselves
+does, which is the difference the history could not show afterwards. Neither is
+bound to the absence of SMTP, and both replace the live secret of that purpose
+like any resend. Creating a user therefore no longer requires SMTP: without it,
+no invitation is sent and no secret is issued until one is asked for.
+
 **Tests use Mailpit as test infrastructure.** Integration tests inspect the
 delivered message through Mailpit's API. Mailpit may join the development Compose
 file, but never the production topology.

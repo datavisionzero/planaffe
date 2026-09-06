@@ -186,6 +186,8 @@ pa export --json                           # one readable document containing th
 pa user create NAME --email ADDRESS [--administrator] # administrators only; sends an invitation
 pa user list
 pa user resend USER                        # the user by name or id, here and below
+pa user invitation-link USER               # print the activation link instead of mailing it
+pa user password-link USER                 # print a password link; the way in without SMTP
 pa user deactivate USER · pa user reactivate USER
 pa user administrator USER --enabled=true|false
 pa me email ADDRESS                         # sends confirmation to the new address

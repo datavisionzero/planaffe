@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -213,6 +214,30 @@ func newUser(g *globals) *cobra.Command {
 		}
 		return resp.HTTPResponse, resp.Body, nil
 	}, "invitation resent")
+	// The way into an account that does not go through an email. Transactional
+	// email is optional (ADR 0018), and password recovery is the only way to a
+	// new password, so an instance without SMTP locked out whoever forgot
+	// theirs. The same one-time secret an email would have carried is printed
+	// here instead, and the administrator hands it over — which is why they
+	// never learn anybody's password.
+	invitationLink := accessLinkCommand(g, "invitation-link USER",
+		"Issue an invited user's activation link and print it instead of mailing it. The user by name or id.",
+		func(c *client.Client, cmd *cobra.Command, user string) (*http.Response, []byte, *api.AccessLink, error) {
+			resp, err := c.IssueInvitationLinkWithResponse(cmd.Context(), user)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			return resp.HTTPResponse, resp.Body, resp.JSON200, nil
+		})
+	passwordLink := accessLinkCommand(g, "password-link USER",
+		"Issue an active user's password link and print it instead of mailing it. The user by name or id.",
+		func(c *client.Client, cmd *cobra.Command, user string) (*http.Response, []byte, *api.AccessLink, error) {
+			resp, err := c.IssueRecoveryLinkWithResponse(cmd.Context(), user)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			return resp.HTTPResponse, resp.Body, resp.JSON200, nil
+		})
 	deactivate := userLifecycleCommand(g, "deactivate USER", "Deactivate a user, by name or id, and suspend every way they authenticate.", func(c *client.Client, cmd *cobra.Command, user string) (*http.Response, []byte, error) {
 		resp, err := c.DeactivateUserWithResponse(cmd.Context(), user)
 		if err != nil {
@@ -247,8 +272,42 @@ func newUser(g *globals) *cobra.Command {
 		return nil
 	}}
 	roleCommand.Flags().BoolVar(&role, "enabled", true, "whether the user administers the instance")
-	cmd.AddCommand(create, list, resend, deactivate, reactivate, roleCommand)
+	cmd.AddCommand(create, list, resend, invitationLink, passwordLink, deactivate, reactivate, roleCommand)
 	return cmd
+}
+
+// A link the caller carries over themselves. The instance answers a whole URL
+// where it has been told its public address and a path where it has not; it
+// never invents a host out of a request header. pa was given the address in
+// PLANAFFE_URL, so it is the one that can complete it.
+func accessLinkCommand(g *globals, use, short string,
+	call func(*client.Client, *cobra.Command, string) (*http.Response, []byte, *api.AccessLink, error)) *cobra.Command {
+	return &cobra.Command{Use: use, Short: short, Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, c, err := g.load()
+		if err != nil {
+			return err
+		}
+		response, body, issued, err := call(c, cmd, args[0])
+		if err != nil {
+			return client.Transport(err)
+		}
+		if err := client.Check(response, body); err != nil {
+			return err
+		}
+		if g.json {
+			return render.JSON(cmd.OutOrStdout(), issued)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%s\nUsable once, until %s. Hand it over yourself.\n",
+			absoluteLink(cfg.URL, issued.Link), issued.ExpiresAt.Local().Format(time.RFC3339))
+		return nil
+	}}
+}
+
+func absoluteLink(base, link string) string {
+	if strings.HasPrefix(link, "/") {
+		return strings.TrimSuffix(base, "/") + link
+	}
+	return link
 }
 
 func userLifecycleCommand(g *globals, use, short string, call func(*client.Client, *cobra.Command, string) (*http.Response, []byte, error), result string) *cobra.Command {

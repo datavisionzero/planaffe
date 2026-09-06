@@ -59,7 +59,8 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/questions", "/questions/{id}", "/questions/{id}/answer",
                 "/session", "/session/bootstrap", "/sessions", "/sessions/{id}",
                 "/tokens", "/tokens/{id}", "/users", "/users/{id}", "/users/{id}/deactivate",
-                "/users/{id}/invitation", "/users/{id}/reactivate", "/version",
+                "/users/{id}/invitation", "/users/{id}/invitation-link", "/users/{id}/reactivate",
+                "/users/{id}/recovery-link", "/version",
             ],
             paths);
 

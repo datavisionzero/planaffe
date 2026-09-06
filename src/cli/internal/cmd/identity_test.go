@@ -24,6 +24,8 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 			return 200, `{"version":"0.0.0-dev"}`
 		case r.Method == http.MethodPost && r.URL.Path == "/users":
 			return 201, `{"id":"0198e0c0-0000-7000-8000-000000000003","kind":"user","name":"other","email":"other@example.test","state":"invited","administrator":false,"created_at":"2026-09-02T14:00:00.000000Z"}`
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "-link"):
+			return 200, `{"link":"/recover?secret=a-one-time-secret","expires_at":"2026-09-06T15:00:00Z"}`
 		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/users/"):
 			return 200, `{"id":"0198e0c0-0000-7000-8000-000000000003","kind":"user","name":"other","email":"other@example.test","state":"deactivated","administrator":false,"created_at":"2026-09-02T14:00:00.000000Z"}`
 		case r.URL.Path == "/users":
@@ -74,6 +76,10 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		{[]string{"agent", "rename", "quiet-otter-42", "--name", "brisk-heron-7"}, "PATCH", "/agents/quiet-otter-42", map[string]any{"name": "brisk-heron-7"}, "renamed to brisk-heron-7", ""},
 		{[]string{"agent", "revoke", "quiet-otter-42"}, "DELETE", "/agents/quiet-otter-42", nil, "revoked", ""},
 		{[]string{"user", "deactivate", "other"}, "POST", "/users/other/deactivate", nil, "other deactivated", ""},
+		// A link the instance answered as a path, because it has not been told
+		// its public address. pa was given one in PLANAFFE_URL and completes it.
+		{[]string{"user", "password-link", "other"}, "POST", "/users/other/recovery-link", nil, server.URL + "/recover?secret=a-one-time-secret", ""},
+		{[]string{"user", "invitation-link", "other"}, "POST", "/users/other/invitation-link", nil, "Hand it over yourself.", ""},
 		{[]string{"token", "create"}, "POST", "/tokens", nil, "token: pa_secret-shown-once", "shown once"},
 		{[]string{"token", "list"}, "GET", "/tokens", nil, "pa_secre…", ""},
 		{[]string{"token", "revoke", "0198e0c0-0000-7000-8000-00000000000b"}, "DELETE", "/tokens/0198e0c0-0000-7000-8000-00000000000b", nil, "revoked", ""},
