@@ -12,11 +12,20 @@ function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
   )
 }
 
+// The line under the list is a padding box and an inset shadow rather than a
+// border, so that the active tab can keep sitting on it. `overflow-x-auto`
+// makes the list a scroll container on both axes, and the `-mb-px` a tab uses
+// to reach the line would then hang one pixel past the padding box — a
+// scrollbar for a single pixel. The padding gives that pixel back inside the
+// box, and the shadow draws where the border drew, under the children.
 function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
-      className={cn("flex items-center gap-1 overflow-x-auto border-b", className)}
+      className={cn(
+        "flex items-center gap-1 overflow-x-auto pb-px shadow-[inset_0_-1px_0_var(--color-border)]",
+        className
+      )}
       {...props}
     />
   )
