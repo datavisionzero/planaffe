@@ -10,10 +10,11 @@ the backup. Read it when a step here sends you there, and not otherwise.
 
 ## What you are installing
 
-Two containers: the instance and its Postgres. The instance applies its own
-migrations, creates the first administrator on the first start and serves both
-the API and the web application on one port. `pa` is the command-line client,
-built from the same repository.
+Three containers: Caddy, the instance and its Postgres. The instance applies
+its own migrations, creates the first administrator on the first start and
+serves both the API and the web application on one port; Caddy stands in front
+of it and is the only one of the three with a published port. `pa` is the
+command-line client, built from the same repository.
 
 ## Before you start
 
@@ -21,12 +22,13 @@ Ask the person you are working for these three things and write them down. You
 cannot invent them, and two of them are secrets.
 
 1. **Where it will run.** A host with Docker, and the address it will be
-   reachable at — `http://localhost:8080` for a machine-local installation, or
-   an `https://` address behind a reverse proxy.
+   reachable at — `http://localhost` for a machine-local trial, or a domain it
+   answers as.
 2. **The first administrator**: a name and an email address.
-3. **Whether it is reachable from outside.** If it is, the person has to make
-   two decisions that are theirs: DNS and a certificate. Both are outside this
-   document.
+3. **Whether it is reachable from outside.** If it is, one decision is the
+   person's and outside this document: the DNS record that points the domain at
+   the host. The certificate is not — Caddy fetches and renews it, and a domain
+   in `PLANAFFE_SITE_ADDRESS` is all it needs.
 
 **Stop and ask** if any of the three is missing. Do not guess a hostname and do
 not invent an email address.
@@ -68,9 +70,11 @@ given.
 | `PLANAFFE_BOOTSTRAP_EMAIL` | the administrator's email address |
 | `PLANAFFE_BOOTSTRAP_TOKEN` | generate one: `openssl rand -hex 32`. At least 32 characters, or the instance refuses to start |
 
-Set `PLANAFFE_PUBLIC_URL` as well if the instance is reachable at an address
-other than `http://localhost:8080` — the browser needs it, and so does every
-link in an email.
+Set two more if the instance answers as a domain rather than on loopback:
+`PLANAFFE_SITE_ADDRESS` to the bare domain — `plan.example.org`, which is what
+Caddy fetches the certificate for — and `PLANAFFE_PUBLIC_URL` to the same
+address with its scheme, `https://plan.example.org`. The browser needs the
+second, and so does every link in an email.
 
 **Expected:** `deploy/.env` exists and the four values are non-empty.
 **Stop if:** you were about to invent the administrator's email address. That is
@@ -85,7 +89,8 @@ secrets into a shared channel, and do not put them into a ticket.**
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-**Expected:** two containers, and after up to a minute both healthy:
+**Expected:** three containers, and after up to a minute the instance and the
+database healthy:
 
 ```sh
 docker compose -f deploy/docker-compose.yml ps
@@ -99,7 +104,7 @@ the two usual causes, and the log names both.
 ## Step 5 — The instance answers
 
 ```sh
-curl -sf http://localhost:8080/version
+curl -sf http://localhost/version
 ```
 
 **Expected:** `{"version":"…"}`. This endpoint needs no token and answers only
@@ -140,7 +145,7 @@ the `PATH`. Go is the person's to install, like Docker.
 ## Step 7 — Put the two variables in the environment
 
 ```sh
-export PLANAFFE_URL=http://localhost:8080
+export PLANAFFE_URL=http://localhost
 export PLANAFFE_TOKEN=<PLANAFFE_BOOTSTRAP_TOKEN from step 3>
 ```
 

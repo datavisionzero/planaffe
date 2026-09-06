@@ -1,0 +1,31 @@
+# What stands in front of the instance, and the whole of the TLS decision.
+#
+# The site address is one variable (`PLANAFFE_SITE_ADDRESS` in deploy/.env): a
+# domain makes Caddy obtain and renew a certificate for it on its own and
+# redirect port 80 to it, and the default `:80` is plain HTTP for a trial on
+# loopback. There is no third case and no certificate to install by hand —
+# that is why Caddy is here rather than a proxy that would need one.
+#
+# It is not a convenience. The browser session hangs on a cookie with the
+# `__Host-` prefix and `Secure`, which works over HTTPS and nowhere else, and
+# an invitation is a link that an email carries through the open network with
+# somebody's password at the end of it. Both of those want TLS, and neither of
+# them got it out of a Compose file that published 8080 in the clear.
+
+{$PLANAFFE_SITE_ADDRESS} {
+	# The instance speaks plain HTTP and only on the compose network; it
+	# publishes no port of its own. This is the one hop that is not encrypted,
+	# and it does not leave the host.
+	reverse_proxy planaffe:8080
+
+	# Caddy sets no request or response deadline unless it is told to, which is
+	# exactly what the three waiting commands need: `pa next --claim --wait`,
+	# `pa issue ask --wait` and `pa needs-you --wait` hold one request open for
+	# as long as an hour (docs/operations.md). A proxy that timed those out
+	# would turn Waiting into a poll without anybody noticing, so nothing here
+	# sets a timeout.
+
+	# The API answers JSON and the application is a handful of static files;
+	# both compress well.
+	encode zstd gzip
+}

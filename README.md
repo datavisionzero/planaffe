@@ -56,9 +56,11 @@ https://github.com/datavisionzero/planaffe/blob/main/docs/install.md
 
 [`docs/install.md`](docs/install.md) is a sequence from nothing to the first
 ticket, written for an agent to execute: one command per step, the output that
-means it worked, and the condition under which it stops and asks you. The four
-things only a person can decide — the administrator's email, a password, DNS, a
-certificate — are marked as exactly that. It names no agent and no harness.
+means it worked, and the condition under which it stops and asks you. The three
+things only a person can decide — the administrator's email, a password, DNS —
+are marked as exactly that. The certificate is not among them: Caddy stands in
+front of the instance and fetches and renews it for whatever domain
+`PLANAFFE_SITE_ADDRESS` names. It names no agent and no harness.
 
 Or type it yourself. It is two commands:
 

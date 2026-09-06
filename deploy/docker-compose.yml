@@ -3,16 +3,62 @@
 #
 #   cp deploy/.env.example deploy/.env   # and set the three values in it
 #   docker compose -f deploy/docker-compose.yml up -d
+#   open http://localhost                # or the domain in PLANAFFE_SITE_ADDRESS
 #
 # Upgrading is `docker compose pull` followed by `docker compose up -d`:
 # migrations apply themselves on startup, only ever forward, so take a
-# `pg_dump` before it — that is the way back (ADR 0011).
+# `pg_dump` before it — that is the way back (ADR 0011), and `docs/operations.md`
+# has the `psql` that leads back in.
 #
 # Every variable is documented in docs/operations.md.
 
 name: planaffe
 
 services:
+  # The TLS terminator, and the only service with a published port. A domain in
+  # `PLANAFFE_SITE_ADDRESS` and Caddy fetches and renews a certificate for it
+  # on its own; the whole decision is that one variable, and deploy/Caddyfile
+  # is the whole configuration.
+  #
+  # It is a third container, and VISION 2 argues against other systems that
+  # they need a dozen. Three is not a dozen, and the alternative is not "no
+  # proxy": it is every operator building the same proxy themselves for a
+  # session cookie that is `__Host-` and `Secure` and for invitation links that
+  # cross the open network.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      # Waited for rather than raced, so that `up -d` returns when the instance
+      # answers rather than when a port is open. On a first start that is the
+      # migrations, and they are worth the half minute.
+      planaffe:
+        condition: service_healthy
+    environment:
+      # What this instance answers as, and the whole of the TLS decision. A
+      # domain — `plan.example.org` — makes Caddy fetch a certificate for it and
+      # redirect from port 80. The default `:80` is plain HTTP for whatever host
+      # asked, which is the trial on a laptop and nothing more: the browser
+      # session needs a `Secure` cookie and will not keep one over plain HTTP.
+      PLANAFFE_SITE_ADDRESS: "${PLANAFFE_SITE_ADDRESS:-:80}"
+    ports:
+      # The left half is the whole published port, so an address in front of it
+      # binds there and nowhere else. Certificates are the reason to leave both
+      # alone: the ACME challenge reaches this instance on 80 and 443 from the
+      # public internet, and a domain behind a moved port does not get one.
+      - "${PLANAFFE_HTTP_PORT:-80}:80"
+      - "${PLANAFFE_HTTPS_PORT:-443}:443"
+      - "${PLANAFFE_HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificates and the account key. Without this volume a restart is
+      # a new certificate, and a few restarts are a rate limit.
+      - caddy-data:/data
+      - caddy-config:/config
+
+  # The API and the web application it serves, which are one image. It speaks
+  # plain HTTP and only on this network: there is no published port here, and
+  # there is not meant to be one.
   planaffe:
     # `:latest` moves on a stable release and never on a prerelease. An
     # installation that would rather follow the trunk names `:main`, and one
@@ -34,9 +80,11 @@ services:
       PLANAFFE_BOOTSTRAP_TOKEN: "${PLANAFFE_BOOTSTRAP_TOKEN:?set PLANAFFE_BOOTSTRAP_TOKEN in deploy/.env}"
       PLANAFFE_PUBLIC_URL: "${PLANAFFE_PUBLIC_URL:-}"
       # The reverse proxy in front of this, so that the caller's address and
-      # scheme are the caller's: an address, a CIDR network, or `all`. Unset,
-      # every request looks as if it came from the proxy.
-      PLANAFFE_TRUSTED_PROXY: "${PLANAFFE_TRUSTED_PROXY:-}"
+      # scheme are the caller's rather than the proxy's. `all` is right here and
+      # only because of the line below it: nothing but Caddy can reach this
+      # service, since it publishes no port. An instance run some other way sets
+      # an address or a CIDR network instead.
+      PLANAFFE_TRUSTED_PROXY: "${PLANAFFE_TRUSTED_PROXY:-all}"
       PLANAFFE_SMTP_HOST: "${PLANAFFE_SMTP_HOST:-}"
       PLANAFFE_SMTP_PORT: "${PLANAFFE_SMTP_PORT:-}"
       PLANAFFE_SMTP_USERNAME: "${PLANAFFE_SMTP_USERNAME:-}"
@@ -54,8 +102,6 @@ services:
       PLANAFFE_LOG_ENDPOINT: "${PLANAFFE_LOG_ENDPOINT:-}"
       PLANAFFE_LOG_TOKEN: "${PLANAFFE_LOG_TOKEN:-}"
       PLANAFFE_LOG_LEVEL: "${PLANAFFE_LOG_LEVEL:-Information}"
-    ports:
-      - "${PLANAFFE_PORT:-8080}:8080"
     healthcheck:
       # The one endpoint outside the door. It answers once the migrations and
       # the bootstrap have run, because the host serves nothing before them.
@@ -85,3 +131,5 @@ services:
 
 volumes:
   planaffe-db:
+  caddy-data:
+  caddy-config:

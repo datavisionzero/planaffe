@@ -38,7 +38,7 @@ planaffe/
 │  ├─ cli.md                  pa: configuration, exit codes, verbs
 │  ├─ agents-md.md            the AGENTS.md block a user copies into their own repository
 │  └─ api/openapi.json        the HTTP contract, checked in
-├─ deploy/                    the Dockerfile, Compose (production and development), and nothing else
+├─ deploy/                    the Dockerfile, the Caddyfile, Compose (production and development), and nothing else
 ├─ src/
 │  ├─ Planaffe.Domain/        the rules
 │  ├─ Planaffe.Application/   the use cases and their ports

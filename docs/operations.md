@@ -26,11 +26,25 @@ prerelease. `docker compose pull` therefore upgrades between releases and not
 with every commit; set `PLANAFFE_IMAGE` to `:main` to follow the trunk instead,
 or to a version or a `sha-<commit>` to stand still.
 
-Two services come up: the instance and its Postgres. The instance applies its
-migrations, creates the first administrator and their token from the three
-bootstrap variables, and listens on port 8080. `GET /version` answers without
+Three services come up: Caddy, the instance and its Postgres. The instance
+applies its migrations, creates the first administrator and their token from the
+three bootstrap variables, and listens on port 8080 of the Compose network,
+where Caddy is the only thing that can reach it. `GET /version` answers without
 authentication. The CLI and direct API use `Authorization: Bearer <token>`; the
 browser uses a server-side session cookie.
+
+Caddy in front of it is the whole of the TLS decision, and it is one variable.
+Unset, `PLANAFFE_SITE_ADDRESS` is `:80` and the instance answers plain HTTP on
+`http://localhost` — a trial on a laptop and nothing more. Set it to a domain
+and Caddy obtains a certificate for it, renews it, and redirects port 80 to it,
+with nothing to install by hand. There is no third case.
+
+That matters beyond convenience: the session cookie is `__Host-` and `Secure`,
+which works over HTTPS and nowhere else, and an invitation is a link an email
+carries through the open network with somebody's password at the end of it.
+Neither of those is served by a port published in the clear. Set
+`PLANAFFE_PUBLIC_URL` to the same address, and `deploy/Caddyfile` is the
+configuration, all sixteen lines of it.
 
 The same port serves the web application. On first use, exchange the bootstrap
 user token once to set the administrator's password. The browser receives an
@@ -49,15 +63,20 @@ upstream-response timeouts of at least 3610 seconds. The client adds another
 30 seconds for transport overhead; no inbound connection to the client is
 needed.
 
-Set `PLANAFFE_TRUSTED_PROXY` to that proxy — its address, its network, or `all`
-where a Compose network renumbers it on every start. Unset, the instance reads
-the socket, and behind a proxy that is the proxy's own address for every
-request: the failed-sign-in limit of twenty per address in fifteen minutes then
-counts every caller together, and twenty bad passwords by anybody stop
-everybody until the window passes. `all` trusts whoever connects, so publish no
-port the proxy does not own: where the proxy runs on the same machine, set
-`PLANAFFE_PORT=127.0.0.1:8080` and the instance is reachable from that machine
-and from nowhere else.
+Caddy sets no such deadline unless it is told to, and `deploy/Caddyfile` tells
+it nothing; a proxy that timed those requests out would turn Waiting into a
+poll without anybody noticing.
+
+`PLANAFFE_TRUSTED_PROXY` says which peers may speak for the caller — an
+address, a CIDR network, or `all` where a Compose network renumbers the proxy
+on every start. It is `all` in this Compose file, and that is safe for exactly
+one reason: the instance publishes no port, so Caddy is the only thing that can
+reach it. Unset, the instance reads the socket, and behind a proxy that is the
+proxy's own address for every request: the failed-sign-in limit of twenty per
+address in fifteen minutes then counts every caller together, and twenty bad
+passwords by anybody stop everybody until the window passes. An installation
+that runs the instance some other way names an address or a network instead,
+and publishes no port its proxy does not own.
 
 ## Upgrading
 
@@ -97,7 +116,9 @@ Set in `deploy/.env`; read once, at start.
 | `PLANAFFE_LOG_ENDPOINT` | no | | a logaffe instance to log into, scheme and host; set together with the token (ADR 0008) |
 | `PLANAFFE_LOG_TOKEN` | no | | the ingest token of the logaffe project the entries belong to |
 | `PLANAFFE_LOG_LEVEL` | no | `Information` | the floor: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal` |
-| `PLANAFFE_PORT` | no | `8080` | the host port the instance is published on; it is the whole left half of the published port, so `127.0.0.1:8080` binds on loopback alone |
+| `PLANAFFE_SITE_ADDRESS` | no | `:80` | what Caddy answers as, and the whole of the TLS decision: a domain fetches and renews a certificate for itself and redirects port 80; `:80` is plain HTTP for a trial on loopback |
+| `PLANAFFE_HTTP_PORT` | no | `80` | the host port Caddy's HTTP listener is published on; the whole left half, so `127.0.0.1:8080` binds on loopback alone |
+| `PLANAFFE_HTTPS_PORT` | no | `443` | the same for HTTPS, TCP and UDP. Leave both alone where a certificate is to be fetched: the ACME challenge arrives on 80 and 443 |
 | `PLANAFFE_IMAGE` | no | `ghcr.io/datavisionzero/planaffe:latest` | the image: `:latest` is the newest stable release, `:1.2` the newest patch of a minor, `:main` the trunk, and a `:1.2.3` or `:sha-<commit>` pins an installation to one build |
 
 The three bootstrap variables are ignored on every start after the first — the
@@ -121,7 +142,7 @@ Production must expose the public URL over HTTPS: the session cookie is
 `Secure`, `HttpOnly`, `SameSite=Lax`, has no `Domain` and uses the `__Host-`
 prefix. Only the explicit Development environment uses a non-Secure cookie with
 a different name. A reverse proxy must preserve the original `Origin` and `Host`
-headers.
+headers — Caddy does, and needs nothing said about it.
 
 A browser write carries `X-Planaffe-CSRF: 1`, which no cross-site form can set,
 and an `Origin` the instance checks. With `PLANAFFE_PUBLIC_URL` set it is
