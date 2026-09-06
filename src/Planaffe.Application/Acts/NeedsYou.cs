@@ -13,12 +13,14 @@ public sealed record NeedsYouItem(IssueSummaryShape Issue, NeedsYouBecause Becau
 /// A cursor page of what only a human can resolve (VISION 10).
 /// </summary>
 /// <param name="Agents">
-/// How many agents could pick work up at all. It is a fact about the instance
-/// and not about any row, so it is said once beside the list rather than turned
-/// into an entry on it: at <c>0</c> nothing on this list gets worked off, and
-/// the thing to do is to create an agent token — one act, unrelated to every
-/// issue the list would otherwise have named. This is VISION 10's "an empty
-/// result explains itself", for this list.
+/// How many agent identities could take work at all — live tokens, not runs in
+/// flight: one agent normally stands for one installation, and several runs may
+/// share it. It is a fact about the instance and not about any row, so it is
+/// said once beside the list rather than turned into an entry on it: at
+/// <c>0</c> nothing on this list gets worked off, and the thing to do is to
+/// create an agent token — one act, unrelated to every issue the list would
+/// otherwise have named. This is VISION 10's "an empty result explains itself",
+/// for this list.
 /// </param>
 public sealed record NeedsYouPage(IReadOnlyList<NeedsYouItem> Items, int Total, bool HasMore, string? NextCursor, int Agents);
 

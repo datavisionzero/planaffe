@@ -29,7 +29,9 @@ Tickets for this repository live in planaffe, project `PROJ`. The checked-in
 `.planaffe` file names the project, so no command has to. `pa` needs
 `PLANAFFE_URL` and `PLANAFFE_TOKEN` in the environment and nothing else; it is
 never interactive, writes data to stdout and errors to stderr, and `--json`
-prints the object as the API answered it.
+prints the object as the API answered it. That token is an agent's, and one
+agent normally stands for one installation rather than for one run: another run
+on the same machine may be signing with the same name.
 
 ### Taking a ticket and giving it back
 

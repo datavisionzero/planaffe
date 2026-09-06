@@ -2,7 +2,9 @@ namespace Planaffe.Domain.Identities;
 
 /// <summary>
 /// Stable facts an agent reports about itself through its one-way back
-/// channel (VISION 12). Per-run facts belong on the issue, not here.
+/// channel (VISION 12). They describe the installation the agent is rather than
+/// the run that reports them, so a later report from another run of the same
+/// installation replaces them. Per-run facts belong on the issue, not here.
 /// </summary>
 public sealed record AgentMetadata(string? Kind, string? Harness, string? Environment, string? Version)
 {

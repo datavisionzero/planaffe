@@ -204,6 +204,14 @@ repository you connected in step 8 and replace `PROJ` with the project key.
 Without it, the next agent in that repository does not know the tickets are
 here.
 
+How many agents to create is the other question, and the short answer is one per
+installation: the machine or container an agent runs on, not the window it runs
+in. A token in a file the shell reads is shared by every run on that machine —
+that is the normal case, it is what the agent's metadata describes, and the
+history then names the installation. Create more than one where runs have to be
+revoked separately: revoking an agent stops everything running under it at
+once.
+
 ## What is left for a person
 
 - The password of the first administrator, in the browser (step 9).

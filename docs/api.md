@@ -657,16 +657,17 @@ Within each group, higher priority comes first and age breaks a tie. The page
 uses the ordinary `cursor` and `limit` query parameters and always carries an
 ETag, including when it is empty.
 
-Beside the list the answer carries `agents`: how many agents could pick work up
-at all. At `0` nothing on this list will be worked off, whatever it says — and
-the thing to do about it is to create an agent token, one act that has nothing
-to do with any issue on the list. That is why it is said once beside the list
-rather than turned into entries on it; it is VISION 10's "an empty result
-explains itself" for this list. It is part of the ETag, so a long poll is told
-when the instance gains or loses its last agent. Until project assignment
-arrives in cut three, agents can work in every project, so the number is the
-instance's unrevoked agent tokens; it becomes project-scoped later and the
-shape does not change.
+Beside the list the answer carries `agents`: how many agent identities could
+take work at all — live tokens rather than runs in flight, because one agent
+normally stands for one installation and several runs may share it. At `0`
+nothing on this list will be worked off, whatever it says — and the thing to do
+about it is to create an agent token, one act that has nothing to do with any
+issue on the list. That is why it is said once beside the list rather than
+turned into entries on it; it is VISION 10's "an empty result explains itself"
+for this list. It is part of the ETag, so a long poll is told when the instance
+gains or loses its last agent. Until project assignment arrives in cut three,
+agents can work in every project, so the number is the instance's unrevoked
+agent tokens; it becomes project-scoped later and the shape does not change.
 
 **Stuck** is the blocker-chain rule of VISION 10: a blocked issue is on the
 list only when a chain of open blockers from it ends in a dead end — an issue
@@ -747,6 +748,12 @@ The back channel of VISION 12, one way: an agent writes about itself and reads
 nothing of anyone. `AgentSummary` gains the same two fields, so `pa agent
 list` and `pa agent view` show what an agent last said about itself and when.
 The CLI: `pa me set --kind claude-code --harness cli --version 2.1`.
+
+What the fields describe is the installation the agent is, not the run that
+reports them. Where several runs share one token — the normal case, one agent
+per machine — a later report replaces the last, and that is the intended
+behaviour rather than one run overwriting another: they describe the same
+installation. Facts about a single run belong on the issue it is working on.
 
 ### Bulk changes
 
