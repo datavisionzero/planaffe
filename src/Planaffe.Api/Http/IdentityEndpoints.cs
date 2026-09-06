@@ -84,27 +84,27 @@ public static class IdentityEndpoints
             .WithName("ListUsers")
             .WithSummary("Every user. Not paginated: the list is people.");
 
-        door.MapPost("/users/{id:guid}/invitation", async (Guid id, ResendInvitation resend, CancellationToken ct) =>
+        door.MapPost("/users/{id}/invitation", async (string id, ResendInvitation resend, CancellationToken ct) =>
             { await resend.ExecuteAsync(id, ct); return Results.Accepted(); })
-            .WithName("ResendInvitation").WithSummary("Replace and resend an invited user's invitation. Administrators only.")
+            .WithName("ResendInvitation").WithSummary("Replace and resend an invited user's invitation, by name or id. Administrators only.")
             .Produces(StatusCodes.Status202Accepted).ProducesProblem(StatusCodes.Status404NotFound);
 
-        door.MapPost("/users/{id:guid}/deactivate", (Guid id, ChangeUserLifecycle change, CancellationToken ct) =>
+        door.MapPost("/users/{id}/deactivate", (string id, ChangeUserLifecycle change, CancellationToken ct) =>
                 change.ExecuteAsync(id, UserLifecycleChange.Deactivate, ct))
-            .WithName("DeactivateUser").WithSummary("Deactivate a user and suspend every way they authenticate. Administrators only.")
+            .WithName("DeactivateUser").WithSummary("Deactivate a user, by name or id, and suspend every way they authenticate. Administrators only.")
             .Produces<UserSummary>().ProducesProblem(StatusCodes.Status409Conflict);
-        door.MapPost("/users/{id:guid}/reactivate", (Guid id, ChangeUserLifecycle change, CancellationToken ct) =>
+        door.MapPost("/users/{id}/reactivate", (string id, ChangeUserLifecycle change, CancellationToken ct) =>
                 change.ExecuteAsync(id, UserLifecycleChange.Reactivate, ct))
-            .WithName("ReactivateUser").WithSummary("Reactivate a deactivated user. Administrators only.")
+            .WithName("ReactivateUser").WithSummary("Reactivate a deactivated user, by name or id. Administrators only.")
             .Produces<UserSummary>();
-        door.MapPatch("/users/{id:guid}", (Guid id, ChangeAdministratorRequest? request,
+        door.MapPatch("/users/{id}", (string id, ChangeAdministratorRequest? request,
                 ChangeUserLifecycle change, CancellationToken ct) =>
             {
                 if (request?.Administrator is null) throw Refusal.Validation("administrator", "Administrator is required.");
                 return change.ExecuteAsync(id, request.Administrator.Value
                     ? UserLifecycleChange.GrantAdministrator : UserLifecycleChange.RevokeAdministrator, ct);
             })
-            .WithName("ChangeUserAdministrator").WithSummary("Grant or revoke the administrator role. Administrators only.")
+            .WithName("ChangeUserAdministrator").WithSummary("Grant or revoke the administrator role, by name or id. Administrators only.")
             .Produces<UserSummary>().ProducesProblem(StatusCodes.Status409Conflict);
 
         door.MapPost("/me/email", async (EmailChangeRequest? request, RequestEmailChange change, CancellationToken ct) =>
@@ -136,20 +136,20 @@ public static class IdentityEndpoints
             .WithName("ListAgents")
             .WithSummary("Every agent with its owner and its token, revoked ones included.");
 
-        door.MapPatch("/agents/{id:guid}", (Guid id, RenameAgentRequest? request, RenameAgent rename, CancellationToken cancellationToken) =>
+        door.MapPatch("/agents/{id}", (string id, RenameAgentRequest? request, RenameAgent rename, CancellationToken cancellationToken) =>
                 rename.ExecuteAsync(id, request?.Name, cancellationToken))
             .WithName("RenameAgent")
-            .WithSummary("Rename an agent. Its owner or an administrator.")
+            .WithSummary("Rename an agent, by name or id. Its owner or an administrator.")
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        door.MapDelete("/agents/{id:guid}", async (Guid id, RevokeAgent revoke, CancellationToken cancellationToken) =>
+        door.MapDelete("/agents/{id}", async (string id, RevokeAgent revoke, CancellationToken cancellationToken) =>
             {
                 await revoke.ExecuteAsync(id, cancellationToken);
                 return Results.NoContent();
             })
             .WithName("RevokeAgent")
-            .WithSummary("Revoke an agent's token. The identity stays. Its owner or an administrator.")
+            .WithSummary("Revoke an agent's token, by name or id. The identity stays. Its owner or an administrator.")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status404NotFound);
 

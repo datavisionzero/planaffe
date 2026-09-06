@@ -448,7 +448,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Replace and resend an invited user's invitation. Administrators only.",
+        "summary": "Replace and resend an invited user's invitation, by name or id. Administrators only.",
         "operationId": "ResendInvitation",
         "parameters": [
           {
@@ -456,8 +456,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -503,7 +502,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Deactivate a user and suspend every way they authenticate. Administrators only.",
+        "summary": "Deactivate a user, by name or id, and suspend every way they authenticate. Administrators only.",
         "operationId": "DeactivateUser",
         "parameters": [
           {
@@ -511,8 +510,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -565,7 +563,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Reactivate a deactivated user. Administrators only.",
+        "summary": "Reactivate a deactivated user, by name or id. Administrators only.",
         "operationId": "ReactivateUser",
         "parameters": [
           {
@@ -573,8 +571,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -617,7 +614,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Grant or revoke the administrator role. Administrators only.",
+        "summary": "Grant or revoke the administrator role, by name or id. Administrators only.",
         "operationId": "ChangeUserAdministrator",
         "parameters": [
           {
@@ -625,8 +622,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -836,7 +832,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Rename an agent. Its owner or an administrator.",
+        "summary": "Rename an agent, by name or id. Its owner or an administrator.",
         "operationId": "RenameAgent",
         "parameters": [
           {
@@ -844,8 +840,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -916,7 +911,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Revoke an agent's token. The identity stays. Its owner or an administrator.",
+        "summary": "Revoke an agent's token, by name or id. The identity stays. Its owner or an administrator.",
         "operationId": "RevokeAgent",
         "parameters": [
           {
@@ -924,8 +919,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],

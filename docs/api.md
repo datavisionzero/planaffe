@@ -377,6 +377,16 @@ Where a rule differs between a user and an agent, the endpoint below says so.
 | `POST` | `/tokens` | user | 201 with `{ id, prefix, secret }` — a further key for the caller, shown once |
 | `DELETE` | `/tokens/{id}` | user | revoke one of the caller's own; 204 |
 
+Wherever `{id}` addresses an identity — the four user rows and the two agent
+ones above — a name does as well, whatever its case. A name is unique across
+users and agents and never has the shape of a UUID, so the two cannot be
+confused, and a path that reaches nobody is `not-found` either way; a name that
+belongs to a user misses under `/agents` for the same reason an unknown id
+does. The id remains the address that survives a rename, which is why it stays
+and why the two are offered side by side rather than one replacing the other.
+Tokens are the exception: a token has no name, so `/tokens/{id}` takes an id
+and nothing else.
+
 A revoked token answers `unauthenticated` from the next request on. The
 metadata back channel (`PATCH /me/metadata`) is cut two.
 

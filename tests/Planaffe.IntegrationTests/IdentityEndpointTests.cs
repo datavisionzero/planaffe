@@ -275,6 +275,45 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task An_identity_is_addressed_by_its_name_as_well_as_by_its_id()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+
+        using var created = await admin.PostAsJsonAsync("/agents", new { name = "quiet-otter-42" }, Ct);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+
+        // The name addresses the agent, whatever the case, and the rename that
+        // answers is the same object the id would have reached.
+        using var renamed = await admin.PatchAsJsonAsync("/agents/QUIET-OTTER-42", new { name = "brisk-heron-7" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+        Assert.Equal(id, (await renamed.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid());
+
+        // The old name leads nowhere afterwards; the id still does.
+        using var stale = await admin.PatchAsJsonAsync("/agents/quiet-otter-42", new { name = "calm-badger-3" }, Ct);
+        await Problem(stale, HttpStatusCode.NotFound, "not-found");
+
+        // A name that belongs to a user is not an agent, and misses the same way.
+        await instance.AddActiveUserAsync("other");
+        using var wrongKind = await admin.PatchAsJsonAsync("/agents/other", new { name = "nobody" }, Ct);
+        await Problem(wrongKind, HttpStatusCode.NotFound, "not-found");
+
+        using var nobody = await admin.PatchAsJsonAsync("/agents/nobody-at-all", new { name = "nobody" }, Ct);
+        await Problem(nobody, HttpStatusCode.NotFound, "not-found");
+
+        // The user side of the same rule, and the revoke that ends it.
+        using var deactivated = await admin.PostAsync("/users/other/deactivate", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, deactivated.StatusCode);
+        Assert.Equal("deactivated", (await deactivated.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("state").GetString());
+
+        using var missing = await admin.PostAsync("/users/nobody-at-all/deactivate", null, Ct);
+        await Problem(missing, HttpStatusCode.NotFound, "not-found");
+
+        using var revoked = await admin.DeleteAsync("/agents/brisk-heron-7", Ct);
+        Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
+    }
+
+    [Fact]
     public async Task A_user_has_as_many_tokens_as_they_create_and_revokes_only_their_own()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

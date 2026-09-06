@@ -81,9 +81,9 @@ public sealed class ListAgents(ICallerIdentity callerIdentity, IIdentities ident
 /// </summary>
 public sealed class RenameAgent(ICallerIdentity callerIdentity, IIdentities identities)
 {
-    public async Task<AgentSummary> ExecuteAsync(Guid id, string? name, CancellationToken cancellationToken)
+    public async Task<AgentSummary> ExecuteAsync(string? address, string? name, CancellationToken cancellationToken)
     {
-        var agent = await Owned.AgentAsync(callerIdentity.Caller, identities, id, "rename an agent", cancellationToken);
+        var agent = await Owned.AgentAsync(callerIdentity.Caller, identities, address, "rename an agent", cancellationToken);
 
         var normalized = Validated.Field("name", () => Identity.NormalizeName(name!));
         if (!normalized.Equals(agent.Name, StringComparison.OrdinalIgnoreCase)
@@ -95,7 +95,7 @@ public sealed class RenameAgent(ICallerIdentity callerIdentity, IIdentities iden
         agent.Rename(normalized);
         await identities.RecordRenameAsync(agent, cancellationToken);
 
-        var row = (await identities.ListAgentsAsync(cancellationToken)).Single(r => r.Agent.Id == id);
+        var row = (await identities.ListAgentsAsync(cancellationToken)).Single(r => r.Agent.Id == agent.Id);
 
         return new AgentSummary(
             row.Agent.Id, row.Agent.Kind, row.Agent.Name,
@@ -156,9 +156,9 @@ public sealed class ReportAgentMetadata(ICallerIdentity callerIdentity, IIdentit
 /// </summary>
 public sealed class RevokeAgent(ICallerIdentity callerIdentity, IIdentities identities, ITokens tokens, TimeProvider clock)
 {
-    public async Task ExecuteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(string? address, CancellationToken cancellationToken)
     {
-        var agent = await Owned.AgentAsync(callerIdentity.Caller, identities, id, "revoke an agent", cancellationToken);
+        var agent = await Owned.AgentAsync(callerIdentity.Caller, identities, address, "revoke an agent", cancellationToken);
 
         var token = await tokens.FindAgentTokenAsync(agent.Id, cancellationToken)
             ?? throw new InvalidOperationException($"Agent {agent.Id} has no token; the schema does not allow that.");
@@ -173,16 +173,25 @@ public sealed class RevokeAgent(ICallerIdentity callerIdentity, IIdentities iden
     }
 }
 
-/// <summary>The line the two acts above share: the agent exists, and the caller is its owner or an administrator.</summary>
+/// <summary>
+/// The line the two acts above share: the address names an agent that exists,
+/// and the caller is its owner or an administrator. The address is an id or a
+/// name (<see cref="IdentityAddress"/>); a name belonging to a user misses the
+/// same way an unknown id does, because neither is an agent.
+/// </summary>
 internal static class Owned
 {
     public static async Task<Agent> AgentAsync(
-        Caller caller, IIdentities identities, Guid id, string act, CancellationToken cancellationToken)
+        Caller caller, IIdentities identities, string? address, string act, CancellationToken cancellationToken)
     {
         caller.RequireUser(act);
 
-        var agent = await identities.FindAgentAsync(id, cancellationToken)
-            ?? throw new Refusal(RefusalCode.NotFound, $"No agent {id}.");
+        var id = await IdentityAddress.ResolveAsync(address, identities, cancellationToken);
+        var agent = id is null ? null : await identities.FindAgentAsync(id.Value, cancellationToken);
+        if (agent is null)
+        {
+            throw new Refusal(RefusalCode.NotFound, $"No agent {address}.");
+        }
 
         return caller.Administrator || agent.OwnerId == caller.Id
             ? agent

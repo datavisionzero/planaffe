@@ -67,12 +67,13 @@ public sealed class RenameUser(ICallerIdentity callerIdentity, IIdentities ident
 public sealed class ResendInvitation(ICallerIdentity callerIdentity, IIdentities identities, IOneTimeSecrets secrets,
     IEmailSender emailSender, SmtpSettings smtp, TimeProvider clock)
 {
-    public async Task ExecuteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(string? address, CancellationToken cancellationToken)
     {
         callerIdentity.Caller.RequireAdministrator("resend an invitation");
         if (!smtp.Configured) throw new Refusal(RefusalCode.SmtpNotConfigured, "Transactional email is not configured for this instance.");
-        var user = await identities.FindUserAsync(id, cancellationToken)
-            ?? throw new Refusal(RefusalCode.NotFound, "No user has that id.");
+        var id = await IdentityAddress.ResolveAsync(address, identities, cancellationToken);
+        var user = (id is null ? null : await identities.FindUserAsync(id.Value, cancellationToken))
+            ?? throw new Refusal(RefusalCode.NotFound, $"No user {address}.");
         if (user.State != UserState.Invited) throw new Refusal(RefusalCode.Transition, "Only an invited user has an invitation to resend.");
         var issued = OneTimeSecret.Issue(user.Id, OneTimeSecretPurpose.Invitation, clock.GetUtcNow());
         await secrets.AddReplacingLiveAsync(issued.Record, clock.GetUtcNow(), cancellationToken);
@@ -83,11 +84,13 @@ public sealed class ResendInvitation(ICallerIdentity callerIdentity, IIdentities
 
 public sealed class ChangeUserLifecycle(ICallerIdentity callerIdentity, IIdentities identities, TimeProvider clock)
 {
-    public async Task<UserSummary> ExecuteAsync(Guid id, UserLifecycleChange change, CancellationToken cancellationToken)
+    public async Task<UserSummary> ExecuteAsync(string? address, UserLifecycleChange change, CancellationToken cancellationToken)
     {
         callerIdentity.Caller.RequireAdministrator("change a user's lifecycle");
+        var id = await IdentityAddress.ResolveAsync(address, identities, cancellationToken)
+            ?? throw new Refusal(RefusalCode.NotFound, $"No user {address}.");
         var outcome = await identities.ChangeLifecycleAsync(id, change, clock.GetUtcNow(), cancellationToken);
-        if (outcome == UserLifecycleOutcome.NotFound) throw new Refusal(RefusalCode.NotFound, "No user has that id.");
+        if (outcome == UserLifecycleOutcome.NotFound) throw new Refusal(RefusalCode.NotFound, $"No user {address}.");
         if (outcome == UserLifecycleOutcome.LastAdministrator)
             throw new Refusal(RefusalCode.LastAdministrator, "Deactivation or demotion would leave no active administrator.");
         if (outcome == UserLifecycleOutcome.InvalidState)

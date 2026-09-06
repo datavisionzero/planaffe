@@ -24,6 +24,8 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 			return 200, `{"version":"0.0.0-dev"}`
 		case r.Method == http.MethodPost && r.URL.Path == "/users":
 			return 201, `{"id":"0198e0c0-0000-7000-8000-000000000003","kind":"user","name":"other","email":"other@example.test","state":"invited","administrator":false,"created_at":"2026-09-02T14:00:00.000000Z"}`
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/users/"):
+			return 200, `{"id":"0198e0c0-0000-7000-8000-000000000003","kind":"user","name":"other","email":"other@example.test","state":"deactivated","administrator":false,"created_at":"2026-09-02T14:00:00.000000Z"}`
 		case r.URL.Path == "/users":
 			return 200, `[{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer","administrator":true,"created_at":"2026-09-02T14:00:00.000000Z"}]`
 		case r.Method == http.MethodPost && r.URL.Path == "/agents":
@@ -63,6 +65,15 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		{[]string{"agent", "view", "0198e0c0-0000-7000-8000-000000000001"}, "GET", "/agents", nil, "environment: container", ""},
 		{[]string{"agent", "rename", "0198e0c0-0000-7000-8000-000000000001", "--name", "brisk-heron-7"}, "PATCH", "/agents/0198e0c0-0000-7000-8000-000000000001", map[string]any{"name": "brisk-heron-7"}, "renamed to brisk-heron-7", ""},
 		{[]string{"agent", "revoke", "0198e0c0-0000-7000-8000-000000000001"}, "DELETE", "/agents/0198e0c0-0000-7000-8000-000000000001", nil, "revoked", ""},
+		// The same three by name. A name is unique across users and agents and
+		// never shaped like a UUID, so it goes into the path as it stands; the
+		// view is the one that resolves in the client, because the list is all
+		// there is to read.
+		{[]string{"agent", "view", "quiet-otter-42"}, "GET", "/agents", nil, "environment: container", ""},
+		{[]string{"agent", "view", "QUIET-OTTER-42"}, "GET", "/agents", nil, "environment: container", ""},
+		{[]string{"agent", "rename", "quiet-otter-42", "--name", "brisk-heron-7"}, "PATCH", "/agents/quiet-otter-42", map[string]any{"name": "brisk-heron-7"}, "renamed to brisk-heron-7", ""},
+		{[]string{"agent", "revoke", "quiet-otter-42"}, "DELETE", "/agents/quiet-otter-42", nil, "revoked", ""},
+		{[]string{"user", "deactivate", "other"}, "POST", "/users/other/deactivate", nil, "other deactivated", ""},
 		{[]string{"token", "create"}, "POST", "/tokens", nil, "token: pa_secret-shown-once", "shown once"},
 		{[]string{"token", "list"}, "GET", "/tokens", nil, "pa_secre…", ""},
 		{[]string{"token", "revoke", "0198e0c0-0000-7000-8000-00000000000b"}, "DELETE", "/tokens/0198e0c0-0000-7000-8000-00000000000b", nil, "revoked", ""},
@@ -96,9 +107,11 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		}
 	}
 
-	code, _, errOut := run(t, server, dir, "agent", "revoke", "not-an-id")
-	if code != exit.Usage || !strings.Contains(errOut, "not an agent id") {
-		t.Errorf("bad id: code %d, stderr %q", code, errOut)
+	// A token is the one thing here without a name, so it is the one place
+	// where an argument that is not a UUID is still a usage error.
+	code, _, errOut := run(t, server, dir, "token", "revoke", "not-an-id")
+	if code != exit.Usage || !strings.Contains(errOut, "not a token id") {
+		t.Errorf("bad token id: code %d, stderr %q", code, errOut)
 	}
 }
 

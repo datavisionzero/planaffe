@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -205,38 +206,34 @@ func newUser(g *globals) *cobra.Command {
 			return nil
 		},
 	}
-	resend := userLifecycleCommand(g, "resend ID", "Replace and resend an invited user's invitation.", func(c *client.Client, cmd *cobra.Command, id uuid.UUID) (*http.Response, []byte, error) {
-		resp, err := c.ResendInvitationWithResponse(cmd.Context(), id)
+	resend := userLifecycleCommand(g, "resend USER", "Replace and resend an invited user's invitation. The user by name or id.", func(c *client.Client, cmd *cobra.Command, user string) (*http.Response, []byte, error) {
+		resp, err := c.ResendInvitationWithResponse(cmd.Context(), user)
 		if err != nil {
 			return nil, nil, err
 		}
 		return resp.HTTPResponse, resp.Body, nil
 	}, "invitation resent")
-	deactivate := userLifecycleCommand(g, "deactivate ID", "Deactivate a user and suspend every way they authenticate.", func(c *client.Client, cmd *cobra.Command, id uuid.UUID) (*http.Response, []byte, error) {
-		resp, err := c.DeactivateUserWithResponse(cmd.Context(), id)
+	deactivate := userLifecycleCommand(g, "deactivate USER", "Deactivate a user, by name or id, and suspend every way they authenticate.", func(c *client.Client, cmd *cobra.Command, user string) (*http.Response, []byte, error) {
+		resp, err := c.DeactivateUserWithResponse(cmd.Context(), user)
 		if err != nil {
 			return nil, nil, err
 		}
 		return resp.HTTPResponse, resp.Body, nil
 	}, "deactivated")
-	reactivate := userLifecycleCommand(g, "reactivate ID", "Reactivate a deactivated user.", func(c *client.Client, cmd *cobra.Command, id uuid.UUID) (*http.Response, []byte, error) {
-		resp, err := c.ReactivateUserWithResponse(cmd.Context(), id)
+	reactivate := userLifecycleCommand(g, "reactivate USER", "Reactivate a deactivated user, by name or id.", func(c *client.Client, cmd *cobra.Command, user string) (*http.Response, []byte, error) {
+		resp, err := c.ReactivateUserWithResponse(cmd.Context(), user)
 		if err != nil {
 			return nil, nil, err
 		}
 		return resp.HTTPResponse, resp.Body, nil
 	}, "reactivated")
 	var role bool
-	roleCommand := &cobra.Command{Use: "administrator ID", Short: "Grant or revoke the administrator role.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := userID(args[0])
-		if err != nil {
-			return err
-		}
+	roleCommand := &cobra.Command{Use: "administrator USER", Short: "Grant or revoke the administrator role. The user by name or id.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		_, c, err := g.load()
 		if err != nil {
 			return err
 		}
-		resp, err := c.ChangeUserAdministratorWithResponse(cmd.Context(), id, api.ChangeAdministratorRequest{Administrator: &role})
+		resp, err := c.ChangeUserAdministratorWithResponse(cmd.Context(), args[0], api.ChangeAdministratorRequest{Administrator: &role})
 		if err != nil {
 			return client.Transport(err)
 		}
@@ -254,25 +251,13 @@ func newUser(g *globals) *cobra.Command {
 	return cmd
 }
 
-func userID(value string) (uuid.UUID, error) {
-	id, err := uuid.Parse(value)
-	if err != nil {
-		return uuid.Nil, &config.UsageError{Message: fmt.Sprintf("%q is not a user id; `pa user list --json` prints them.", value)}
-	}
-	return id, nil
-}
-
-func userLifecycleCommand(g *globals, use, short string, call func(*client.Client, *cobra.Command, uuid.UUID) (*http.Response, []byte, error), result string) *cobra.Command {
+func userLifecycleCommand(g *globals, use, short string, call func(*client.Client, *cobra.Command, string) (*http.Response, []byte, error), result string) *cobra.Command {
 	return &cobra.Command{Use: use, Short: short, Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := userID(args[0])
-		if err != nil {
-			return err
-		}
 		_, c, err := g.load()
 		if err != nil {
 			return err
 		}
-		response, body, err := call(c, cmd, id)
+		response, body, err := call(c, cmd, args[0])
 		if err != nil {
 			return client.Transport(err)
 		}
@@ -339,12 +324,8 @@ func newAgent(g *globals) *cobra.Command {
 		},
 	}
 	view := &cobra.Command{
-		Use: "view ID", Short: "One agent with its owner, token state and last reported metadata.", Args: cobra.ExactArgs(1),
+		Use: "view AGENT", Short: "One agent by name or id, with its owner, token state and last reported metadata.", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := agentID(args[0])
-			if err != nil {
-				return err
-			}
 			_, c, err := g.load()
 			if err != nil {
 				return err
@@ -357,7 +338,7 @@ func newAgent(g *globals) *cobra.Command {
 				return err
 			}
 			for _, agent := range *resp.JSON200 {
-				if agent.Id == id {
+				if agent.Id.String() == args[0] || strings.EqualFold(agent.Name, args[0]) {
 					if g.json {
 						return render.JSON(cmd.OutOrStdout(), agent)
 					}
@@ -365,25 +346,21 @@ func newAgent(g *globals) *cobra.Command {
 					return nil
 				}
 			}
-			return &client.Failure{Code: exit.NotFound, Message: fmt.Sprintf("no agent %s", id)}
+			return &client.Failure{Code: exit.NotFound, Message: fmt.Sprintf("no agent %s", args[0])}
 		},
 	}
 	var newName string
 	rename := &cobra.Command{
-		Use: "rename ID --name NAME", Short: "Rename an agent; the history keeps the id, so old entries show the new name.", Args: cobra.ExactArgs(1),
+		Use: "rename AGENT --name NAME", Short: "Rename an agent, by name or id; the history keeps the id, so old entries show the new name.", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if newName == "" {
 				return &config.UsageError{Message: "--name NAME: the new name."}
-			}
-			id, err := agentID(args[0])
-			if err != nil {
-				return err
 			}
 			_, c, err := g.load()
 			if err != nil {
 				return err
 			}
-			resp, err := c.RenameAgentWithResponse(cmd.Context(), id, api.RenameAgentRequest{Name: &newName})
+			resp, err := c.RenameAgentWithResponse(cmd.Context(), args[0], api.RenameAgentRequest{Name: &newName})
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -399,17 +376,13 @@ func newAgent(g *globals) *cobra.Command {
 	}
 	rename.Flags().StringVar(&newName, "name", "", "the new name")
 	revoke := &cobra.Command{
-		Use: "revoke ID", Short: "Revoke an agent's token. The identity stays, naming the agent in everything it did.", Args: cobra.ExactArgs(1),
+		Use: "revoke AGENT", Short: "Revoke an agent's token, by name or id. The identity stays, naming the agent in everything it did.", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := agentID(args[0])
-			if err != nil {
-				return err
-			}
 			_, c, err := g.load()
 			if err != nil {
 				return err
 			}
-			resp, err := c.RevokeAgentWithResponse(cmd.Context(), id)
+			resp, err := c.RevokeAgentWithResponse(cmd.Context(), args[0])
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -417,7 +390,7 @@ func newAgent(g *globals) *cobra.Command {
 				return err
 			}
 			if g.json {
-				return render.JSON(cmd.OutOrStdout(), map[string]any{"id": id, "revoked": true})
+				return render.JSON(cmd.OutOrStdout(), map[string]any{"agent": args[0], "revoked": true})
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s revoked\n", args[0])
 			return nil
@@ -425,14 +398,6 @@ func newAgent(g *globals) *cobra.Command {
 	}
 	cmd.AddCommand(create, list, view, rename, revoke)
 	return cmd
-}
-
-func agentID(s string) (uuid.UUID, error) {
-	id, err := uuid.Parse(s)
-	if err != nil {
-		return uuid.Nil, &config.UsageError{Message: fmt.Sprintf("%q is not an agent id; `pa agent list` prints them.", s)}
-	}
-	return id, nil
 }
 
 func newToken(g *globals) *cobra.Command {
