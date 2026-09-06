@@ -147,8 +147,39 @@ installation deserves, is the whole of operations:
 docker compose -f deploy/docker-compose.yml exec db pg_dump -U planaffe planaffe > planaffe.sql
 ```
 
-That dump is the backup and the exact way back into an instance. For a readable,
-portable copy of one project, use the CLI instead:
+That dump is the backup and the exact way back into an instance. The way back
+is one command more, and it is the half that is otherwise carried out for the
+first time on the day it matters — stop the application, put the dump into an
+empty database, start again:
+
+```sh
+docker compose -f deploy/docker-compose.yml stop planaffe
+docker compose -f deploy/docker-compose.yml exec db dropdb -U planaffe planaffe
+docker compose -f deploy/docker-compose.yml exec db createdb -U planaffe planaffe
+docker compose -f deploy/docker-compose.yml exec -T db psql -v ON_ERROR_STOP=1 -U planaffe planaffe < planaffe.sql
+docker compose -f deploy/docker-compose.yml start planaffe
+```
+
+The order matters in one place only: the application is down while the database
+is replaced, because an instance that is running holds connections `dropdb`
+refuses to work around. `ON_ERROR_STOP=1` is not decoration — without it `psql`
+walks past a failed statement and exits `0` on a restore that did not happen.
+
+Migrations only run forward (ADR 0011), and for a dump that means one thing in
+each direction. A dump from an older planaffe restored under a newer one needs
+nothing done to it: the start that follows migrates it, the way any upgrade
+does. A dump from a newer planaffe under an older one has no answer at all —
+the instance refuses to start rather than serve a shape it misunderstands. So
+keep a dump beside the version it was taken from, and roll the image back
+before the database.
+
+None of this is a script that ships with planaffe, and it is not prose that has
+merely been read either: `BackupTests` in the integration tests takes a dump,
+restores it into an empty database, starts an instance on it and asks for what
+was there before. The way back is proved at every change of the schema rather
+than described.
+
+For a readable, portable copy of one project, use the CLI instead:
 
 ```sh
 pa export --project PLAN --json > planaffe-PLAN.json

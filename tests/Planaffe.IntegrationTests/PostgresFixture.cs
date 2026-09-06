@@ -49,6 +49,28 @@ public sealed class PostgresFixture : IAsyncLifetime
             MaxPoolSize = 10,
         }.ConnectionString;
     }
+
+    /// <summary>The database a connection string of ours names.</summary>
+    public static string DatabaseOf(string connectionString) =>
+        new NpgsqlConnectionStringBuilder(connectionString).Database!;
+
+    /// <summary>
+    /// A shell command inside the Postgres container, which is where
+    /// <c>pg_dump</c> and <c>psql</c> are. <c>docs/operations.md</c> runs both
+    /// through <c>docker compose exec</c> for the same reason: a test that
+    /// needed the client tools installed beside it would be proving something
+    /// about the machine it ran on.
+    /// </summary>
+    public async Task<string> RunAsync(string command)
+    {
+        var credentials = new NpgsqlConnectionStringBuilder(_container.GetConnectionString());
+        var environment = $"PGHOST=127.0.0.1 PGUSER={credentials.Username} PGPASSWORD={credentials.Password}";
+
+        var result = await _container.ExecAsync(["sh", "-c", $"{environment} {command}"], TestContext.Current.CancellationToken);
+
+        Assert.True(result.ExitCode == 0, $"{command} exited {result.ExitCode}\n{result.Stdout}\n{result.Stderr}");
+        return result.Stdout;
+    }
 }
 
 [CollectionDefinition(nameof(PostgresCollection))]
