@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { celebrateIfCleared } from "@/projects/celebrate";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/shared/Markdown";
@@ -61,7 +62,17 @@ export function IssueView() {
     return () => { live = false; };
   }, [key]);
 
-  const changed = (value: Issue) => { setState((old) => ({ key, issue: { at: "known", value }, history: old?.history ?? asking })); setEditing(false); };
+  const changed = (value: Issue) => {
+    // An act that closed an issue which was open a moment ago may have been
+    // the last one open in the project. The screen asks once, and celebrates
+    // if it was — where the human is standing, not only on the overview.
+    const was = current.issue.at === "known" ? current.issue.value.status : undefined;
+    if (was !== undefined && !closed(was) && closed(value.status)) {
+      void celebrateIfCleared(value.project);
+    }
+    setState((old) => ({ key, issue: { at: "known", value }, history: old?.history ?? asking }));
+    setEditing(false);
+  };
   const restored = (value: Issue) => { setDeleted(undefined); changed(value); };
 
   if (current.issue.at === "asking") return <><PageHeader title={<Skeleton className="h-4 w-64" />} /><div className="space-y-3 p-4"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></>;
@@ -394,3 +405,6 @@ function relativeTime(x: string) { const hours = Math.max(0, Math.floor((Date.no
 /** How much of the grace period is left, in the words the deadline is read in. */
 function timeLeft(x: string) { const hours = Math.floor((new Date(x).getTime() - Date.now()) / 3_600_000); if (hours < 1) return "less than an hour left"; return hours < 48 ? `${hours} hour${hours === 1 ? "" : "s"} left` : `${Math.floor(hours / 24)} days left`; }
 function isLong(x: string) { return x.length > 600 || x.split("\n").length > 8; }
+
+/** The two statuses that close an issue (`CONTEXT.md`, Closed). */
+function closed(status: string) { return status === "done" || status === "canceled"; }

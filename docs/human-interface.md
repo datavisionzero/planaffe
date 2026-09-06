@@ -405,9 +405,10 @@ trigger, to what the screen offers next. The phone layout performs the same acti
 desktop layout.
 
 The shell renders before project data, navigation does not remount it, list rows
-are virtualized, and two things arrive after the frame rather than in it: the
-Markdown pipeline with the first screen that renders Markdown, and the editor
-with the first screen that writes it. The editor weighs about three and a half
+are virtualized, and three things arrive after the frame rather than in it: the
+Markdown pipeline with the first screen that renders Markdown, the editor
+with the first screen that writes it, and the confetti when something is
+actually celebrated — which for most readers on most days is never. The editor weighs about three and a half
 times what the pipeline does, which is why it is fetched when a field is first
 put on a screen and why the field is a quiet placeholder for that moment rather
 than a plainer text area that would be swapped out from under somebody who had
@@ -424,10 +425,11 @@ that names none is never exceeded — it is only not kept, and nobody notices:
 | `first-load` | 780 kB | the entry module, every chunk preloaded beside it and the stylesheet — everything the built `index.html` asks for before the shell renders |
 | `markdown` | 200 kB | the Markdown pipeline's own chunk, fetched with the first screen that renders Markdown |
 | `editor` | 620 kB | the editor's own chunk, fetched when a field is first put on a screen |
+| `confetti` | 20 kB | the celebration's own chunk, fetched the first time a project reaches `clear` |
 
-The last two are also checked for where they are and not only for what they
-weigh: both are promised to arrive after the frame, so a build that puts either
-of them into the first load fails whatever its size. That is the half a number
+The last three are also checked for where they are and not only for what they
+weigh: all of them are promised to arrive after the frame, so a build that puts
+one of them into the first load fails whatever its size. That is the half a number
 alone would have missed — the pipeline sat in the first load for a while
 because one screen was imported statically instead of lazily, and the paragraph
 above went on promising otherwise.

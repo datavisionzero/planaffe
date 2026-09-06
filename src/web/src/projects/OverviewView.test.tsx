@@ -1,10 +1,19 @@
 import { screen, within } from "@testing-library/react";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { installInstance, renderAt } from "@/shared/testing";
 import { age, reason } from "./standing";
 import { OverviewView } from "./OverviewView";
 
 const now = new Date("2026-09-06T12:00:00Z").getTime();
+
+// What the celebration was asked for, so that its two sizes and the rule about
+// a first sight can be asserted without a canvas.
+const celebrations: unknown[] = [];
+
+vi.mock("./celebrate", async () => {
+  const real = await vi.importActual<typeof import("./celebrate")>("./celebrate");
+  return { ...real, celebrate: (what: unknown) => { celebrations.push(what); return Promise.resolve(); } };
+});
 
 function project(key: string, standing: string, because: string, over: Record<string, unknown> = {}) {
   return {
@@ -101,4 +110,41 @@ it("keeps an age coarse enough to read at a glance", () => {
   expect(age("2026-09-06T11:00:00Z", now)).toBe("1 hour");
   expect(age("2026-09-05T18:00:00Z", now)).toBe("18 hours");
   expect(age("2026-09-03T12:00:00Z", now)).toBe("3 days");
+});
+
+it("celebrates a project that reaches clear, and never on first sight", async () => {
+  celebrations.length = 0;
+  let answers = 0;
+
+  installInstance({
+    "GET /standing": () => {
+      answers += 1;
+      return {
+        agents: 1,
+        projects: [
+          answers === 1
+            ? project("PLAN", "waiting", "review", {
+                needs_you: { question: 0, review: 1, unready: 0, stuck: 0, oldest: "2026-09-06T11:00:00Z" },
+                work: { in_progress: 0, ready: 0, open: 1 },
+              })
+            : project("PLAN", "clear", "nothing"),
+        ],
+      };
+    },
+  });
+
+  const view = renderAt("/projects", <OverviewView />);
+  await screen.findByText("Waiting");
+
+  // The first answer is a first sight. Arriving at a screen is not the moment
+  // anything was finished, and confetti on every visit means nothing by
+  // Thursday.
+  expect(celebrations).toEqual([]);
+
+  // Coming back to the tab reads again, and this time the step changed.
+  document.dispatchEvent(new Event("visibilitychange"));
+  await screen.findByText("Clear");
+
+  expect(celebrations).toEqual([{ kind: "clear" }]);
+  view.unmount();
 });

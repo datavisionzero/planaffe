@@ -122,7 +122,12 @@ describe("the human-first issue detail", () => {
     const header = (await screen.findByRole("heading", { name: /Human-first issue/ })).parentElement!.parentElement!;
     await user.click(within(header).getByRole("button", { name: "Accept as done" }));
 
-    expect(await instance.calls.at(-1)!.json()).toEqual({ status: "done", result: issue.result });
+    // The close, by name rather than as the last call: closing an issue that
+    // was open asks the overview once afterwards, in case that was the last
+    // one open in the project.
+    const closing = instance.calls.find((call) => call.url.endsWith("/issues/PLAN-9/close"))!;
+    expect(await closing.json()).toEqual({ status: "done", result: issue.result });
+    await waitFor(() => expect(instance.calls.some((call) => call.url.endsWith("/standing"))).toBe(true));
   });
 
   it("offers Claim on a free issue and keeps the rest of the verbs in the overflow", async () => {

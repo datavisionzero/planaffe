@@ -8,10 +8,11 @@
 //
 // What is measured comes out of the built `index.html`, which is the honest
 // answer to "what does a browser fetch before the shell renders" — the entry
-// module, every chunk preloaded beside it, and the stylesheet. The editor and
-// the Markdown pipeline are chunks of their own because both arrive after the
-// frame rather than in it (ADR 0006), and they are found by the module each
-// was cut from rather than by a hash that changes with every build.
+// module, every chunk preloaded beside it, and the stylesheet. The editor, the
+// Markdown pipeline and the confetti are chunks of their own because all three
+// arrive after the frame rather than in it (ADR 0006), and they are found by
+// the module each was cut from rather than by a hash that changes with every
+// build.
 //
 // Their weight is the smaller half of what is checked about them. The larger
 // half is that they are not in the first load at all: the pipeline was, for a
@@ -88,6 +89,7 @@ const measured = {
   "first-load": loaded.reduce((total, file) => total + bytes(file), 0),
   markdown: afterTheFrame("markdown", "MarkdownField"),
   editor: afterTheFrame("editor", "Editor"),
+  confetti: afterTheFrame("confetti", "confetti\\.module"),
 };
 const limit = limits();
 let over = false;

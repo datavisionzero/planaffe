@@ -1,7 +1,9 @@
+import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { PageHeader } from "@/shared/PageHeader";
 import { cn } from "@/lib/utils";
-import { counts, look, reason, type ProjectStanding } from "./standing";
+import { celebrate } from "./celebrate";
+import { counts, look, reason, type ProjectStanding, type Standing } from "./standing";
 import { useOverview } from "./useOverview";
 
 /**
@@ -16,6 +18,45 @@ import { useOverview } from "./useOverview";
  */
 export function OverviewView() {
   const { overview, reload } = useOverview();
+  const tiles = useRef(new Map<string, HTMLElement>());
+  const seen = useRef(new Map<string, Standing>());
+
+  // A step that changed while somebody was looking at it. Never on the first
+  // sight of a project: arriving at a screen that is already `clear` is not
+  // the moment anything was finished, and confetti on every visit is confetti
+  // that means nothing by Thursday.
+  useEffect(() => {
+    if (overview.at !== "known") {
+      return;
+    }
+
+    let cleared = false;
+
+    for (const project of overview.projects) {
+      const was = seen.current.get(project.key);
+      seen.current.set(project.key, project.standing);
+
+      if (was === undefined || was === project.standing) {
+        continue;
+      }
+
+      if (project.standing === "clear") {
+        cleared = true;
+      } else if (project.standing === "running" && (was === "waiting" || was === "neglected")) {
+        // Smaller, and at the tile: the load is off, the work goes on. Keeping
+        // the two apart is what keeps the big one worth something.
+        const tile = tiles.current.get(project.key);
+        if (tile !== undefined) {
+          void celebrate({ kind: "relieved", at: tile });
+        }
+      }
+    }
+
+    // Once, however many projects arrived at it in the same answer.
+    if (cleared) {
+      void celebrate({ kind: "clear" });
+    }
+  }, [overview]);
 
   return (
     <>
@@ -59,7 +100,17 @@ export function OverviewView() {
             </p>
           )}
           <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {overview.projects.map((project) => <Tile key={project.key} project={project} now={overview.read} />)}
+            {overview.projects.map((project) => (
+              <Tile
+                key={project.key}
+                project={project}
+                now={overview.read}
+                held={(element) => {
+                  if (element === null) tiles.current.delete(project.key);
+                  else tiles.current.set(project.key, element);
+                }}
+              />
+            ))}
           </ul>
         </div>
       )}
@@ -67,14 +118,14 @@ export function OverviewView() {
   );
 }
 
-function Tile({ project, now }: { project: ProjectStanding; now: number }) {
+function Tile({ project, now, held }: { project: ProjectStanding; now: number; held: (element: HTMLElement | null) => void }) {
   const drawn = look[project.standing];
   const Icon = drawn.icon;
   const to = drawn.view === null ? `/${project.key}` : `/${project.key}/${drawn.view}`;
   const said = counts(project);
 
   return (
-    <li>
+    <li ref={held}>
       <Link
         to={to}
         className="flex h-full flex-col gap-2 rounded-lg border bg-card p-3 transition-colors hover:bg-accent"
