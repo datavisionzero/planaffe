@@ -280,6 +280,10 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
     /// The rows are there to widen the window, not because the count matters:
     /// the query has to take long enough for the claim beside it to commit
     /// while it runs. Without the recheck this fails on nearly every attempt.
+    /// The claim beside it is not guaranteed to land: where `next` gets to the
+    /// row first it holds it, and the claim is refused as `claim-held` — that
+    /// attempt missed the window and settles nothing. At least one has to hit
+    /// it, or the test has quietly stopped testing anything.
     /// </remarks>
     [Fact]
     public async Task An_issue_claimed_while_next_is_choosing_is_not_the_one_next_hands_out()
@@ -292,6 +296,7 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
         }
 
         using var agent = await Agent(instance, admin, "one");
+        var hits = 0;
         for (var attempt = 0; attempt < 6; attempt++)
         {
             var preview = await agent.GetFromJsonAsync<JsonElement>("/projects/PLAN/next?limit=1", Ct);
@@ -300,9 +305,20 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
             var asking = agent.PostAsJsonAsync("/projects/PLAN/next", new { }, Ct);
             await Task.Delay(attempt, Ct);
             using var stolen = await admin.PostAsJsonAsync($"/issues/{top}/claim", new { }, Ct);
-            Assert.Equal(HttpStatusCode.OK, stolen.StatusCode);
-
             using var answer = await asking;
+
+            // `next` held the row before the claim reached it: the window was
+            // missed, and the attempt says nothing either way. On to the next.
+            if (stolen.StatusCode == HttpStatusCode.Conflict)
+            {
+                var missed = await stolen.Content.ReadFromJsonAsync<JsonElement>(Ct);
+                Assert.Equal("/problems/claim-held", missed.GetProperty("type").GetString());
+                continue;
+            }
+
+            Assert.Equal(HttpStatusCode.OK, stolen.StatusCode);
+            hits++;
+
             Assert.True(answer.StatusCode == HttpStatusCode.OK,
                 $"Attempt {attempt}: expected OK, got {answer.StatusCode}: {await answer.Content.ReadAsStringAsync(Ct)}");
 
@@ -310,6 +326,10 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
             Assert.NotEqual(top, handed.GetProperty("key").GetString());
             Assert.Equal("in_progress", handed.GetProperty("status").GetString());
         }
+
+        Assert.True(hits > 0,
+            "No attempt got its claim in while `next` was choosing: every one of them was refused as `claim-held`, "
+            + "so the window this test exists for was never entered and nothing about the recheck was proven.");
     }
 
     private static async Task<HttpClient> Project(AnInstance instance)
