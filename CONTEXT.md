@@ -330,6 +330,14 @@ list rather than making each blocked issue a separate emergency. `stuck` in the
 API.
 _Avoid_: dead, orphaned, abandoned, deadlocked
 
+**Standing**:
+Derived: how one project stands for the human who runs it, as one of five steps
+— `clear`, `running`, `idle`, `waiting`, `neglected` — read off what is waiting
+for a human and what an agent could still take, with the worst applicable step
+winning. It grades attention and never the size of the backlog (ADR 0024), and
+it is computed on read like **Workable**, never written.
+_Avoid_: health, score, traffic light, state, project status
+
 **Wait**:
 `wait` on `next`, on a question and on "needs you": the request stays open
 until what it asked for is there or the deadline passes, and answers the same

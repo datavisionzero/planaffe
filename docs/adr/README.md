@@ -47,3 +47,4 @@ material value to understanding the decision.
 - [0021 – A page's address is its slug, not a key](./0021-a-pages-address-is-its-slug-not-a-key.md)
 - [0022 – A comment can be corrected and withdrawn by its author](./0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md)
 - [0023 – A dependency is a decision a human takes](./0023-a-dependency-is-a-decision-a-human-takes.md)
+- [0024 – The overview grades attention, not backlog size](./0024-the-overview-grades-attention-not-backlog-size.md)

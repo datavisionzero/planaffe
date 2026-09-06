@@ -6,7 +6,12 @@ the product intent in [`VISION.md`](../VISION.md); the HTTP operations remain
 defined in [`api.md`](./api.md).
 
 Bulk issue changes, export and all three waiting operations remain CLI work.
-There is no board, dashboard or rich-text editor. Every Markdown editor is the
+There is no board and no rich-text editor. There is one screen above the
+projects — the overview, which grades what is waiting for a human and never how
+long a backlog is
+([ADR 0024](./adr/0024-the-overview-grades-attention-not-backlog-size.md)); it
+is the only place the application answers across projects, and it is not a
+dashboard of numbers about the work. Every Markdown editor is the
 same field over Markdown source, and every ordinary human action on one issue is
 available in the browser. Enter in that field is a line break where it is
 read, so nothing has to be known about Markdown to write one
@@ -34,6 +39,7 @@ Markdown and never a document model of its own
 | `/login` | Sign in | email, password, recovery link | centred single column |
 | `/activate` | Accept invitation or bootstrap | name/email context and password setup | centred single column |
 | `/recover` | Recover password | request form or new-password form | centred single column |
+| `/projects` | Overview | one tile per project: its standing, the reason for it and its three counts, worst first | one column of tiles |
 | `/projects/new` | Create project | immutable key, name and two project switches | centred single column |
 | `/:project/ready` | Ready | shared issue list with workable defaults | two-line rows, no horizontal scroll |
 | `/:project/in-progress` | In progress | shared issue list filtered to active claims | two-line rows, no horizontal scroll |
@@ -150,6 +156,56 @@ else's label has to know they are. Where nothing is typed there is nothing to
 merge and nothing to show: the ready switch on the issue and the triage button
 on "Needs you" take the version, say that it changed, and let the same press
 work the second time.
+
+## Overview
+
+The one screen that answers across projects, and the one `/` lands on. A tile
+per project, and the tile says how that project stands: its **standing**
+([`CONTEXT.md`](../CONTEXT.md)), the reason that produced it, and the three
+counts underneath — in progress, ready, open. Which is to say what "Needs you"
+already says for one project, said for all of them at once, for the reader who
+has four and can otherwise only look at one at a time.
+
+The five steps are `clear`, `running`, `idle`, `waiting` and `neglected`, worst
+applicable wins, and what grades them is what waits for a human and whether an
+agent could still take work — never how many issues are open. That is ADR 0024,
+and it is why the open count is a number on the tile and colours nothing.
+
+**The tile never rests on colour**, the way an issue row already marks its
+status and its priority twice over: the step carries a symbol, its word and the
+reason in a line of its own — "2 questions, oldest 6 days", "1 in review",
+"nothing ready, no agent". `idle` names which of its three cases it is, because
+no `ready` issue, a wall of blockers and no agent token at all are repaired in
+three different places. At `clear` the line says nothing is open rather than
+printing three zeros.
+
+**Tiles sort by standing, worst first**, then by the older entry, then by
+project key: what needs a human is the first thing under the reader's eye. The
+whole tile is the link, and it leads to the reason rather than to the project —
+`neglected` and `waiting` to that project's "Needs you", `idle` to its "Ready",
+the two good steps to where the project opens anyway.
+
+**`/` lands here, with one exception**: a reader with a single project is taken
+straight into it, because an overview of one tile is decoration. `/projects/new`
+keeps its own meaning and is not swallowed by the route above it. The way back
+is the project switcher, as a row above the projects, and the command palette;
+the sidebar belongs to one project and gets no entry that leads out of it.
+
+**It holds no connection open.** One read carrying `If-None-Match`, repeated
+when the tab is looked at again and on an interval while it is, and not at all
+while it is in the background. The wake channel is one project's
+([`api.md`](./api.md), Waiting), so ten projects would be ten held connections
+for a screen that is glanced at rather than sat on. Where the instance stops
+answering the tiles stay as they were and the next attempt comes with a growing
+pause — what the navigation counts already do.
+
+**Reaching `clear` is celebrated**, once, and only when the reader was there to
+see it change: confetti over the screen for about a second, a smaller one at
+the tile for the step out of `waiting` or `neglected` into `running`, and
+nothing at all on first load, which would spend the gesture on arriving rather
+than on finishing. A reader who asked for reduced motion gets the sentence and
+no motion. The celebration carries nothing that has to be read, so it is
+`aria-hidden` and takes no pointer.
 
 ## Pages
 
@@ -283,7 +339,7 @@ breakpoint and carries the rest.
 | Epic | list, open, inspect progress and filtered issues | create, edit Markdown and labels, close, reopen, delete, restore |
 | Release | list, open, preview exact membership, copy as Markdown | edit notes, publish, put an issue into the open release or take it out, rename or take back the newest publication |
 | Label | list and inspect use | create, edit name, group and description, rename or dissolve a group, delete, restore |
-| Project | switch and inspect settings/members/instructions | create; edit name, switches and the instructions page; delete or restore when administrator |
+| Project | switch, see how every project one has access to stands, and inspect settings/members/instructions | create; edit name, switches and the instructions page; delete or restore when administrator |
 | Identity | inspect own profile, sessions, tokens and agents | change own name, verified email and password; revoke sessions/tokens; create or revoke own tokens and agents |
 | Administration | inspect all users, project assignments, deleted projects and SMTP status | invite/resend, hand over an invitation or password link, deactivate/reactivate, change administrator role, assign projects, send test email |
 
