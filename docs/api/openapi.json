@@ -340,6 +340,37 @@
         }
       }
     },
+    "/standing": {
+      "get": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "How every project the caller sees is standing, worst first. Not paginated.",
+        "operationId": "ReadStanding",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users": {
       "post": {
         "tags": [
@@ -7990,6 +8021,25 @@
           }
         }
       },
+      "Overview": {
+        "required": [
+          "projects",
+          "agents"
+        ],
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectStanding"
+            }
+          },
+          "agents": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "Page": {
         "required": [
           "slug",
@@ -8300,6 +8350,37 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "ProjectStanding": {
+        "required": [
+          "key",
+          "name",
+          "standing",
+          "because",
+          "needs_you",
+          "work"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/Standing"
+          },
+          "because": {
+            "$ref": "#/components/schemas/StandingBecause"
+          },
+          "needs_you": {
+            "$ref": "#/components/schemas/StandingAttention"
+          },
+          "work": {
+            "$ref": "#/components/schemas/StandingWork"
           }
         }
       },
@@ -8703,6 +8784,87 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "Standing": {
+        "enum": [
+          "clear",
+          "running",
+          "idle",
+          "waiting",
+          "neglected"
+        ],
+        "type": "string"
+      },
+      "StandingAttention": {
+        "required": [
+          "question",
+          "review",
+          "unready",
+          "stuck",
+          "oldest"
+        ],
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "review": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unready": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "stuck": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "oldest": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "StandingBecause": {
+        "enum": [
+          "question",
+          "review",
+          "unready",
+          "stuck",
+          "no_agent",
+          "blocked",
+          "nothing_ready",
+          "working",
+          "nothing"
+        ],
+        "type": "string"
+      },
+      "StandingWork": {
+        "required": [
+          "in_progress",
+          "ready",
+          "open"
+        ],
+        "type": "object",
+        "properties": {
+          "in_progress": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ready": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "open": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

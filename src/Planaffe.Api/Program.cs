@@ -96,6 +96,7 @@ builder.Services.AddSingleton(InstanceSettings.FromVariables(
 // extensibility the product offers.
 builder.Services.AddScoped<CreateProject>();
 builder.Services.AddScoped<ListProjects>();
+builder.Services.AddScoped<ReadStanding>();
 builder.Services.AddScoped<ListAdminProjects>();
 builder.Services.AddScoped<ReadProject>();
 builder.Services.AddScoped<ChangeProject>();

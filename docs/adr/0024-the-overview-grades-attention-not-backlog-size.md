@@ -61,9 +61,10 @@ of them is waiting. Roadmaps, OKRs and reporting remain out.
 - **The scale is closed**, like the status set: five steps, no configuration,
   no per-project thresholds. Whoever wants a different rule changes it here for
   everybody, which is the point of guiding principle 3.
-- **`idle` says which of its three cases it is** — nothing ready, everything
-  blocked, or no agent at all — because they are repaired in three different
-  places, and a shared word would send the reader to the wrong one.
+- **`idle` says which of its three cases it is** — no agent at all, work
+  behind blockers, or work that simply is not workable — because they are
+  repaired in three different places, and a shared word would send the reader
+  to the wrong one.
 - **The tile never rests on colour**: the step carries a symbol, a word and the
   reason that produced it, the way an issue row already marks status and
   priority twice over.

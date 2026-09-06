@@ -28,6 +28,15 @@ public static class ProjectEndpoints
             .WithSummary("Every project, optionally including deleted projects. Administrators only.")
             .ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status403Forbidden);
 
+        // Outside the /projects group and outside the project-scope door: the
+        // one read that answers across projects, and so the one with no key in
+        // its path (ADR 0024). It scopes itself to what the caller may see.
+        endpoints.MapGet("/standing", (ReadStanding read, CancellationToken cancellationToken) => read.ExecuteAsync(cancellationToken))
+            .RequireAuthorization().WithName("ReadStanding")
+            .WithSummary("How every project the caller sees is standing, worst first. Not paginated.")
+            .Produces<OverviewShape>()
+            .ProducesProblem(StatusCodes.Status401Unauthorized);
+
         var door = endpoints.MapGroup("/projects")
             .RequireAuthorization()
             .ProducesProblem(StatusCodes.Status401Unauthorized);

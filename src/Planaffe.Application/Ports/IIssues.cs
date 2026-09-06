@@ -154,6 +154,32 @@ public sealed record NeedsYouRow(Guid Id, NeedsYouBecause Because);
 /// <param name="Agents">Agents that could pick work up at all — a fact about the instance, not about any row.</param>
 public sealed record NeedsYouPageRows(IReadOnlyList<NeedsYouRow> Items, int Total, bool HasMore, int Agents);
 
+/// <summary>One project the standing is read for, with the switch that decides its third group.</summary>
+public sealed record StandingScope(Guid ProjectId, bool TriageRequired);
+
+/// <summary>
+/// The raw counts one project's standing is read off, before the scale in the
+/// Domain turns them into a step. Every project asked for comes back, including
+/// the ones with nothing in them.
+/// </summary>
+public sealed record StandingRow(
+    Guid ProjectId,
+    int Questions,
+    int InReview,
+    int Unready,
+    int Stuck,
+    DateTimeOffset? Oldest,
+    int InProgress,
+    int Ready,
+    int Blocked,
+    int Open);
+
+/// <param name="Agents">
+/// Live agent tokens on the instance — one number for the whole answer, not one
+/// per project, exactly as it is beside "needs you" and for the same reason.
+/// </param>
+public sealed record StandingRows(IReadOnlyList<StandingRow> Projects, int Agents);
+
 /// <summary>
 /// What <c>next</c> asks for: the project, the caller the eight conditions are
 /// evaluated for, and the filters of <c>docs/api.md</c> with names already
@@ -218,6 +244,15 @@ public interface IIssues
         Guid projectId, bool triageRequired, NeedsYouPosition? after, int limit, CancellationToken cancellationToken);
 
     Task<Reasons> ReasonsAsync(NextQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The counts behind every project's standing, in one statement over all of
+    /// them (ADR 0024). One row per project asked for, in no particular order,
+    /// and the caller is who the workable count is evaluated for — the same
+    /// caller <c>next</c> would hand those issues to.
+    /// </summary>
+    Task<StandingRows> StandingAsync(
+        IReadOnlyCollection<StandingScope> scope, Guid callerId, CancellationToken cancellationToken);
 
     /// <summary>The row itself, tracked and locked <c>for update</c> for the rest of the transaction.</summary>
     Task<Issue?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken);

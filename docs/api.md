@@ -715,6 +715,61 @@ parked blocker still counts, and a parked issue with an open question is on the
 list as `question`. The CLI: `pa needs-you`, which prints the four groups under
 their headings.
 
+### Standing
+
+| method | path | who | does |
+|---|---|---|---|
+| `GET` | `/standing` | any | how every project the caller sees is standing: `{ projects: [ProjectStanding], agents }`, worst first. No key in the path, no pagination |
+
+The one read that answers across projects, which is why it is the one with no
+project in its address. It returns exactly the projects `GET /projects`
+returns; a project the caller has no access to is absent rather than refused.
+
+```json
+{ "projects": [
+  { "key": "PLAN", "name": "planaffe",
+    "standing": "neglected", "because": "question",
+    "needs_you": { "question": 2, "review": 0, "unready": 0, "stuck": 0,
+                   "oldest": "2026-08-31T09:12:00Z" },
+    "work": { "in_progress": 3, "ready": 12, "open": 41 } } ],
+  "agents": 1 }
+```
+
+**`standing` is one of five, worst applicable winning**: `clear` when nothing is
+open at all; `running` when nothing waits for a human and an agent has work or
+is on it; `idle` when nothing waits for a human and no agent could take
+anything either; `waiting` at one or two entries in "needs you", none of them
+older than three days; `neglected` at three, or at one that is. The size of the
+backlog enters none of it (ADR 0024), and the instance decides the step so that
+two clients cannot disagree about the same project.
+
+**`because` names the one thing that most explains the step**, so a reader is
+sent where it is repaired rather than at a colour. For `waiting` and
+`neglected` it is the first non-empty of `question`, `review`, `unready`,
+`stuck` — the order of "needs you", so that the tile and the first row of that
+list say the same thing. For `idle` it is `no_agent`, `blocked` or
+`nothing_ready`, which are three different repairs. `clear` says `nothing` and
+`running` says `working`.
+
+`needs_you` is the four groups of `GET /projects/{key}/needs-you`, counted
+rather than listed, under the same rules — `unready` only where triage is
+required, `stuck` by the blocker-chain rule, a parked issue never `stuck`
+itself. `oldest` is when the oldest of them began to wait, and `null` where
+nothing does: a question since it was asked, an issue in review since it
+entered review, and the other two since the issue was written, which is the
+closest thing either has to a beginning.
+
+`work.ready` is what **this caller** would be handed — the eight conditions of
+VISION 10 for the caller asking, without the filters `next` takes — so it is
+the count belonging to the identity reading, exactly as `GET
+/projects/{key}/next` is. `in_progress` is the live claims and `open` every
+issue that is neither `done` nor `canceled`. `agents` stands once for the whole
+answer and is the number that stands beside "needs you", for the same reason.
+
+**No `wait` here.** The wake channel is one project's (Waiting, below), and an
+answer spanning every project has no single channel to hang on; a reader of the
+overview re-reads it instead. The CLI: `pa standing`.
+
 ### Waiting
 
 `wait`, in seconds, on four reads — one mechanism, four doors (VISION 6.1):

@@ -175,8 +175,8 @@ and it is why the open count is a number on the tile and colours nothing.
 status and its priority twice over: the step carries a symbol, its word and the
 reason in a line of its own — "2 questions, oldest 6 days", "1 in review",
 "nothing ready, no agent". `idle` names which of its three cases it is, because
-no `ready` issue, a wall of blockers and no agent token at all are repaired in
-three different places. At `clear` the line says nothing is open rather than
+no agent at all, work behind blockers and work that is simply not workable are
+repaired in three different places. At `clear` the line says nothing is open rather than
 printing three zeros.
 
 **Tiles sort by standing, worst first**, then by the older entry, then by

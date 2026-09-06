@@ -292,6 +292,201 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
             [.. page.Select(row => new NeedsYouRow(row.Id, (NeedsYouBecause)row.Because))], total, hasMore, agents);
     }
 
+    private sealed class StandingSelection
+    {
+        public Guid ProjectId { get; init; }
+
+        public int Questions { get; init; }
+
+        public int InReview { get; init; }
+
+        public int Unready { get; init; }
+
+        public int Stuck { get; init; }
+
+        public DateTimeOffset? Oldest { get; init; }
+
+        public int InProgress { get; init; }
+
+        public int Ready { get; init; }
+
+        public int Blocked { get; init; }
+
+        public int Open { get; init; }
+    }
+
+    // Every project's standing in one statement (ADR 0024). The shape is the
+    // needs-you query generalised: `derived` and `walk` are scoped by a join
+    // against the projects asked for instead of by one project id, and the
+    // triage switch comes out of that join rather than out of a parameter,
+    // because it differs per project. The recursion is the expensive half and
+    // it is walked once for all of them rather than once each.
+    //
+    // The counts that are not "needs you" — workable, blocked, open, in flight
+    // — are aggregated in the same pass over `derived`, so a project that has
+    // nothing in any group still costs nothing extra.
+    private const string StandingSql = """
+        with recursive scope (project_id, triage_required) as (
+            select id, triage from unnest({0}::uuid[], {1}::boolean[]) as asked(id, triage)
+        ),
+        derived as (
+            select i.id, i.project_id, i.epic_id, i.parent_id, i.priority, i.created_at, i.number,
+                   i.assignee_id, i.ready,
+                   case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+                        then 'todo' else i.status end as status,
+                   case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+                        then null else i.claimed_by end as claimed_by
+              from issue i
+              join scope s on s.project_id = i.project_id
+             where i.deleted_at is null
+        ),
+        walk (root_id, node_id, path) as (
+            select blocked.id, blocker.id, array[blocked.id, blocker.id]
+              from derived blocked
+              join blocker edge on edge.blocked_id = blocked.id
+              join derived blocker on blocker.id = edge.blocker_id
+             where blocked.status not in ('done', 'canceled')
+               and blocker.status not in ('done', 'canceled')
+            union all
+            select walk.root_id, blocker.id, walk.path || blocker.id
+              from walk
+              join blocker edge on edge.blocked_id = walk.node_id
+              join derived blocker on blocker.id = edge.blocker_id
+             where blocker.status not in ('done', 'canceled')
+               and cardinality(walk.path) <= {2}
+               and not blocker.id = any(walk.path)
+        ),
+        stuck as (
+            select distinct walk.root_id
+              from walk
+              join derived terminal on terminal.id = walk.node_id
+             where terminal.status = 'backlog'
+                or exists (select 1 from question q where q.issue_id = terminal.id and q.answer is null)
+        ),
+        open_question as (
+            select q.issue_id, min(q.asked_at) as asked_at
+              from question q
+             where q.answer is null
+             group by q.issue_id
+        ),
+        classified as (
+            select candidate.project_id,
+                   case
+                     when oq.issue_id is not null then 0
+                     when candidate.status = 'review' then 1
+                     when s.triage_required and candidate.status = 'todo' and not candidate.ready then 2
+                     else 3
+                   end as because,
+                   -- When this began to wait, which is what the three-day line
+                   -- is measured against: a question since it was asked, an
+                   -- issue in review since it entered review, and the other two
+                   -- since the issue was written — the closest thing either has
+                   -- to a beginning.
+                   case
+                     when oq.issue_id is not null then oq.asked_at
+                     when candidate.status = 'review'
+                       then coalesce((select max(h.at) from history h
+                                       where h.issue_id = candidate.id and h.field = 'status' and h.new_value = 'review'),
+                                     candidate.created_at)
+                     else candidate.created_at
+                   end as waiting_since
+              from derived candidate
+              join scope s on s.project_id = candidate.project_id
+              left join open_question oq on oq.issue_id = candidate.id
+              left join stuck on stuck.root_id = candidate.id
+             where candidate.status not in ('done', 'canceled')
+               and (oq.issue_id is not null
+                    or candidate.status = 'review'
+                    or (s.triage_required and candidate.status = 'todo' and not candidate.ready)
+                    or (stuck.root_id is not null and candidate.status <> 'backlog'))
+        ),
+        attention as (
+            select project_id,
+                   count(*) filter (where because = 0)::int as questions,
+                   count(*) filter (where because = 1)::int as in_review,
+                   count(*) filter (where because = 2)::int as unready,
+                   count(*) filter (where because = 3)::int as stuck,
+                   min(waiting_since) as oldest
+              from classified
+             group by project_id
+        ),
+        work as (
+            select d.project_id,
+                   count(*) filter (where d.status not in ('done', 'canceled'))::int as open,
+                   count(*) filter (where d.claimed_by is not null)::int as in_progress,
+                   count(*) filter (where d.status not in ('done', 'canceled')
+                                      and exists (select 1 from blocker b join derived f on f.id = b.blocker_id
+                                                   where b.blocked_id = d.id and f.status not in ('done', 'canceled')))::int as blocked,
+                   -- The eight conditions of VISION 10, for the caller asking,
+                   -- without the filters `next` takes: what this caller would be
+                   -- handed if they asked for work in this project right now.
+                   count(*) filter (
+                       where d.status = 'todo'
+                         and d.claimed_by is null
+                         and (d.assignee_id is null or d.assignee_id = {3})
+                         and (not s.triage_required or d.ready)
+                         and not exists (select 1 from question q where q.issue_id = d.id and q.answer is null)
+                         and not exists (select 1 from blocker b join derived f on f.id = b.blocker_id
+                                          where b.blocked_id = d.id and f.status not in ('done', 'canceled'))
+                         and not exists (select 1 from derived c where c.parent_id = d.id and c.status not in ('done', 'canceled'))
+                         and (d.parent_id is null or exists (
+                             select 1 from derived p
+                              where p.id = d.parent_id and p.status not in ('backlog', 'done', 'canceled')
+                                and not exists (select 1 from blocker pb join derived pf on pf.id = pb.blocker_id
+                                                 where pb.blocked_id = p.id and pf.status not in ('done', 'canceled'))))
+                   )::int as ready
+              from derived d
+              join scope s on s.project_id = d.project_id
+             group by d.project_id
+        )
+        select sc.project_id as "ProjectId",
+               coalesce(a.questions, 0) as "Questions",
+               coalesce(a.in_review, 0) as "InReview",
+               coalesce(a.unready, 0) as "Unready",
+               coalesce(a.stuck, 0) as "Stuck",
+               a.oldest as "Oldest",
+               coalesce(w.in_progress, 0) as "InProgress",
+               coalesce(w.ready, 0) as "Ready",
+               coalesce(w.blocked, 0) as "Blocked",
+               coalesce(w.open, 0) as "Open"
+          from scope sc
+          left join attention a on a.project_id = sc.project_id
+          left join work w on w.project_id = sc.project_id
+        """;
+
+    public async Task<StandingRows> StandingAsync(
+        IReadOnlyCollection<StandingScope> scope, Guid callerId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        // The same count that stands beside "needs you", read once for the whole
+        // answer: it is a fact about the instance and repeating it per project
+        // would only invite a reader to think it differs between them.
+        var agents = await context.Tokens
+            .CountAsync(t => t.Kind == IdentityKind.Agent && t.RevokedAt == null, cancellationToken);
+
+        if (scope.Count == 0)
+        {
+            return new StandingRows([], agents);
+        }
+
+        object[] parameters =
+        [
+            new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid, Value = scope.Select(s => s.ProjectId).ToArray() },
+            new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Boolean, Value = scope.Select(s => s.TriageRequired).ToArray() },
+            CycleDepth,
+            callerId,
+        ];
+
+        var rows = await context.Database.SqlQueryRaw<StandingSelection>(StandingSql, parameters).ToListAsync(cancellationToken);
+
+        return new StandingRows(
+            [.. rows.Select(row => new StandingRow(
+                row.ProjectId, row.Questions, row.InReview, row.Unready, row.Stuck, row.Oldest,
+                row.InProgress, row.Ready, row.Blocked, row.Open))],
+            agents);
+    }
+
     private static object[] NeedsYouParameters(Guid projectId, bool triageRequired, NeedsYouPosition? after, int limit) =>
     [
         projectId,
