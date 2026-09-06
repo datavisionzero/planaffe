@@ -98,11 +98,13 @@ it("sets ready in place and reads the list again", async () => {
 
   const request = await vi.waitFor(() => instance.calls.find((call) => call.method === "PATCH")!);
   expect(request.headers.get("If-Match")).toBe("2026-08-02T10:00:00Z");
-  // Every field is required; only `ready` is written, the rest is left alone.
-  expect(await request.json()).toEqual({
-    title: null, description: null, result: null, priority: null, ready: true,
-    assignee: null, epic: null, parent: null, labels: null, status: null,
-  });
+  // Only `ready` is on the wire, and this is the whole of the assertion: a
+  // field present as `null` is not a field left alone, it is a field cleared
+  // (`docs/api.md`). Naming the others here to satisfy the generated type sent
+  // the description, the result, the assignee, the epic and the parent away
+  // with one press — and this very expectation, written the same way, held the
+  // door open for it.
+  expect(await request.json()).toEqual({ ready: true });
   // The row leaves because the list was read again, not because it was removed here.
   await vi.waitFor(() => expect(screen.queryByText("Never triaged")).toBeNull());
   expect(screen.queryByRole("heading", { name: /Not ready/ })).not.toBeInTheDocument();

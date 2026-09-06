@@ -474,6 +474,48 @@ public sealed class IssueEndpointTests(PostgresFixture postgres)
         Assert.Equal(JsonValueKind.Null, blockerRead.GetProperty("blocks")[0].GetProperty("result").ValueKind);
     }
 
+    /// <summary>
+    /// The three states of a <c>PATCH</c> (<c>docs/api.md</c>): absent leaves a
+    /// field alone, present as <c>null</c> clears it, present with a value
+    /// writes it. Pinned here because a client read the first two as one and
+    /// wrote away a description, an epic and an assignee with a press meant for
+    /// one flag.
+    /// </summary>
+    [Fact]
+    public async Task An_absent_field_is_left_alone_and_one_present_as_null_is_cleared()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Ready(instance);
+        await admin.PostAsJsonAsync("/epics", new { project = "PLAN", title = "Theme" }, Ct);
+        await admin.PostAsJsonAsync(
+            "/issues",
+            new
+            {
+                project = "PLAN",
+                issues = new[] { new { title = "The work", description = "Four columns.", epic = "PLAN-E1", assignee = "maintainer" } },
+            },
+            Ct);
+
+        // One flag, and nothing else named: everything else stands.
+        using var flagged = await admin.PatchAsJsonAsync("/issues/PLAN-1", new { ready = true }, Ct);
+        var after = await flagged.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.True(after.GetProperty("ready").GetBoolean());
+        Assert.Equal("Four columns.", after.GetProperty("description").GetString());
+        Assert.Equal("PLAN-E1", after.GetProperty("epic").GetProperty("key").GetString());
+        Assert.Equal("maintainer", after.GetProperty("assignee").GetProperty("name").GetString());
+
+        // The same fields named as null are the other act entirely.
+        using var cleared = await admin.PatchAsJsonAsync(
+            "/issues/PLAN-1",
+            new { description = (string?)null, epic = (string?)null, assignee = (string?)null },
+            Ct);
+        var empty = await cleared.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal(string.Empty, empty.GetProperty("description").GetString());
+        Assert.Equal(JsonValueKind.Null, empty.GetProperty("epic").ValueKind);
+        Assert.Equal(JsonValueKind.Null, empty.GetProperty("assignee").ValueKind);
+        Assert.True(empty.GetProperty("ready").GetBoolean());
+    }
+
     private static async Task<HttpClient> Ready(AnInstance instance)
     {
         var admin = instance.ClientWith(AnInstance.BootstrapToken);

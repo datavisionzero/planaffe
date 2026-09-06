@@ -225,12 +225,15 @@ function SetReady({ issue, onDone }: { issue: IssueSummary; onDone: () => void }
       const answer = await api.PATCH("/issues/{key}", {
         params: { path: { key: issue.key } },
         headers: { "If-Match": version },
-        // Every field of the change is required and `null` leaves it alone;
-        // only `ready` is written here.
-        body: {
-          title: null, description: null, result: null, priority: null, ready: true,
-          assignee: null, epic: null, parent: null, labels: null, status: null,
-        },
+        // Only `ready`, and nothing beside it. A `PATCH` reads three states
+        // and not two — absent, present as `null`, present with a value — and
+        // present as `null` is what clears a field (`docs/api.md`, "Change the
+        // fields present; `null` clears"). Naming the other fields as `null`
+        // to satisfy the generated type, which marks every property of the
+        // body required, wrote the description, the result, the assignee, the
+        // epic and the parent away with one press. The cast is the way past
+        // that type, as at the same switch on the issue screen.
+        body: { ready: true } as never,
       });
 
       const current = stale<{ updated_at: string }>(answer);
