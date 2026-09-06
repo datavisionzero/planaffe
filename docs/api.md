@@ -98,23 +98,39 @@ not change when it starts counting.
   "author": { "id": "…", "kind": "user", "name": "maintainer" },
   "labels": [ { "name": "feature", "group": "kind", "description": "…" } ],
   "epic": { "key": "PLAN-E2", "title": "Backend and data model", "description": "…markdown…", "status": "open" },
-  "blocked_by": [ { "key": "PLAN-40", "title": "…", "status": "todo", "open": true } ],
+  "blocked_by": [ { "key": "PLAN-40", "title": "…", "status": "done", "open": false, "result": "…markdown…" } ],
   "blocks":     [ { "key": "PLAN-44", "title": "…", "status": "todo", "open": true } ],
   "comments":   [ { "id": "…", "author": {…}, "body": "…", "created_at": "…", "edited_at": null } ],
   "questions":  [ { "id": "…", "question": "…", "asked_by": {…}, "asked_at": "…",
                     "answer": null, "answered_by": null, "answered_at": null } ],
-  "project": { "key": "PLAN", "name": "planaffe", "triage_required": false, "review_required": false,
-               "labels": [ { "name": "bug", "group": "kind", "description": "…" }, … ] }
+  "project_context": { "key": "PLAN", "name": "planaffe", "triage_required": false, "review_required": false,
+                       "labels": [ { "name": "bug", "group": "kind", "description": "…" }, … ],
+                       "instructions": { "slug": "agents", "title": "…", "body": "…markdown…" } }
 }
 ```
 
-This is the context package of cut one (VISION 15.5): the ticket, its comments
-and questions, the epic's description, and the project's labels with their
-descriptions — everything an agent gets in one read. `labels` and `epic` are
-the full objects here and the key or name in the summary; the two shapes are
-named apart in the contract so a client always knows which it holds. The
-history is not part of it — it can be long and is read for a different reason —
-and has its own endpoint.
+This is the context package of VISION 15.5: the ticket, its comments and
+questions, the epic's description, the results of the issues that blocked it,
+the project's labels with their descriptions and the project's instructions —
+everything an agent gets in one read, and the same object every act on an issue
+answers with, so claiming delivers it too. `labels` and `epic` are the full
+objects here and the key or name in the summary; the two shapes are named apart
+in the contract so a client always knows which it holds. The history is not
+part of it — it can be long and is read for a different reason — and has its
+own endpoint.
+
+`result` stands on `blocked_by` and not on `blocks`: what a predecessor decided
+is what the work starts from, and a successor has decided nothing yet. It is
+`null` where the blocker recorded none, and on a link into a project the caller
+does not reach, which stays hidden and assumed open as it always was.
+
+`project_context.instructions` is the page the project designates (VISION
+15.3), or `null` — the document itself and the slug it can be changed at. One
+page and not a flag on each of them: three marked pages would be three pages of
+context on every ticket, and the context budget is the resource the idea is
+about. It is the same page the wiki serves at
+`GET /projects/{key}/pages/{slug}`, not a second kind of Markdown on the
+project.
 
 `EpicSummary` and `Epic`:
 
@@ -147,8 +163,15 @@ what last.
 
 ```json
 { "key": "PLAN", "name": "planaffe", "triage_required": false, "review_required": false,
-  "created_at": "…", "updated_at": "…" }
+  "instructions_page": "agents", "created_at": "…", "updated_at": "…" }
 ```
+
+`instructions_page` is the slug of the page every agent is handed with every
+ticket, or `null` where the project designates none. The text is not here: a
+project is read to be administered, and the instructions are read with a
+ticket, where `ProjectContext` carries them. The designation follows the page —
+it goes quiet while the page is deleted, comes back with the restore, and the
+purge takes it with the row.
 
 `User`, `BrowserSession` and `SmtpStatus`:
 
@@ -397,7 +420,7 @@ metadata back channel (`PATCH /me/metadata`) is cut two.
 | `POST` | `/projects` | user | `{ key, name, triage_required?, review_required? }` → 201 `Project`, with the `kind` label group and the creator's project access created |
 | `GET` | `/projects` | any | every project the caller sees; no pagination |
 | `GET` | `/projects/{key}` | any | `Project` |
-| `PATCH` | `/projects/{key}` | assigned user | `{ name?, triage_required?, review_required? }`; the key is immutable |
+| `PATCH` | `/projects/{key}` | assigned user | `{ name?, triage_required?, review_required?, instructions_page? }`; the key is immutable. `instructions_page` is the slug of one of the project's live pages, and `null` takes the designation away; a slug that names nothing is `validation` on that field. Users only, like the rest of this row: an agent that could designate the page would be writing its own instructions |
 | `DELETE` | `/projects/{key}` | administrator | soft delete of the project and everything in it; 204. The CLI asks for the key to be typed; the API does not |
 | `POST` | `/projects/{key}/restore` | administrator | back, with everything in it, into whatever state it was |
 

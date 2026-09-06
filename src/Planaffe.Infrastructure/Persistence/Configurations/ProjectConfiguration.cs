@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Planaffe.Domain.Identities;
+using Planaffe.Domain.Pages;
 using Planaffe.Domain.Projects;
 
 namespace Planaffe.Infrastructure.Persistence.Configurations;
@@ -31,6 +32,18 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
             .HasColumnName("review_required")
             .HasDefaultValue(false)
             .IsRequired();
+
+        // The page every agent is handed with its ticket (CONTEXT.md,
+        // Instructions), by id rather than by slug so that a rename leaves it
+        // alone. `set null` on delete is the whole of the cleanup: the purge
+        // takes a page whose grace period has passed without asking anybody,
+        // and the project simply stops pointing at it.
+        builder.Property(p => p.InstructionsPageId).HasColumnName("instructions_page_id");
+        builder.HasOne<Page>()
+            .WithMany()
+            .HasForeignKey(p => p.InstructionsPageId)
+            .HasConstraintName("fk_project_instructions_page")
+            .OnDelete(DeleteBehavior.SetNull);
 
         // The two counters every key in the project is drawn from, incremented
         // by one statement under the row's lock in the store — never by the

@@ -13,6 +13,7 @@ public sealed class IssueAssembler(
     IIdentities identities,
     IEpics epics,
     IProjects projects,
+    IPages pages,
     ILabels labels,
     IReleases releases,
     ProjectScope scope)
@@ -85,6 +86,14 @@ public sealed class IssueAssembler(
         var project = await projects.FindByKeyAsync(row.ProjectKey, cancellationToken)
             ?? throw new InvalidOperationException($"Issue {row.Key} has no project row.");
         var projectLabels = await labels.ListAsync(project.Id, cancellationToken);
+
+        // The project's instructions travel with the ticket, which is the whole
+        // of VISION 15.3: one page, delivered wherever the package is, and never
+        // a second route an agent has to know about. A designated page that is
+        // deleted resolves to nothing here and comes back with its restore.
+        var instructions = project.InstructionsPageId is { } instructionsId
+            ? (await pages.FindLiveManyAsync([instructionsId], cancellationToken)).SingleOrDefault()
+            : null;
         var releaseNames = await releases.CurrentNamesAsync([row.Id], cancellationToken);
         var allowedProjects = await scope.ProjectIdsAsync(cancellationToken);
 
@@ -113,14 +122,20 @@ public sealed class IssueAssembler(
             Ref(people, row.AssigneeId),
             Claim(people, row),
             Ref(people, row.AuthorId)!,
-            [.. blockedBy.Select(issue => Link(issue, allowedProjects))],
-            [.. blocks.Select(issue => Link(issue, allowedProjects))],
+            [.. blockedBy.Select(issue => Link(issue, allowedProjects, outcome: true))],
+            [.. blocks.Select(issue => Link(issue, allowedProjects, outcome: false))],
             questions.Count(q => q.Open),
             blockedBy.Count(b => !b.Closed),
             subIssues.Count(i => !i.Closed),
             [.. comments.Select(c => new CommentShape(c.Id, Ref(people, c.AuthorId)!, c.Body, c.CreatedAt, c.EditedAt))],
             [.. questions.Select(q => new QuestionShape(q.Id, q.Text, Ref(people, q.AskedBy)!, q.AskedAt, q.Answer, Ref(people, q.AnsweredBy), q.AnsweredAt))],
-            new ProjectContextShape(project.Key, project.Name, project.TriageRequired, project.ReviewRequired, [.. projectLabels.Select(LabelShape.Of)]),
+            new ProjectContextShape(
+                project.Key,
+                project.Name,
+                project.TriageRequired,
+                project.ReviewRequired,
+                [.. projectLabels.Select(LabelShape.Of)],
+                instructions is null ? null : new InstructionsShape(instructions.Slug, instructions.Title, instructions.Body)),
             row.CreatedAt,
             row.UpdatedAt,
             row.ClosedAt);
@@ -148,9 +163,17 @@ public sealed class IssueAssembler(
         return found.ToDictionary(e => e.Id, e => EpicKey.Of(projectKeys[e.ProjectId], e.Number));
     }
 
-    private static BlockerLinkShape Link(IssueRow far, IReadOnlySet<Guid> allowedProjects) =>
+    /// <summary>
+    /// One end of a blocker edge. <paramref name="outcome"/> carries the far
+    /// issue's result, which is the last piece of the context package (VISION
+    /// 15.5) and belongs on the blockers alone: an agent starts from what its
+    /// predecessors decided, and a successor has decided nothing yet. An issue
+    /// in a project the caller does not reach stays what it always was here —
+    /// hidden and assumed open — and its result is no exception.
+    /// </summary>
+    private static BlockerLinkShape Link(IssueRow far, IReadOnlySet<Guid> allowedProjects, bool outcome) =>
         allowedProjects.Contains(far.ProjectId)
-            ? new(far.Key, far.Title, far.Status, !far.Closed)
+            ? new(far.Key, far.Title, far.Status, !far.Closed, outcome ? far.Result : null)
             : new(null, null, null, true);
 
     private static IssueRefShape Ref(IssueRow issue) => new(issue.Key, issue.Title);

@@ -54,3 +54,30 @@ it("moves between areas without growing the address", async () => {
   expect(screen.getByTestId("at")).toHaveTextContent("/PLAN/settings/members");
   expect(await screen.findByRole("heading", { name: "Members" })).toBeInTheDocument();
 });
+
+// One page of the wiki is the project's instructions (`CONTEXT.md`,
+// Instructions). The screen designates it and does not edit it: the text is an
+// ordinary page, written where every other page is written.
+it("designates one page of the wiki as the project's instructions", async () => {
+  const instance = installInstance({
+    "GET /projects/PLAN": aProject,
+    "GET /projects/PLAN/users": [],
+    "GET /projects/PLAN/pages": [
+      { slug: "agents", project: "PLAN", title: "How work runs here", labels: [], updated_by: aUser, created_at: "", updated_at: "" },
+      { slug: "architecture", project: "PLAN", title: "Architecture", labels: [], updated_by: aUser, created_at: "", updated_at: "" },
+    ],
+    "PATCH /projects/PLAN": { ...aProject, instructions_page: "agents" },
+  });
+  renderAt("/PLAN/settings/instructions", <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/:project/settings/*" element={<ProjectSettingsView />} /></Routes></SessionProvider>);
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("combobox", { name: "Instructions page" }));
+  await user.click(await screen.findByRole("option", { name: /agents/ }));
+
+  expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
+  const request = instance.calls.find((call) => call.method === "PATCH")!;
+  expect(await request.json()).toEqual({ instructions_page: "agents" });
+
+  // Chosen, the page is one click away: the text is edited in the wiki.
+  expect(await screen.findByRole("link", { name: "Open agents" })).toHaveAttribute("href", "/PLAN/pages/agents");
+});

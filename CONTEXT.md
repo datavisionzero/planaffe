@@ -128,6 +128,14 @@ comments, no attachments, no per-page access — whoever reaches the project rea
 its pages.
 _Avoid_: wiki page, document, article, note, knowledge base
 
+**Instructions**:
+The one page a project designates as the text every agent is handed with every
+ticket — what holds for all work here, whoever does it and in whichever
+repository. One page per project and not a mark on any number of them: the
+context an agent carries is the budget the whole idea is about, and whoever
+needs more writes it into that page and notices it growing.
+_Avoid_: system prompt, project prompt, agent instructions, AGENTS.md, rules
+
 **Label**:
 A free tag defined per project, optionally carrying a one-line description of
 what it means there, and the only extensibility the product offers.

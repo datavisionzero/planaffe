@@ -431,6 +431,49 @@ public sealed class IssueEndpointTests(PostgresFixture postgres)
         Assert.Equal("maintainer", item.GetProperty("deleted_by").GetProperty("name").GetString());
     }
 
+    /// <summary>
+    /// What a predecessor decided travels with the ticket (VISION 15.5), so
+    /// that an agent does not have to fetch a blocker to learn why it was one.
+    /// </summary>
+    [Fact]
+    public async Task A_blocker_carries_its_result_and_a_blocked_issue_does_not()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Ready(instance);
+        await admin.PostAsJsonAsync(
+            "/issues",
+            new
+            {
+                project = "PLAN",
+                issues = new object[]
+                {
+                    new { @ref = "schema", title = "The schema" },
+                    new { @ref = "contract", title = "The contract", blocked_by = new[] { "schema" } },
+                },
+            },
+            Ct);
+
+        // While the blocker is open it has decided nothing.
+        var open = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-2", Ct);
+        Assert.Equal(JsonValueKind.Null, open.GetProperty("blocked_by")[0].GetProperty("result").ValueKind);
+
+        using var closed = await admin.PostAsJsonAsync(
+            "/issues/PLAN-1/close", new { status = "done", result = "Four tables, and the view derives the status." }, Ct);
+        Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
+
+        var after = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-2", Ct);
+        var blocker = after.GetProperty("blocked_by")[0];
+        Assert.Equal("PLAN-1", blocker.GetProperty("key").GetString());
+        Assert.False(blocker.GetProperty("open").GetBoolean());
+        Assert.Equal("Four tables, and the view derives the status.", blocker.GetProperty("result").GetString());
+
+        // The other direction carries none: a successor has decided nothing yet,
+        // and what it decides is no business of the work here.
+        var blockerRead = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+        Assert.Equal("PLAN-2", blockerRead.GetProperty("blocks")[0].GetProperty("key").GetString());
+        Assert.Equal(JsonValueKind.Null, blockerRead.GetProperty("blocks")[0].GetProperty("result").ValueKind);
+    }
+
     private static async Task<HttpClient> Ready(AnInstance instance)
     {
         var admin = instance.ClientWith(AnInstance.BootstrapToken);

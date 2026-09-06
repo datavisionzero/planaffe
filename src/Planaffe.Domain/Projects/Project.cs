@@ -52,6 +52,21 @@ public sealed class Project
 
     public bool ReviewRequired { get; private set; }
 
+    /// <summary>
+    /// The one page every agent is handed with every ticket
+    /// (<c>CONTEXT.md</c>, Instructions; VISION 15.3), or <c>null</c> where the
+    /// project designates none. One page and not a flag on each of them: three
+    /// marked pages would be three pages of context on every ticket, and the
+    /// context budget is the resource the whole idea is about (VISION 6.1).
+    /// </summary>
+    /// <remarks>
+    /// It is the page's id and not its slug, so that renaming the address the
+    /// wiki reaches it by (ADR 0021) leaves the designation where it was. The
+    /// designation follows the page: a deleted one delivers nothing until it is
+    /// restored, and the purge clears this column with the row.
+    /// </remarks>
+    public Guid? InstructionsPageId { get; private set; }
+
     public int LastIssueNumber { get; private init; }
 
     public int LastEpicNumber { get; private init; }
@@ -70,6 +85,17 @@ public sealed class Project
 
     public static Project Create(string key, string name, Guid createdBy, DateTimeOffset createdAt) =>
         new(Guid.CreateVersion7(), ProjectKey.Normalize(key), NormalizeName(name), createdBy, createdAt);
+
+    /// <summary>
+    /// Point the project at the page every agent is handed with its ticket, or
+    /// at none. Which page exists, and that it is one of this project's, is the
+    /// act's to establish; this type only holds the pointer.
+    /// </summary>
+    public void Instruct(Guid? pageId, DateTimeOffset at)
+    {
+        InstructionsPageId = pageId;
+        UpdatedAt = at;
+    }
 
     public void Rename(string name, DateTimeOffset at)
     {

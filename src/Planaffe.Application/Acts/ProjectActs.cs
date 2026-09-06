@@ -1,21 +1,64 @@
 using Planaffe.Application.Ports;
 using Planaffe.Domain;
+using Planaffe.Domain.Pages;
 using Planaffe.Domain.Projects;
 using Planaffe.Domain.Releases;
 
 namespace Planaffe.Application.Acts;
 
-/// <summary>A project as <c>docs/api.md</c> shapes it. The suffix is dropped in the contract.</summary>
+/// <summary>
+/// A project as <c>docs/api.md</c> shapes it. The suffix is dropped in the
+/// contract. <paramref name="InstructionsPage"/> is the slug of the page the
+/// project designates (<c>CONTEXT.md</c>, Instructions), or <c>null</c>; the
+/// text itself is not here, because a project is read to be administered and
+/// the instructions are read with a ticket.
+/// </summary>
 public sealed record ProjectShape(
     string Key,
     string Name,
     bool TriageRequired,
     bool ReviewRequired,
+    string? InstructionsPage,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt)
 {
-    public static ProjectShape Of(Project project) =>
-        new(project.Key, project.Name, project.TriageRequired, project.ReviewRequired, project.CreatedAt, project.UpdatedAt);
+    public static ProjectShape Of(Project project, string? instructionsPage) =>
+        new(project.Key, project.Name, project.TriageRequired, project.ReviewRequired,
+            instructionsPage, project.CreatedAt, project.UpdatedAt);
+}
+
+/// <summary>
+/// The slug behind a project's instructions pointer. The column holds the
+/// page's id (<c>docs/storage.md</c>, Pages), and every reader of a project
+/// wants the address instead — so the lookup lives once, here, and a list of
+/// projects pays one query for all of them.
+/// </summary>
+public static class ProjectInstructions
+{
+    public static async Task<string?> SlugAsync(this IPages pages, Project project, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        return (await pages.SlugsAsync([project], cancellationToken)).GetValueOrDefault(project.Id);
+    }
+
+    public static async Task<IReadOnlyDictionary<Guid, string>> SlugsAsync(
+        this IPages pages, IReadOnlyCollection<Project> projects, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(pages);
+        ArgumentNullException.ThrowIfNull(projects);
+
+        var wanted = projects.Select(p => p.InstructionsPageId).OfType<Guid>().Distinct().ToArray();
+        if (wanted.Length == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        var found = (await pages.FindLiveManyAsync(wanted, cancellationToken)).ToDictionary(page => page.Id, page => page.Slug);
+
+        return projects
+            .Where(p => p.InstructionsPageId is { } id && found.ContainsKey(id))
+            .ToDictionary(p => p.Id, p => found[p.InstructionsPageId!.Value]);
+    }
 }
 
 public sealed record AdminProjectShape(string Key, string Name, DateTimeOffset CreatedAt, DateTimeOffset? DeletedAt);
@@ -99,35 +142,50 @@ public sealed class CreateProject(ICallerIdentity callerIdentity, IProjects proj
         await projects.AddAsync(project, Label.Kind(project.Id, now), Release.Open(project.Id, now),
             ProjectAccess.Grant(project.Id, caller.Id, caller.Id, now), cancellationToken);
 
-        return ProjectShape.Of(project);
+        // A project is born designating no page: there is none yet.
+        return ProjectShape.Of(project, null);
     }
 }
 
 /// <summary>Every project the caller sees — in cut one, every live project.</summary>
-public sealed class ListProjects(ICallerIdentity callerIdentity, IProjects projects, IProjectAccess access)
+public sealed class ListProjects(ICallerIdentity callerIdentity, IProjects projects, IPages pages, IProjectAccess access)
 {
     public async Task<IReadOnlyList<ProjectShape>> ExecuteAsync(CancellationToken cancellationToken)
     {
         var ids = await access.ProjectIdsAsync(callerIdentity.Caller.OwnerId ?? callerIdentity.Caller.Id, cancellationToken);
-        return [.. (await projects.ListAsync(cancellationToken)).Where(project => ids.Contains(project.Id)).Select(ProjectShape.Of)];
+        var mine = (await projects.ListAsync(cancellationToken)).Where(project => ids.Contains(project.Id)).ToArray();
+        var slugs = await pages.SlugsAsync(mine, cancellationToken);
+
+        return [.. mine.Select(project => ProjectShape.Of(project, slugs.GetValueOrDefault(project.Id)))];
     }
 }
 
-public sealed class ReadProject(IProjects projects, ProjectScope scope, InstanceSettings settings)
+public sealed class ReadProject(IProjects projects, IPages pages, ProjectScope scope, InstanceSettings settings)
 {
     public async Task<ProjectShape> ExecuteAsync(string key, CancellationToken cancellationToken)
     {
         var project = await projects.LiveAsync(key, settings, cancellationToken);
         await scope.RequireAsync(project.Id, cancellationToken);
-        return ProjectShape.Of(project);
+        return ProjectShape.Of(project, await pages.SlugAsync(project, cancellationToken));
     }
 }
 
-/// <summary>What a <c>PATCH</c> carries: only what is present changes.</summary>
-public sealed record ProjectChanges(string? Name, bool? TriageRequired, bool? ReviewRequired);
+/// <summary>
+/// What a <c>PATCH</c> carries: only what is present changes.
+/// <paramref name="InstructionsPageGiven"/> tells an absent field from one
+/// present as <c>null</c>, which is how the designation is taken away.
+/// </summary>
+public sealed record ProjectChanges(
+    string? Name, bool? TriageRequired, bool? ReviewRequired, bool InstructionsPageGiven = false, string? InstructionsPage = null);
 
-/// <summary>A user changes the name or the switches; the key is immutable.</summary>
-public sealed class ChangeProject(ICallerIdentity callerIdentity, IProjects projects, ProjectScope scope, InstanceSettings settings, TimeProvider clock)
+/// <summary>
+/// A user changes the name, the switches or the page every agent is handed with
+/// its ticket; the key is immutable. The designation is a user's to make and not
+/// an agent's, like everything else here: an agent that could point the project
+/// at a page would be writing its own instructions.
+/// </summary>
+public sealed class ChangeProject(
+    ICallerIdentity callerIdentity, IProjects projects, IPages pages, ProjectScope scope, InstanceSettings settings, TimeProvider clock)
 {
     public async Task<ProjectShape> ExecuteAsync(string key, ProjectChanges changes, CancellationToken cancellationToken)
     {
@@ -153,9 +211,35 @@ public sealed class ChangeProject(ICallerIdentity callerIdentity, IProjects proj
             project.RequireReview(review, now);
         }
 
+        if (changes.InstructionsPageGiven)
+        {
+            project.Instruct(await DesignatedAsync(project, changes.InstructionsPage, cancellationToken), now);
+        }
+
         await projects.SaveAsync(project, cancellationToken);
 
-        return ProjectShape.Of(project);
+        return ProjectShape.Of(project, await pages.SlugAsync(project, cancellationToken));
+    }
+
+    /// <summary>
+    /// The page the slug names, in this project and live. A slug that names
+    /// nothing is <c>validation</c> on the field it arrived in rather than
+    /// <c>not-found</c>: the address is in the body, and what is wrong is what
+    /// was typed.
+    /// </summary>
+    private async Task<Guid?> DesignatedAsync(Project project, string? slug, CancellationToken cancellationToken)
+    {
+        var wanted = slug?.Trim();
+        if (string.IsNullOrEmpty(wanted))
+        {
+            return null;
+        }
+
+        var normalized = Validated.Field("instructions_page", () => Slug.Normalize(wanted));
+        var page = await pages.FindLiveAsync(project.Id, normalized, cancellationToken)
+            ?? throw Refusal.Validation("instructions_page", $"No page {project.Key}/{normalized}.");
+
+        return page.Id;
     }
 }
 
@@ -177,7 +261,7 @@ public sealed class DeleteProject(ICallerIdentity callerIdentity, IProjects proj
 }
 
 /// <summary>Back, with everything in it. A project that is not deleted is <c>transition</c>.</summary>
-public sealed class RestoreProject(ICallerIdentity callerIdentity, IProjects projects)
+public sealed class RestoreProject(ICallerIdentity callerIdentity, IProjects projects, IPages pages)
 {
     public async Task<ProjectShape> ExecuteAsync(string key, CancellationToken cancellationToken)
     {
@@ -194,6 +278,6 @@ public sealed class RestoreProject(ICallerIdentity callerIdentity, IProjects pro
         project.Restore();
         await projects.SaveAsync(project, cancellationToken);
 
-        return ProjectShape.Of(project);
+        return ProjectShape.Of(project, await pages.SlugAsync(project, cancellationToken));
     }
 }

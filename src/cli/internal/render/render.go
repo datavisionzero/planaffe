@@ -105,11 +105,30 @@ func Issue(w io.Writer, issue api.Issue) {
 	if len(issue.Blocks) > 0 {
 		fmt.Fprintf(w, "blocks: %s\n", links(issue.Blocks))
 	}
+	// The context package, widest first: what holds for the whole project, then
+	// for the theme, then the ticket itself (VISION 15.5). The instructions are
+	// printed here and nowhere else, because this is where the package arrives.
+	if i := issue.ProjectContext.Instructions; i != nil && i.Body != "" {
+		fmt.Fprintf(w, "\n## %s (%s/%s)\n\n%s\n", i.Title, issue.ProjectContext.Key, i.Slug, i.Body)
+	}
 	if issue.Epic != nil && issue.Epic.Description != "" {
 		fmt.Fprintf(w, "\n## %s (%s)\n\n%s\n", issue.Epic.Title, issue.Epic.Key, issue.Epic.Description)
 	}
 	if issue.Description != "" {
 		fmt.Fprintf(w, "\n%s\n", issue.Description)
+	}
+	// In full, not as a note that there is one to fetch: an extra fetch is
+	// exactly what the package exists to spare (VISION 15.5), and a blocker's
+	// outcome is what the work here starts from.
+	for _, b := range issue.BlockedBy {
+		if b.Result == nil || *b.Result == "" || b.Key == nil {
+			continue
+		}
+		title := ""
+		if b.Title != nil {
+			title = "  " + *b.Title
+		}
+		fmt.Fprintf(w, "\n## What %s decided%s\n\n%s\n", *b.Key, title, *b.Result)
 	}
 	if len(issue.SubIssues) > 0 {
 		fmt.Fprintln(w, "\n## Sub-issues")
@@ -229,7 +248,11 @@ func NeedsYou(w io.Writer, items []api.NeedsYouItem) {
 // Project prints one project with its switches.
 func Project(w io.Writer, p api.Project) {
 	fmt.Fprintf(w, "%s  %s\n", p.Key, p.Name)
-	fmt.Fprintf(w, "triage required: %t  review required: %t\n", p.TriageRequired, p.ReviewRequired)
+	fmt.Fprintf(w, "triage required: %t  review required: %t", p.TriageRequired, p.ReviewRequired)
+	if p.InstructionsPage != nil {
+		fmt.Fprintf(w, "  instructions: %s", *p.InstructionsPage)
+	}
+	fmt.Fprintln(w)
 }
 
 // ProjectLine prints one project as a list line.

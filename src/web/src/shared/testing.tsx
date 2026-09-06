@@ -85,6 +85,7 @@ export const aProject = {
   name: "planaffe",
   triage_required: false,
   review_required: false,
+  instructions_page: null,
   created_at: "2026-09-02T10:00:00Z",
   updated_at: "2026-09-02T10:00:00Z",
 };

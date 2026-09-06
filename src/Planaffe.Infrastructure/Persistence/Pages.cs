@@ -14,6 +14,11 @@ public sealed class Pages(PlanaffeDbContext context) : IPages
     public Task<Page?> FindAnyAsync(Guid projectId, string slug, CancellationToken cancellationToken) =>
         context.Pages.SingleOrDefaultAsync(p => p.ProjectId == projectId && p.Slug == slug, cancellationToken);
 
+    public async Task<IReadOnlyList<Page>> FindLiveManyAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
+        ids.Count == 0
+            ? []
+            : await context.Pages.Where(p => ids.Contains(p.Id) && p.DeletedAt == null).ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Page>> ListAsync(Guid projectId, IReadOnlyList<string> labelNames, string? search, CancellationToken cancellationToken)
     {
         var rows = context.Pages.Where(p => p.ProjectId == projectId && p.DeletedAt == null);

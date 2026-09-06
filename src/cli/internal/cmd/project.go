@@ -192,9 +192,11 @@ func projectArg(cfg config.Config, args []string) (string, error) {
 }
 
 func newProjectEdit(g *globals) *cobra.Command {
-	var name, triage, review string
+	var name, triage, review, instructions string
 	cmd := &cobra.Command{
-		Use: "edit KEY", Short: "Change the name or the switches; the key is immutable.", Args: cobra.ExactArgs(1),
+		Use:   "edit KEY",
+		Short: "Change the name, the switches or the instructions page; the key is immutable.",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, c, err := g.load()
 			if err != nil {
@@ -215,8 +217,18 @@ func newProjectEdit(g *globals) *cobra.Command {
 					return &config.UsageError{Message: fmt.Sprintf("--%s is true or false.", strings.ReplaceAll(flag, "_", "-"))}
 				}
 			}
+			// `none` takes the designation away, as it does for the issue's
+			// epic, parent and assignee: the slug is on the wire as null, and
+			// leaving the flag out leaves the designation alone.
+			switch instructions {
+			case "":
+			case "none":
+				changes["instructions_page"] = nil
+			default:
+				changes["instructions_page"] = instructions
+			}
 			if len(changes) == 0 {
-				return &config.UsageError{Message: "nothing to change: --name, --triage-required or --review-required."}
+				return &config.UsageError{Message: "nothing to change: --name, --triage-required, --review-required or --instructions-page."}
 			}
 			body, _ := json.Marshal(changes)
 			resp, err := c.ChangeProjectWithBodyWithResponse(cmd.Context(), strings.ToUpper(args[0]), "application/json", bytes.NewReader(body))
@@ -232,6 +244,7 @@ func newProjectEdit(g *globals) *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "the new name")
 	cmd.Flags().StringVar(&triage, "triage-required", "", "true or false")
 	cmd.Flags().StringVar(&review, "review-required", "", "true or false")
+	cmd.Flags().StringVar(&instructions, "instructions-page", "", "the slug of the page every agent is handed with every ticket, or none")
 	return cmd
 }
 

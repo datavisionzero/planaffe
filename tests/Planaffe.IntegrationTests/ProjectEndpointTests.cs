@@ -232,6 +232,90 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
         Assert.Equal(JsonValueKind.Null, issue.GetProperty("questions")[0].GetProperty("answer").ValueKind);
     }
 
+    /// <summary>
+    /// The page every agent is handed with every ticket (VISION 15.3): a user
+    /// designates it, an agent may not, and it arrives inside the context
+    /// package rather than on a route of its own.
+    /// </summary>
+    [Fact]
+    public async Task The_instructions_page_is_designated_by_a_user_and_travels_with_every_ticket()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+        await admin.PostAsJsonAsync(
+            "/projects/PLAN/pages", new { slug = "agents", title = "How work runs here", body = "Tests run with `just test`." }, Ct);
+        await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "The work" } } }, Ct);
+
+        // Designated by nobody yet: the package carries the ticket and no instructions.
+        var project = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN", Ct);
+        Assert.Equal(JsonValueKind.Null, project.GetProperty("instructions_page").ValueKind);
+        var before = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+        Assert.Equal(JsonValueKind.Null, before.GetProperty("project_context").GetProperty("instructions").ValueKind);
+
+        // A slug that names nothing is refused at the field it arrived in.
+        using var unknown = await admin.PatchAsJsonAsync("/projects/PLAN", new { instructions_page = "nowhere" }, Ct);
+        var problem = await Problem(unknown, HttpStatusCode.BadRequest, "validation");
+        Assert.True(problem.GetProperty("errors").TryGetProperty("instructions_page", out _));
+
+        using var designated = await admin.PatchAsJsonAsync("/projects/PLAN", new { instructions_page = "agents" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, designated.StatusCode);
+        Assert.Equal("agents", (await designated.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("instructions_page").GetString());
+
+        // In the package, with the document itself — and in the same object
+        // every act answers with, which is what makes claiming deliver it.
+        var read = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+        var instructions = read.GetProperty("project_context").GetProperty("instructions");
+        Assert.Equal("agents", instructions.GetProperty("slug").GetString());
+        Assert.Equal("How work runs here", instructions.GetProperty("title").GetString());
+        Assert.Equal("Tests run with `just test`.", instructions.GetProperty("body").GetString());
+
+        using var agent = await Agent(instance, admin, "worker");
+        using var claimed = await agent.PostAsJsonAsync("/issues/PLAN-1/claim", new { }, Ct);
+        Assert.Equal(HttpStatusCode.OK, claimed.StatusCode);
+        Assert.Equal(
+            "Tests run with `just test`.",
+            (await claimed.Content.ReadFromJsonAsync<JsonElement>(Ct))
+                .GetProperty("project_context").GetProperty("instructions").GetProperty("body").GetString());
+
+        // An agent may not point the project at a page: it would be writing its own instructions.
+        using var byAgent = await agent.PatchAsJsonAsync("/projects/PLAN", new { instructions_page = "agents" }, Ct);
+        await Problem(byAgent, HttpStatusCode.Forbidden, "forbidden");
+
+        // Renaming the page leaves the designation where it was: the pointer is the row, not the address.
+        using var renamed = await admin.PatchAsJsonAsync("/projects/PLAN/pages/agents", new { slug = "house-rules" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+        Assert.Equal(
+            "house-rules",
+            (await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN", Ct)).GetProperty("instructions_page").GetString());
+
+        // Deleting it goes quiet rather than refusing, and the restore brings it back.
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync("/projects/PLAN/pages/house-rules", Ct)).StatusCode);
+        Assert.Equal(
+            JsonValueKind.Null,
+            (await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct)).GetProperty("project_context").GetProperty("instructions").ValueKind);
+        Assert.Equal(JsonValueKind.Null, (await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN", Ct)).GetProperty("instructions_page").ValueKind);
+
+        using var restored = await admin.PostAsync("/projects/PLAN/pages/house-rules/restore", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
+        Assert.Equal(
+            "house-rules",
+            (await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN", Ct)).GetProperty("instructions_page").GetString());
+
+        // And `null` takes the designation away, where leaving the field out leaves it alone.
+        using var kept = await admin.PatchAsJsonAsync("/projects/PLAN", new { name = "planaffe" }, Ct);
+        Assert.Equal("house-rules", (await kept.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("instructions_page").GetString());
+
+        using var cleared = await admin.PatchAsJsonAsync("/projects/PLAN", new { instructions_page = (string?)null }, Ct);
+        Assert.Equal(JsonValueKind.Null, (await cleared.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("instructions_page").ValueKind);
+    }
+
+    private static async Task<HttpClient> Agent(AnInstance instance, HttpClient admin, string name)
+    {
+        using var created = await admin.PostAsJsonAsync("/agents", new { name }, Ct);
+        return instance.ClientWith((await created.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
+    }
+
     internal static async Task<JsonElement> Problem(HttpResponseMessage response, HttpStatusCode status, string code)
     {
         using (response)

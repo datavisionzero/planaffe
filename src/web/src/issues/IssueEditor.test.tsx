@@ -41,7 +41,7 @@ it("does not send an unchanged parking status while editing fields", async () =>
     status: "todo", ready: true, priority: 1, labels: [{ name: "web", group: null, description: null }],
     epic: null, parent: null, release: null, sub_issues: [], assignee: null, claim: null, author: person,
     blocked_by: [], blocks: [], open_questions: 0, open_blockers: 0, open_sub_issues: 0, comments: [], questions: [],
-    project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: false, labels: [] },
+    project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: false, labels: [], instructions: null },
     created_at: "2026-09-02T10:00:00Z", updated_at: "2026-09-02T10:00:00Z", closed_at: null,
   };
   const instance = installInstance({ "PATCH /issues/PLAN-10": { body: { ...issue, title: "After", priority: 3 } } });
@@ -72,7 +72,7 @@ it("shows a status it cannot park and sends no status with the fields", async ()
     epic: null, parent: null, release: null, sub_issues: [], assignee: null,
     claim: { holder: person, since: "2026-09-02T10:00:00Z", expires_at: "2026-09-02T14:00:00Z" }, author: person,
     blocked_by: [], blocks: [], open_questions: 0, open_blockers: 0, open_sub_issues: 0, comments: [], questions: [],
-    project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: false, labels: [] },
+    project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: false, labels: [], instructions: null },
     created_at: "2026-09-02T10:00:00Z", updated_at: "2026-09-02T10:00:00Z", closed_at: null,
   };
   const instance = installInstance({ "PATCH /issues/PLAN-10": { body: { ...issue, title: "After" } } });
@@ -107,7 +107,7 @@ it("keeps the typed text on a stale refusal and lets the next save through", asy
     status: "todo", ready: false, priority: 1, labels: [], epic: null, parent: null, release: null,
     sub_issues: [], assignee: null, claim: null, author: person, blocked_by: [], blocks: [],
     open_questions: 0, open_blockers: 0, open_sub_issues: 0, comments: [], questions: [],
-    project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: false, labels: [] },
+    project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: false, labels: [], instructions: null },
     created_at: "2026-09-02T10:00:00Z", updated_at: "2026-09-02T10:00:00Z", closed_at: null,
   };
   // Somebody else rewrote the description and raised the priority meanwhile.

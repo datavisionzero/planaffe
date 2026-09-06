@@ -101,7 +101,7 @@ pa issue list --status todo --label bug --assignee me --sort priority
 pa issue list --sort epic                  # by epic: one unbroken run per group, no epic last
 pa issue list -q '"for update" -flaky' # full text: issue fields, comments and questions
 pa issue list --deleted                    # the grace period, the one read that sees deleted rows
-pa issue view PLAN-42 [--json]             # the complete issue, epic description and all
+pa issue view PLAN-42 [--json]             # the context package: the project's instructions, the epic's description, the ticket, what its blockers decided
 pa issue edit PLAN-42 --title "…" --priority 2 --assignee none --label a --label b --if-match "<updated_at>"
 pa issue edit PLAN-42 PLAN-43 --priority 2     # same change, one transaction, all or none
 pa issue edit PLAN-42 --status backlog     # parking; every other status move is an act
@@ -144,6 +144,7 @@ Projects, labels, epics, pages and releases:
 ```
 pa project create PLAN "planaffe" [--triage-required] [--review-required]
 pa project list · pa project view [KEY] · pa project edit PLAN --review-required true --name "…"
+pa project edit PLAN --instructions-page agents      # the one page every agent is handed with every ticket; none takes it away
 pa project access list PLAN
 pa project access grant PLAN <user-id> · pa project access revoke PLAN <user-id> # administrators only
 pa project delete PLAN --confirm PLAN      # the key typed twice, never prompted for; administrators only

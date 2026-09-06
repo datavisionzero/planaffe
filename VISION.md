@@ -329,6 +329,8 @@ A third reason only became visible while this was being decided. **planaffe has 
 | A second place for ideas | An idea that wants to become a ticket is the stub (15.4), and the stub has a queue. One that never will is a line on a page. An entity in between would have no queue — which is exactly how it becomes a graveyard. |
 | Project-wide instructions as a field on the project (15.3) | Those instructions are one page with a switch, not a second kind of Markdown hanging on the project. 15.3 is absorbed here. |
 
+**One page of a project is its instructions.** The project designates exactly one — `CONTEXT.md` calls it that — and every agent is handed it with every ticket, because it travels inside the context package (15.5) rather than on a route of its own. A switch on each page instead would have been more flexible and worse: three marked pages are three pages of context on every ticket, and the context budget is the resource this whole section is written around (6.1, 2.2). Whoever needs more instructions writes them into that one page, and notices it growing. Designating it is a user's act, never an agent's: an agent that could point the project at a page would be writing its own instructions. Nothing of the kind exists on the epic — the epic has its description, and that is already delivered.
+
 ## 8. Issue Fields
 
 Seventeen fields — comparable to Linear's core, considerably leaner than GitLab or Jira:
@@ -661,7 +663,7 @@ What that is good for: what does an epic really cost? Which model handles which 
 
 ### 15.3 Project-wide instructions for agents
 
-> **Absorbed into the page (7.), 5 September 2026.** These instructions are one page with a switch, not a second kind of Markdown on the project, and building them separately would leave the product with two of them. What follows is the reasoning, which stands; only the place has changed.
+> **Absorbed into the page (7.) and built, 6 September 2026.** These instructions are one page the project designates, not a second kind of Markdown on the project, and building them separately would have left the product with two of them. They are delivered inside the context package (15.5) and nowhere else. What follows is the reasoning, which stands; only the place has changed — and one detail with it, because a switch on every page would have let the context grow by marking more of them.
 
 The user stores a text on the project that is delivered to every agent with every ticket — a kind of system prompt for the project. "Tests run with `just test`", "no new dependencies without asking", "migrations always reversible".
 
@@ -691,6 +693,8 @@ Why this belongs in the issue tracker and not in a note-taking app: the stub is 
 An issue tracker for humans is built for skimming: you see a list, click into it, scroll to the comments, open the epic on the side. An agent cannot do that — it has one pass, and what it does not get in that pass is missing while it works.
 
 That is why reading a ticket, for an agent, is **one operation that delivers everything needed**: the ticket itself with its comments, its epic's description, the project's labels with their descriptions (8.), the project instructions (15.3), the questions already answered, the handover state of a previous run (15.10) and the outcome of the tickets that blocked it. Not as references it has to load one by one, but together.
+
+> **Built, apart from the handover state, 6 September 2026.** `GET /issues/{key}` is the package, and because every act on an issue answers with the same complete issue, claiming and `next` deliver it too — the natural moment this section names, without a second route. What is not in it is the handover state, which waits on 15.10 deciding it exists.
 
 That is more than a convenience: every extra fetch is a place where an agent misses something the issue tracker has known all along. And claiming is the natural moment — whoever takes a ticket gets everything belonging to it with it.
 

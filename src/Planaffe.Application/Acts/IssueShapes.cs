@@ -9,7 +9,15 @@ public sealed record ClaimShape(IdentityRef Holder, DateTimeOffset Since, DateTi
 public sealed record BlockerRefShape(string? Key, bool Open);
 
 /// <summary>A blocker, or a blocked issue, in the complete issue.</summary>
-public sealed record BlockerLinkShape(string? Key, string? Title, IssueStatus? Status, bool Open);
+/// <summary>
+/// A blocker or a blocked issue as the complete issue names it.
+/// <paramref name="Result"/> is the outcome VISION 15.5 asks for and stands on
+/// <c>blocked_by</c> only: what a predecessor decided is what the work here
+/// starts from, and a successor's outcome does not exist yet. It is
+/// <c>null</c> where the blocker has recorded none, and on every link the
+/// caller may not see into.
+/// </summary>
+public sealed record BlockerLinkShape(string? Key, string? Title, IssueStatus? Status, bool Open, string? Result = null);
 
 /// <summary>The slim issue every list returns (ADR 0012, <c>docs/api.md</c>).</summary>
 public sealed record IssueSummaryShape(
@@ -49,14 +57,30 @@ public sealed record QuestionShape(
     IdentityRef? AnsweredBy,
     DateTimeOffset? AnsweredAt);
 
-/// <summary>The project as the complete issue carries it: the switches and the labels with their descriptions.</summary>
-public sealed record ProjectContextShape(
-    string Key, string Name, bool TriageRequired, bool ReviewRequired, IReadOnlyList<LabelShape> Labels);
+/// <summary>
+/// The page a project designates as its instructions (<c>CONTEXT.md</c>,
+/// Instructions), as the context package carries it: the document itself, and
+/// the address it can be changed at.
+/// </summary>
+public sealed record InstructionsShape(string Slug, string Title, string Body);
 
 /// <summary>
-/// The complete issue — the context package of cut one (VISION 15.5): the
-/// ticket, its comments and questions, the epic's description, and the
-/// project's labels with their descriptions, in one read.
+/// The project as the complete issue carries it: the switches, the labels with
+/// their descriptions, and the instructions every agent is handed with every
+/// ticket.
+/// </summary>
+public sealed record ProjectContextShape(
+    string Key,
+    string Name,
+    bool TriageRequired,
+    bool ReviewRequired,
+    IReadOnlyList<LabelShape> Labels,
+    InstructionsShape? Instructions);
+
+/// <summary>
+/// The complete issue — the context package of VISION 15.5: the ticket, its
+/// comments and questions, the epic's description, the project's labels with
+/// their descriptions and the project's instructions, in one read.
 /// </summary>
 public sealed record IssueShape(
     string Key,

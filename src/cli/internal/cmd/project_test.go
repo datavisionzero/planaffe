@@ -10,7 +10,7 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/exit"
 )
 
-const project = `{"key":"PLAN","name":"planaffe","triage_required":false,"review_required":true,"created_at":"2026-09-02T14:00:00.000000Z","updated_at":"2026-09-02T14:00:00.000000Z"}`
+const project = `{"key":"PLAN","name":"planaffe","triage_required":false,"review_required":true,"instructions_page":"agents","created_at":"2026-09-02T14:00:00.000000Z","updated_at":"2026-09-02T14:00:00.000000Z"}`
 const label = `{"name":"bug","group":"kind","description":"Something that should work and does not."}`
 const epic = `{"key":"PLAN-E2","project":"PLAN","title":"Backend","description":"The plan.","status":"open","author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"labels":[` + label + `],"progress":{"total":7,"closed":5,"done":4,"canceled":1},"created_at":"2026-09-02T14:00:00.000000Z","updated_at":"2026-09-02T14:00:00.000000Z","closed_at":null}`
 
@@ -59,6 +59,8 @@ func TestProjectLabelAndEpicVerbsHitTheirEndpoints(t *testing.T) {
 		{[]string{"project", "list"}, "GET", "/projects", nil, "PLAN"},
 		{[]string{"project", "view"}, "GET", "/projects/PLAN", nil, "review required: true"},
 		{[]string{"project", "edit", "PLAN", "--triage-required", "true", "--name", "renamed"}, "PATCH", "/projects/PLAN", map[string]any{"triage_required": true, "name": "renamed"}, ""},
+		{[]string{"project", "edit", "PLAN", "--instructions-page", "agents"}, "PATCH", "/projects/PLAN", map[string]any{"instructions_page": "agents"}, "instructions: agents"},
+		{[]string{"project", "edit", "PLAN", "--instructions-page", "none"}, "PATCH", "/projects/PLAN", map[string]any{"instructions_page": nil}, ""},
 		{[]string{"project", "delete", "PLAN", "--confirm", "plan"}, "DELETE", "/projects/PLAN", nil, "PLAN deleted"},
 		{[]string{"project", "restore", "PLAN"}, "POST", "/projects/PLAN/restore", nil, "PLAN"},
 		{[]string{"label", "list"}, "GET", "/projects/PLAN/labels", nil, "Something that should work"},

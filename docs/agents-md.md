@@ -113,7 +113,7 @@ so a ticket you have just written can carry its question immediately.
 
 ```sh
 pa next --claim                          # what to work on
-pa issue view PROJ-42                    # the complete ticket, epic description and all
+pa issue view PROJ-42                    # the whole context: the project's instructions, the epic, the ticket, what its blockers decided
 pa issue comment PROJ-42 "…"             # a note that forces nobody to act
 pa issue ask PROJ-42 "…" [--wait 600]    # a question; the ticket waits for an answer
 pa issue close PROJ-42 --done --result-file -

@@ -55,6 +55,7 @@ Markdown and never a document model of its own
 | `/settings/tokens` | Personal settings · User tokens | the tokens, and the secret of a new one, once | area list folds above the area |
 | `/settings/agents` | Personal settings · Agents | the agents and their tokens | area list folds above the area |
 | `/:project/settings/general` | Project settings · General | name, the two switches and project deletion | area list folds above the area |
+| `/:project/settings/instructions` | Project settings · Instructions | which page of the wiki every agent is handed with every ticket, and a link into it | area list folds above the area |
 | `/:project/settings/members` | Project settings · Members | who has access to the project | area list folds above the area |
 | `/admin/users` | Administration · Users | invite, role and lifecycle, each row's acts in its menu | area list folds above the area |
 | `/admin/projects` | Administration · Projects | every project of the instance, deleted ones included | area list folds above the area |
@@ -282,7 +283,7 @@ breakpoint and carries the rest.
 | Epic | list, open, inspect progress and filtered issues | create, edit Markdown and labels, close, reopen, delete, restore |
 | Release | list, open, preview exact membership, copy as Markdown | edit notes, publish, put an issue into the open release or take it out, rename or take back the newest publication |
 | Label | list and inspect use | create, edit name, group and description, rename or dissolve a group, delete, restore |
-| Project | switch and inspect settings/members | create; edit name and switches; delete or restore when administrator |
+| Project | switch and inspect settings/members/instructions | create; edit name, switches and the instructions page; delete or restore when administrator |
 | Identity | inspect own profile, sessions, tokens and agents | change own name, verified email and password; revoke sessions/tokens; create or revoke own tokens and agents |
 | Administration | inspect all users, project assignments, deleted projects and SMTP status | invite/resend, deactivate/reactivate, change administrator role, assign projects, send test email |
 
