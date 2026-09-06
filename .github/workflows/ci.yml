@@ -138,6 +138,10 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run build -- --outDir dist --emptyOutDir
+      # The performance budget of `docs/human-interface.md`, held against what
+      # the build just wrote. It is red rather than a note, because a note is
+      # overlooked by the third time.
+      - run: npm run budget -- dist
 
   # `pa` is a client of the public API and references nothing in `src/`
   # (ADR 0003), so it is a plain Go module built by a plain Go job. The version

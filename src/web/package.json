@@ -8,6 +8,7 @@
     "dev": "vite",
     "prebuild": "npm run generate",
     "build": "tsc -b && vite build",
+    "budget": "node scripts/budget.mjs",
     "pretypecheck": "npm run generate",
     "typecheck": "tsc -b",
     "pretest": "npm run generate",

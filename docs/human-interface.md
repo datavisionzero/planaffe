@@ -336,3 +336,24 @@ started typing. Fenced code is not highlighted; it
 carries the language its fence named ([ADR 0017](./adr/0017-the-web-application-is-drawn-by-tailwind-and-base-ui-components-the-repository-owns.md)).
 Loading, empty, error and permission states are designed states rather than
 blank screens.
+
+Two of those weights are a number and not a description, because a budget that
+names none is never exceeded — it is only not kept, and nobody notices:
+
+| budget | limit | what is weighed |
+|---|---:|---|
+| `first-load` | 950 kB | the entry module, every chunk preloaded beside it and the stylesheet — everything the built `index.html` asks for before the shell renders |
+| `editor` | 620 kB | the editor's own chunk, fetched when a field is first put on a screen |
+
+They are measured out of the build, in the bytes it writes, by `npm run budget`
+in `src/web`; CI runs it on every push and an excess is red rather than a note,
+which holds the trunk ([ADR 0001](./adr/0001-the-repository-is-a-trunk.md)).
+That is the only point at which a budget does anything: a note is overlooked by
+the third time. The limits are therefore set wide enough to catch a jump rather
+than to fence in growth, so that the red means something when it comes.
+
+Fonts are not weighed. They are `@font-face` sources the browser fetches for
+the subsets it actually needs, and they hold nothing up. Nor is there a number
+for the time to the first frame: without a browser driver it is not
+reproducibly measurable, and a number that depends on the machine it was taken
+on is worse than no number at all.

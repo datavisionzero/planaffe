@@ -232,7 +232,9 @@ The frontend carries its own tests inside `src/web/`, and the CLI its own inside
 on demand. There is no review step and no environment between a commit and a
 release ([ADR 0001](./adr/0001-the-repository-is-a-trunk.md)), so that workflow
 is the only thing standing between a mistake and the trunk: unit tests,
-integration tests on Testcontainers, the web build, the CLI build, and the
+integration tests on Testcontainers, the web build with the performance budget
+of [`human-interface.md`](./human-interface.md) held against what it wrote, the
+CLI build, and the
 contract check that fails when the installation serves a document other than the
 one checked in. A trunk commit that passes all of them publishes the image to
 `ghcr.io/datavisionzero/planaffe` under `:main` and under the commit, and never
