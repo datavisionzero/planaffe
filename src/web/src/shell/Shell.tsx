@@ -7,7 +7,6 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { EpicsView } from "@/epics/EpicsView";
 import { IssueListView } from "@/issues/IssueListView";
 import { NeedsYouView } from "@/issues/NeedsYouView";
-import { NewIssueView } from "@/issues/IssueEditor";
 import { PagesView } from "@/pages/PagesView";
 import { LabelsView } from "@/projects/LabelsView";
 import { ProjectSwitcher } from "@/projects/ProjectSwitcher";
@@ -29,7 +28,16 @@ import { views } from "./views";
 
 // The Markdown pipeline of ADR 0007 weighs more than the shell; it arrives
 // with the first issue, epic or release opened, not with the frame.
+//
+// `NewIssueView` belongs in this list and was the one screen that escaped it.
+// It is imported statically nowhere any more: through `IssueEditor` it reaches
+// `MarkdownField` and with it the whole pipeline, so a static import here put
+// the pipeline in the frame's own graph — the build then had to fetch it
+// before the shell rendered, on every screen, including the ones that never
+// show Markdown. The paragraph above said otherwise, and so did
+// `docs/human-interface.md`.
 const IssueView = lazy(() => import("@/issues/IssueView").then((module) => ({ default: module.IssueView })));
+const NewIssueView = lazy(() => import("@/issues/IssueEditor").then((module) => ({ default: module.NewIssueView })));
 const EpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.EpicView })));
 const NewEpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.NewEpicView })));
 const ReleaseView = lazy(() => import("@/releases/ReleaseView").then((module) => ({ default: module.ReleaseView })));
@@ -171,7 +179,7 @@ export function Shell() {
                 <Route key={view.id} path={view.path} element={<IssueListView view={view} />} />
               ))}
             <Route path="needs-you" element={<NeedsYouView />} />
-            <Route path="issues/new" element={<NewIssueView />} />
+            <Route path="issues/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewIssueView /></Suspense>} />
             <Route path="issues/:number" element={<Suspense fallback={<Busy title="Loading the screen…" />}><IssueView /></Suspense>} />
             <Route path="epics" element={<EpicsView />} />
             <Route path="epics/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewEpicView /></Suspense>} />

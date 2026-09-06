@@ -8,10 +8,17 @@
 //
 // What is measured comes out of the built `index.html`, which is the honest
 // answer to "what does a browser fetch before the shell renders" — the entry
-// module, every chunk preloaded beside it, and the stylesheet. The editor is
-// its own chunk because it is fetched when a field is first put on a screen
-// (ADR 0006), and it is found by that name rather than by a hash that changes
-// with every build.
+// module, every chunk preloaded beside it, and the stylesheet. The editor and
+// the Markdown pipeline are chunks of their own because both arrive after the
+// frame rather than in it (ADR 0006), and they are found by the module each
+// was cut from rather than by a hash that changes with every build.
+//
+// Their weight is the smaller half of what is checked about them. The larger
+// half is that they are not in the first load at all: the pipeline was, for a
+// while, because one screen was imported statically instead of lazily, and
+// nothing said so — the paragraph in the document went on promising the
+// opposite. A number alone would not have caught that; the chunk was simply
+// somewhere else.
 //
 // An excess exits non-zero, which makes CI red and holds the trunk (ADR 0001).
 // That is the point at which a budget does anything at all; the limits are set
@@ -52,19 +59,36 @@ function firstLoad() {
 
   if (asked.length === 0) throw new Error(`${out}/index.html asks for no asset — is this a build?`);
 
-  return asked.reduce((total, file) => total + bytes(file), 0);
+  return asked;
 }
 
-/** The editor's own chunk, named after the module it was cut from. */
-function editor() {
-  const chunks = readdirSync(join(out, "assets")).filter((file) => /^Editor-.*\.js$/.test(file));
+/**
+ * A chunk that arrives after the frame, named after the module it was cut
+ * from. Not being in the first load is the point of it, so that is asserted
+ * here rather than left to the number.
+ */
+function afterTheFrame(name, cut) {
+  const chunks = readdirSync(join(out, "assets")).filter((file) => new RegExp(`^${cut}-.*\\.js$`).test(file));
 
-  if (chunks.length !== 1) throw new Error(`expected one Editor chunk in ${out}/assets, found ${chunks.length}`);
+  if (chunks.length !== 1) {
+    throw new Error(`expected one ${cut} chunk in ${out}/assets, found ${chunks.length} — \`${name}\` was renamed, or it was folded back into another chunk because something now imports it statically`);
+  }
 
-  return bytes(join("assets", chunks[0]));
+  const file = join("assets", chunks[0]);
+
+  if (loaded.includes(file)) {
+    throw new Error(`${file} is in the first load, and \`${name}\` is promised to arrive after the frame — something imports it statically`);
+  }
+
+  return bytes(file);
 }
 
-const measured = { "first-load": firstLoad(), editor: editor() };
+const loaded = firstLoad();
+const measured = {
+  "first-load": loaded.reduce((total, file) => total + bytes(file), 0),
+  markdown: afterTheFrame("markdown", "MarkdownField"),
+  editor: afterTheFrame("editor", "Editor"),
+};
 const limit = limits();
 let over = false;
 
