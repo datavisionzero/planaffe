@@ -94,6 +94,9 @@ pa needs-you                 # questions, review, unready under triage, then stu
                              # an instance without an agent is said once on stderr, not per ticket
 pa needs-you --wait 3600     # wait until the list gains an entry; exit 8 at the deadline
 pa needs-you --limit 20 --json
+pa standing                  # how every project you can see is standing, worst first
+                             # the one command that takes no project: no key, no .planaffe
+pa standing --json
 
 pa issue create "Title" --description-file - --priority 3 --ready --label feature --epic PLAN-E2 --blocked-by PLAN-40
 pa issue create --file batch.json          # several wired-up issues in one transaction (below)
@@ -202,6 +205,15 @@ address is not the same kind of act as editing a text: nothing forwards, and
 every reference written to the old slug stops working. `pa page view` prints
 the head and then the body unchanged, so that the output pipes straight back
 into `--body-file -`.
+
+`pa standing` is the one verb with no project in it: it is the overview
+(`human-interface.md`), and everything the caller can see is the point. Each
+line carries the step as its **word** rather than as the icon the browser
+draws — what runs into a pipe stays readable, and a terminal without the right
+font would put a box where a thumb was meant to be — then what produced the
+step, with its number, and then the three counts. A project with nothing open
+prints no counts, and an instance with no agent is told once under the list
+rather than on every line.
 
 Descriptions, results, comments, questions and answers come from an argument, a
 file or stdin (`-`), never an editor. The whole agent cycle of VISION 6.1 is

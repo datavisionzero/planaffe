@@ -245,6 +245,100 @@ func NeedsYou(w io.Writer, items []api.NeedsYouItem) {
 	}
 }
 
+// Standing prints the overview: one line per project, in the order the
+// instance gave them — worst first. The step travels as its word and never as
+// a symbol: what runs into a pipe stays readable, and a terminal without the
+// right font would draw a box instead of a thumb.
+func Standing(w io.Writer, overview api.Overview) {
+	if len(overview.Projects) == 0 {
+		fmt.Fprintln(w, "No project yet.")
+		return
+	}
+	// The reason column is as wide as the widest reason rather than a number
+	// picked in advance: "3 issues to triage, oldest under an hour" is longer
+	// than any guess, and one long line must not push every other line's
+	// counts out of their column.
+	reasons := make([]string, len(overview.Projects))
+	widest := 0
+	for i, p := range overview.Projects {
+		reasons[i] = standingReason(p)
+		if len(reasons[i]) > widest {
+			widest = len(reasons[i])
+		}
+	}
+	for i, p := range overview.Projects {
+		line := fmt.Sprintf("%-10s %-10s %-*s %s", p.Key, p.Standing, widest, reasons[i], standingWork(p))
+		fmt.Fprintln(w, strings.TrimRight(line, " "))
+	}
+	// Said once for the whole answer, like it is beside "needs you": with no
+	// agent nothing anywhere is picked up, whatever the lines above say.
+	if overview.Agents == 0 {
+		fmt.Fprintln(w, "\nThis instance has no active agent token, so nothing will be worked off: pa agent create <name>.")
+	}
+}
+
+// standingReason is the line's third column: what produced the step, always
+// with the number that produced it.
+func standingReason(p api.ProjectStanding) string {
+	waited := ""
+	if p.NeedsYou.Oldest != nil {
+		waited = ", oldest " + waiting(*p.NeedsYou.Oldest)
+	}
+	switch p.Because {
+	case api.StandingBecauseQuestion:
+		return plural(int(p.NeedsYou.Question), "question") + waited
+	case api.StandingBecauseReview:
+		return fmt.Sprintf("%d in review%s", p.NeedsYou.Review, waited)
+	case api.StandingBecauseUnready:
+		return plural(int(p.NeedsYou.Unready), "issue") + " to triage" + waited
+	case api.StandingBecauseStuck:
+		return plural(int(p.NeedsYou.Stuck), "issue") + " stuck" + waited
+	case api.StandingBecauseNoAgent:
+		return "no agent to pick anything up"
+	case api.StandingBecauseBlocked:
+		return fmt.Sprintf("nothing ready, %d behind blockers", p.Work.Open)
+	case api.StandingBecauseNothingReady:
+		return "nothing an agent could take"
+	case api.StandingBecauseWorking:
+		if p.Work.InProgress > 0 {
+			return fmt.Sprintf("%d in progress", p.Work.InProgress)
+		}
+		return plural(int(p.Work.Ready), "issue") + " ready"
+	default:
+		return "nothing open"
+	}
+}
+
+// standingWork is the three counts, and nothing about them is a grade: a full
+// backlog that is moving is a healthy project (ADR 0024).
+func standingWork(p api.ProjectStanding) string {
+	if p.Work.Open == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d in progress · %d ready · %d open", p.Work.InProgress, p.Work.Ready, p.Work.Open)
+}
+
+// waiting is how long something has been waiting, coarse on purpose: the line
+// is read at a glance and the step it feeds turns on days.
+func waiting(since time.Time) string {
+	hours := int(time.Since(since).Hours())
+	switch {
+	case hours < 1:
+		return "under an hour"
+	case hours < 48:
+		return plural(hours, "hour")
+	default:
+		return fmt.Sprintf("%d days", hours/24)
+	}
+}
+
+func plural(many int, thing string) string {
+	if many == 1 {
+		return fmt.Sprintf("%d %s", many, thing)
+	}
+	return fmt.Sprintf("%d %ss", many, thing)
+}
+
 // Project prints one project with its switches.
 func Project(w io.Writer, p api.Project) {
 	fmt.Fprintf(w, "%s  %s\n", p.Key, p.Name)
