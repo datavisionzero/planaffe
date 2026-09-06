@@ -202,12 +202,16 @@ into `--body-file -`.
 
 Descriptions, results, comments, questions and answers come from an argument, a
 file or stdin (`-`), never an editor. The whole agent cycle of VISION 6.1 is
-`pa next --claim`, work, `pa issue comment`, `pa issue ask`, and `pa issue close
---done --result-file -`; a human answers with `pa question answer`. The three
-waiting commands accept any positive number of seconds and split waits longer
-than the server's one-hour limit into rounds. `pa issue ask --wait` stops no
-later than the expiry of the caller's claim; `pa needs-you --wait` first reads
-the current page and then uses its ETag for the long poll. A deadline is exit 8.
+`pa next --claim`, work, `pa issue comment`, `pa issue ask`, and `pa issue
+close --done --result-file -`; a human answers with `pa question answer`. A
+ticket the agent writes itself ends that cycle the same way it would end a
+claim: with `--ready` when it is implementable as written, and otherwise with a
+`pa issue ask` naming what a human has to decide first, because `ready` selects
+nothing where triage required is off. The three waiting commands accept any
+positive number of seconds and split waits longer than the server's one-hour
+limit into rounds. `pa issue ask --wait` stops no later than the expiry of the
+caller's claim; `pa needs-you --wait` first reads the current page and then
+uses its ETag for the long poll. A deadline is exit 8.
 
 That cycle is also written out as a paragraph to copy: [`agents-md.md`](./agents-md.md)
 is the block a user pastes into the `AGENTS.md` of their own repository, so that

@@ -81,10 +81,31 @@ pa issue edit PROJ-42 --ready false     # it turned out to be too vague
 ```
 
 Where the project has triage required switched on, `ready` decides what `next`
-hands out: an unflagged ticket is never handed to anybody. The flag is a human's
-word by convention rather than by a rule — set it when you are told to, and clear
-it on your own when a ticket you picked up turns out to be too thin, saying in a
-question or a comment what is missing.
+hands out: an unflagged ticket is never handed to anybody. Where it is switched
+off, `ready` selects nothing on its own — only an explicit `pa next --ready`
+filters by it — and the flag is read by people rather than by the list. It is a
+human's word by convention rather than by a rule: set it when you are told to,
+and on a ticket you write yourself, where nobody else is waiting to say the word.
+Clear it on your own when a ticket you picked up turns out to be too thin, saying
+in a question or a comment what is missing.
+
+### Creating a ticket
+
+A ticket you create leaves in one of two states, and there is no third. Either it
+is implementable as written, and it carries `--ready`. Or it hangs on a decision
+only a human can take, and a question follows at once, naming that decision:
+
+```sh
+pa issue create "Title" --description-file - --priority 2 --ready
+pa issue ask PROJ-43 "Which of the two …?"   # on one left without --ready
+```
+
+The question is what makes the open point visible. It holds the ticket back from
+`next` and puts it at the top of the human's list, whatever the project's
+switches say. A missing `ready` does neither where triage required is off: the
+ticket is handed to the next agent exactly as a clear one is, and that agent
+walks into the decision you left in the prose. Asking needs no claim of its own,
+so a ticket you have just written can carry its question immediately.
 
 ### The commands you need
 
@@ -95,6 +116,7 @@ pa issue comment PROJ-42 "…"             # a note that forces nobody to act
 pa issue ask PROJ-42 "…" [--wait 600]    # a question; the ticket waits for an answer
 pa issue close PROJ-42 --done --result-file -
 pa issue release PROJ-42                 # give it back unfinished
+pa issue create "…" --description-file - # a ticket of your own: --ready or ask
 ```
 
 Everything else — creating tickets in bulk, epics, labels, releases — is
