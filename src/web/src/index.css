@@ -62,6 +62,12 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   /* Status and priority colours, the only semantic colours beside the accent. */
+  --color-standing-clear: var(--standing-clear);
+  --color-standing-running: var(--standing-running);
+  --color-standing-idle: var(--standing-idle);
+  --color-standing-waiting: var(--standing-waiting);
+  --color-standing-neglected: var(--standing-neglected);
+
   --color-status-todo: var(--status-todo);
   --color-status-progress: var(--status-progress);
   --color-status-review: var(--status-review);
@@ -115,6 +121,16 @@
   --status-review: oklch(0.55 0.16 295);
   --status-done: oklch(0.6 0.13 150);
   --status-canceled: #b9bcb5;
+
+  /* The five steps of a project's standing (ADR 0024). `clear` and `running`
+     are both good and are not the same green: one is finished, the other is
+     moving, and a reader scanning ten tiles should not have to read the word
+     to tell them apart. */
+  --standing-clear: oklch(0.6 0.13 150);
+  --standing-running: oklch(0.62 0.11 190);
+  --standing-idle: oklch(0.72 0.11 85);
+  --standing-waiting: oklch(0.68 0.16 55);
+  --standing-neglected: oklch(0.577 0.245 27.325);
 }
 
 .dark {
@@ -154,6 +170,12 @@
   --status-review: oklch(0.68 0.15 295);
   --status-done: oklch(0.68 0.12 150);
   --status-canceled: #585d58;
+
+  --standing-clear: oklch(0.68 0.12 150);
+  --standing-running: oklch(0.7 0.1 190);
+  --standing-idle: oklch(0.78 0.1 85);
+  --standing-waiting: oklch(0.74 0.14 55);
+  --standing-neglected: oklch(0.704 0.191 22.216);
 }
 
 @layer base {

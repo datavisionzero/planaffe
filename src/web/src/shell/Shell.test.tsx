@@ -59,6 +59,27 @@ function shell(path: string) {
       return { items, total: items.length, has_more: false, next_cursor: null };
     },
     "GET /epics": { items: [], total: 0, has_more: false, next_cursor: null },
+    "GET /standing": {
+      agents: 1,
+      projects: [
+        {
+          key: "PLAN",
+          name: "planaffe",
+          standing: "waiting",
+          because: "review",
+          needs_you: { question: 0, review: 1, unready: 0, stuck: 0, oldest: "2026-09-06T10:00:00Z" },
+          work: { in_progress: 3, ready: 0, open: 4 },
+        },
+        {
+          key: "LOG",
+          name: "logaffe",
+          standing: "clear",
+          because: "nothing",
+          needs_you: { question: 0, review: 0, unready: 0, stuck: 0, oldest: null },
+          work: { in_progress: 0, ready: 0, open: 0 },
+        },
+      ],
+    },
     "GET /projects/PLAN/needs-you": {
       items: [{ issue: anIssue("PLAN-13", "The web shell", "review"), because: "review" }],
       total: 1,
@@ -274,7 +295,6 @@ describe("the shell (ADR 0006)", () => {
         "/LOG/in-progress",
       ),
     );
-    expect(window.localStorage.getItem("planaffe.project")).toBe("LOG");
   });
 
   // The frame used to flatten a failed list into an empty one, so the switcher
@@ -398,14 +418,32 @@ describe("the shell (ADR 0006)", () => {
     }
   });
 
-  it("lands on the remembered project from /", async () => {
-    window.localStorage.setItem("planaffe.project", "LOG");
+  it("lands on the overview from /, and in the project when there is only one", async () => {
     shell("/");
 
+    // Two projects: the overview, which is the one screen that answers across
+    // them (ADR 0024).
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /planaffe/ })).toHaveAttribute("href", "/PLAN/needs-you");
+
+    installInstance({
+      "GET /projects": [aProject],
+      "GET /issues": { items: [], total: 0, has_more: false, next_cursor: null },
+      "GET /projects/PLAN/needs-you": { items: [], total: 0, has_more: false, next_cursor: null },
+      "GET /projects/PLAN/labels": [],
+    });
+    renderAt(
+      "/",
+      <SessionProvider value={{ me: aUser, signOut: vi.fn() }}>
+        <Shell />
+      </SessionProvider>,
+    );
+
+    // One project: straight in. An overview of a single tile is decoration.
     await waitFor(() =>
-      expect(screen.getByRole("navigation").querySelector('a[aria-current="page"]')).toHaveAttribute(
+      expect(screen.getAllByRole("navigation")[1]!.querySelector('a[aria-current="page"]')).toHaveAttribute(
         "href",
-        "/LOG/ready",
+        "/PLAN/ready",
       ),
     );
   });

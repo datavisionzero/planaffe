@@ -4,7 +4,6 @@ import { useNavigate } from "react-router";
 import { api, type IssueSummary, type Project, type Schemas } from "@/api/client";
 import { useTheme } from "@/components/theme-provider";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { rememberProject } from "@/projects/useProjects";
 import { useSession } from "@/session/useSession";
 import { cn } from "@/lib/utils";
 import { Keys } from "./ShortcutsDialog";
@@ -212,6 +211,13 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
     }
 
     list.push({ id: "create:project", label: "Create project", group: "Create", run: go("/projects/new") });
+    list.push({
+      id: "overview",
+      label: "Overview",
+      hint: "How every project stands, worst first.",
+      group: "Go to",
+      run: go("/projects"),
+    });
 
     for (const project of projects) {
       if (project.key !== current?.key) {
@@ -221,7 +227,6 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
           hint: project.key,
           group: "Switch project",
           run: () => {
-            rememberProject(project.key);
             go(`/${project.key}/ready`)();
           },
         });

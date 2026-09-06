@@ -11,8 +11,9 @@ import { PagesView } from "@/pages/PagesView";
 import { LabelsView } from "@/projects/LabelsView";
 import { ProjectSwitcher } from "@/projects/ProjectSwitcher";
 import { NewProjectView } from "@/projects/NewProjectView";
+import { OverviewView } from "@/projects/OverviewView";
 import { ProjectsContext } from "@/projects/context";
-import { lastProject, rememberProject, useProjects, type Projects } from "@/projects/useProjects";
+import { useProjects, type Projects } from "@/projects/useProjects";
 import { ReleasesView } from "@/releases/ReleasesView";
 import { SettingsView } from "@/settings/SettingsView";
 import { AdminView } from "@/settings/AdminView";
@@ -68,12 +69,6 @@ export function Shell() {
     projects.at === "known" && projectKey !== undefined
       ? projects.projects.find((project) => project.key === projectKey)
       : undefined;
-
-  useEffect(() => {
-    if (current !== undefined) {
-      rememberProject(current.key);
-    }
-  }, [current]);
 
   // The keys the frame itself owns, read from `shortcuts.ts` so that this
   // handler and the overview it feeds cannot come apart. `p`, `?` and `c` are
@@ -170,6 +165,7 @@ export function Shell() {
           <Route path="/" element={<Landing projects={projects} />} />
           <Route path="/settings/*" element={<SettingsView />} />
           <Route path="/admin/*" element={<AdminView />} />
+          <Route path="/projects" element={<OverviewView />} />
           <Route path="/projects/new" element={<NewProjectView />} />
           <Route path="/:project">
             <Route index element={<Navigate to="ready" replace />} />
@@ -210,8 +206,14 @@ export function Shell() {
 }
 
 /**
- * `/` is nowhere: it lands in the project the user was in last, or the first
- * one, in "Ready for agents" — the view the product is about.
+ * `/` is the overview: how every project stands, worst first
+ * (`docs/human-interface.md`).
+ *
+ * With one project it is not. An overview of a single tile is decoration, and
+ * the reader who has one project wants the same thing every time — so they are
+ * taken straight into it, in "Ready for agents", the view the product is
+ * about. The empty instance keeps the sentence it always had, because there is
+ * nothing to be an overview of.
  */
 function Landing({ projects }: { projects: Projects }) {
   if (projects.at === "asking") {
@@ -222,10 +224,7 @@ function Landing({ projects }: { projects: Projects }) {
     return <Empty title="The projects could not be loaded." />;
   }
 
-  const remembered = lastProject();
-  const target = projects.projects.find((project) => project.key === remembered) ?? projects.projects[0];
-
-  if (target === undefined) {
+  if (projects.projects.length === 0) {
     return (
       <Empty title="No project yet.">
         <code className="font-mono">pa project create --key PLAN --name "…"</code> makes the first one.
@@ -233,7 +232,11 @@ function Landing({ projects }: { projects: Projects }) {
     );
   }
 
-  return <Navigate to={`/${target.key}/ready`} replace />;
+  if (projects.projects.length === 1) {
+    return <Navigate to={`/${projects.projects[0]!.key}/ready`} replace />;
+  }
+
+  return <Navigate to="/projects" replace />;
 }
 
 /**

@@ -58,25 +58,3 @@ export function useProjectList(): ProjectList {
 
   return list;
 }
-
-/**
- * The project the user was in last, so that `/` lands there. A convenience of
- * this browser, nothing the instance knows.
- */
-const lastProjectKey = "planaffe.project";
-
-export function rememberProject(key: string): void {
-  try {
-    window.localStorage.setItem(lastProjectKey, key);
-  } catch {
-    // A browser that keeps nothing lands on the first project instead.
-  }
-}
-
-export function lastProject(): string | null {
-  try {
-    return window.localStorage.getItem(lastProjectKey);
-  } catch {
-    return null;
-  }
-}

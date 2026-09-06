@@ -189,7 +189,9 @@ the two good steps to where the project opens anyway.
 straight into it, because an overview of one tile is decoration. `/projects/new`
 keeps its own meaning and is not swallowed by the route above it. The way back
 is the project switcher, as a row above the projects, and the command palette;
-the sidebar belongs to one project and gets no entry that leads out of it.
+the sidebar belongs to one project and gets no entry that leads out of it. It
+is called Overview in both of them and in its own heading — the name this
+section carries — so that nothing has to be recognised twice.
 
 **It holds no connection open.** One read carrying `If-None-Match`, repeated
 when the tab is looked at again and on an interval while it is, and not at all

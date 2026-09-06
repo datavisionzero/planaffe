@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
+import { CheckIcon, ChevronsUpDownIcon, LayoutGridIcon, PlusIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import type { Project } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
-import { rememberProject, type Projects } from "./useProjects";
+import type { Projects } from "./useProjects";
 
 /**
  * The project switcher of the header (ADR 0006). Switching keeps the view:
@@ -65,11 +65,20 @@ export function ProjectSwitcher({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        {/* The way out of a project. The sidebar belongs to one project and
+            gets no entry that leads away from it, so this is where the
+            overview is reached from — above the projects it is an overview
+            of. */}
+        <DropdownMenuItem onClick={() => void navigate("/projects")}>
+          <LayoutGridIcon className="size-3.5" />
+          <span className="flex-1">Overview</span>
+          {current === undefined && <CheckIcon className="size-3.5" />}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         {known.map((project) => (
           <DropdownMenuItem
             key={project.key}
             onClick={() => {
-              rememberProject(project.key);
               void navigate(`/${project.key}/${viewPath}`);
             }}
           >
