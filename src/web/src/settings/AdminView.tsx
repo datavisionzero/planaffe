@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, Navigate, Route, Routes, useParams } from "react-router";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Link, Route, Routes, useParams } from "react-router";
 import { api, describe, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/session/useSession";
+import { PageHeader } from "@/shared/PageHeader";
+import { ActionDialog } from "@/shared/ActionDialog";
 import { reporting } from "@/shared/report";
 import { date, submitting } from "./forms";
 import { Row, RowMenu, Rows, Said, Section, SettingsShell } from "./SettingsShell";
@@ -17,7 +19,7 @@ type Smtp = Schemas["SmtpStatus"];
 export function AdminView() {
   const { me } = useSession();
 
-  if (!me.administrator) return <Navigate to="/" replace />;
+  if (!me.administrator) return <NotYours />;
 
   return (
     <SettingsShell
@@ -29,6 +31,31 @@ export function AdminView() {
       ]}
     />
   );
+}
+
+/**
+ * What `/admin` answers a reader who does not have the role.
+ *
+ * It used to be a redirect to the issue list. Whoever opened the address out
+ * of a bookmark or out of a colleague's message learned nothing at all: not
+ * whether it exists, not whether it moved, not whether it is simply not
+ * theirs. `docs/human-interface.md` counts a permission state among the
+ * designed ones, and a redirect is the blank page, only faster.
+ *
+ * That the navigation does not offer the area to a non-administrator stays as
+ * it is; the same paragraph foresees the direct call and has the server refuse
+ * it with `403`. This check is the courtesy in front of that answer and never
+ * the authorization, which stays in the API.
+ */
+function NotYours() {
+  const back = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => { back.current?.focus(); }, []);
+
+  return <><PageHeader title="Instance administration" /><div className="m-auto grid max-w-md justify-items-center gap-3 p-8 text-center">
+    <p role="status">Instance administration belongs to administrators, and this account is not one.</p>
+    <Button render={<Link ref={back} to="/" />}>Back to your projects</Button>
+  </div></>;
 }
 
 function Users() {
@@ -59,23 +86,73 @@ function Users() {
         <label className="flex gap-2 text-sm sm:col-span-3"><input name="administrator" type="checkbox" /> Administrator</label>
       </form>
       <Rows empty="No users.">
-        {users.map((u) => (
-          <Row
-            key={u.id}
-            title={u.name}
-            detail={`${u.email} · ${u.state}${u.administrator ? " · administrator" : ""}`}
-            action={
-              <RowMenu label={`Actions for ${u.name}`}>
-                {u.state === "invited" && <DropdownMenuItem onClick={() => void report(api.POST("/users/{id}/invitation", { params: { path: { id: u.id } } }), "Invitation resent.")}>Resend invitation</DropdownMenuItem>}
-                <DropdownMenuItem onClick={() => void report(api.PATCH("/users/{id}", { params: { path: { id: u.id } }, body: { administrator: !u.administrator } }), u.administrator ? `${u.name} is no longer an administrator.` : `${u.name} is now an administrator.`)}>{u.administrator ? "Demote" : "Make admin"}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => void report(api.POST(u.state === "deactivated" ? "/users/{id}/reactivate" : "/users/{id}/deactivate", { params: { path: { id: u.id } } }), u.state === "deactivated" ? `${u.name} is active again.` : `${u.name} is deactivated.`)}>{u.state === "deactivated" ? "Reactivate" : "Deactivate"}</DropdownMenuItem>
-              </RowMenu>
-            }
-          />
-        ))}
+        {users.map((u) => <UserRow key={u.id} user={u} report={report} />)}
       </Rows>
       <Said notice={notice} />
     </Section>
+  );
+}
+
+/** A write on this screen, and the one sentence it leaves behind. */
+type Report = ReturnType<typeof reporting>;
+
+/**
+ * One user and the acts an administrator has on them.
+ *
+ * Two of the four used to hang straight on the click of a menu entry — one
+ * click, no question, done — and "Deactivate" stands directly under
+ * "Make admin". A deactivation is the most consequential act this interface
+ * knows: it ends every browser session of that person and stops their user
+ * tokens and all of their agents in the same minute, so whoever has an agent
+ * running next door has just halted it.
+ *
+ * So those two ask first, and the dialog writes the consequences out instead
+ * of asserting them. Reactivating and "Make admin" ask nothing: a question in
+ * front of every act is no longer a warning, only a second click.
+ *
+ * The dialog is opened from a menu, which closes on the click and would take
+ * its own trigger down with it, so the row keeps the open state and the dialog
+ * stands beside the menu.
+ */
+function UserRow({ user, report }: { user: User; report: Report }) {
+  const [asking, setAsking] = useState<"deactivate" | "demote">();
+  const deactivated = user.state === "deactivated";
+
+  return (
+    <Row
+      title={user.name}
+      detail={`${user.email} · ${user.state}${user.administrator ? " · administrator" : ""}`}
+      action={
+        <>
+          <RowMenu label={`Actions for ${user.name}`}>
+            {user.state === "invited" && <DropdownMenuItem onClick={() => void report(api.POST("/users/{id}/invitation", { params: { path: { id: user.id } } }), "Invitation resent.")}>Resend invitation</DropdownMenuItem>}
+            {user.administrator
+              ? <DropdownMenuItem onClick={() => setAsking("demote")}>Demote</DropdownMenuItem>
+              : <DropdownMenuItem onClick={() => void report(api.PATCH("/users/{id}", { params: { path: { id: user.id } }, body: { administrator: true } }), `${user.name} is now an administrator.`)}>Make admin</DropdownMenuItem>}
+            {deactivated
+              ? <DropdownMenuItem onClick={() => void report(api.POST("/users/{id}/reactivate", { params: { path: { id: user.id } } }), `${user.name} is active again.`)}>Reactivate</DropdownMenuItem>
+              : <DropdownMenuItem variant="destructive" onClick={() => setAsking("deactivate")}>Deactivate</DropdownMenuItem>}
+          </RowMenu>
+          <ActionDialog
+            open={asking === "deactivate"}
+            onOpenChange={(open) => setAsking(open ? "deactivate" : undefined)}
+            title={`Deactivate ${user.name}?`}
+            description={`Every browser session of ${user.name} ends, and their user tokens and all of their agents stop authenticating — an agent running right now is halted with them. Nothing they wrote or changed disappears; the history keeps its author. An administrator can reactivate them at any time.`}
+            confirmLabel="Deactivate"
+            onConfirm={async () => { await report(api.POST("/users/{id}/deactivate", { params: { path: { id: user.id } } }), `${user.name} is deactivated.`); }}
+          />
+          <ActionDialog
+            open={asking === "demote"}
+            onOpenChange={(open) => setAsking(open ? "demote" : undefined)}
+            title={`Demote ${user.name}?`}
+            description={`${user.name} loses the instance role: no more inviting or deactivating users, no project assignments, no SMTP. Their project access, their sessions, their tokens and their agents are untouched, and an administrator can grant the role again.`}
+            confirmLabel="Demote"
+            confirmVariant="default"
+            onConfirm={async () => { await report(api.PATCH("/users/{id}", { params: { path: { id: user.id } }, body: { administrator: false } }), `${user.name} is no longer an administrator.`); }}
+          />
+        </>
+      }
+    />
   );
 }
 

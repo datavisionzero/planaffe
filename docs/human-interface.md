@@ -316,6 +316,17 @@ An administrator role grants instance administration, not implicit access to
 project content. There must always be at least one active administrator; the
 last one can neither be deactivated nor demoted.
 
+Deactivating and demoting ask before they act, and the dialog writes the
+consequences out rather than asserting them; reactivating and granting the role
+do not. A question in front of every act is no longer a warning, only a second
+click.
+
+Opening an address that is not the caller's is a permission state and not a
+redirect: `/admin` without the role says that the instance administration
+belongs to administrators and offers the way back. The navigation still does not
+show the area, and the server still refuses the call with `403`; the screen is
+what a link out of a bookmark or a colleague's message runs into.
+
 ## Accessibility and performance floor
 
 Every action is reachable by keyboard, focus is visible and restored after a

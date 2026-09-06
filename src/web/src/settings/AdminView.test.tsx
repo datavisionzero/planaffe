@@ -33,6 +33,12 @@ async function act(user: ReturnType<typeof userEvent.setup>, of: string, what: s
   await user.click(await screen.findByRole("menuitem", { name: what }));
 }
 
+/** The two acts that ask first: the menu entry, then the dialog's own button. */
+async function confirm(user: ReturnType<typeof userEvent.setup>, of: string, what: string) {
+  await act(user, of, what);
+  await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: what }));
+}
+
 // The reload after a successful invite used to be unreachable: the form was
 // read back off the event after the await, which threw before `load()` ran.
 it("shows an invited user without a reload of the page", async () => {
@@ -80,7 +86,7 @@ it("says why the last administrator cannot be demoted", async () => {
   });
   const user = userEvent.setup();
 
-  await act(user, "maintainer", "Demote");
+  await confirm(user, "maintainer", "Demote");
 
   expect(await screen.findByRole("status")).toHaveTextContent("Deactivation or demotion would leave no active administrator.");
 });
@@ -92,7 +98,7 @@ it("says why the last administrator cannot be deactivated", async () => {
   });
   const user = userEvent.setup();
 
-  await act(user, "maintainer", "Deactivate");
+  await confirm(user, "maintainer", "Deactivate");
 
   expect(await screen.findByRole("status")).toHaveTextContent("Deactivation or demotion would leave no active administrator.");
 });
@@ -161,4 +167,65 @@ it("marks the area a project is read in as the current one", async () => {
 
   expect(await screen.findByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
   expect(screen.getByRole("link", { name: "Users" })).not.toHaveAttribute("aria-current");
+});
+
+// Deactivating ends every session of that person and stops their tokens and
+// agents in the same minute, and "Deactivate" sits directly under "Make admin".
+// It hung on the click of the menu entry and fired with no question at all.
+it("asks before it deactivates, and sends nothing when the question is answered with no", async () => {
+  const instance = admin({
+    "GET /users": [maintainer, invited],
+    [`POST /users/${invited.id}/deactivate`]: { status: 204 },
+  });
+  const user = userEvent.setup();
+
+  await act(user, "newcomer", "Deactivate");
+
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog).toHaveTextContent("Every browser session of newcomer ends");
+  expect(instance.calls.some((call) => call.url.includes("/deactivate"))).toBe(false);
+
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(instance.calls.some((call) => call.url.includes("/deactivate"))).toBe(false);
+
+  await confirm(user, "newcomer", "Deactivate");
+  expect(instance.calls.some((call) => call.url.includes("/deactivate"))).toBe(true);
+});
+
+// A question in front of every act is no longer a warning, only a second click.
+// Neither of these takes anything away, and neither asks.
+it("reactivates and promotes without a question", async () => {
+  const deactivated = { ...invited, state: "deactivated" };
+  const instance = admin({
+    "GET /users": [maintainer, deactivated],
+    [`POST /users/${invited.id}/reactivate`]: { status: 204 },
+    [`PATCH /users/${invited.id}`]: { ...deactivated, state: "active" },
+  });
+  const user = userEvent.setup();
+
+  await act(user, "newcomer", "Make admin");
+  expect(await screen.findByRole("status")).toHaveTextContent("newcomer is now an administrator.");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  await act(user, "newcomer", "Reactivate");
+  expect(await screen.findByRole("status")).toHaveTextContent("newcomer is active again.");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(instance.calls.some((call) => call.url.includes("/reactivate"))).toBe(true);
+});
+
+// The address used to answer a reader without the role with a redirect to the
+// issue list: he learned neither that it exists nor that it is not his.
+it("says that the administration is not this account's instead of redirecting", async () => {
+  installInstance({});
+  renderAt(
+    "/admin/users",
+    <SessionProvider value={{ me: { ...aUser, administrator: false }, signOut: vi.fn() }}>
+      <Routes><Route path="/admin/*" element={<AdminView />} /></Routes>
+      <At />
+    </SessionProvider>,
+  );
+
+  expect(await screen.findByRole("status")).toHaveTextContent("Instance administration belongs to administrators");
+  expect(screen.getByTestId("at")).toHaveTextContent("/admin/users");
+  expect(screen.getByRole("link", { name: "Back to your projects" })).toHaveFocus();
 });
