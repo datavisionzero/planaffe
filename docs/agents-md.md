@@ -26,12 +26,16 @@ or three commands an agent actually runs.
 ## Tickets
 
 Tickets for this repository live in planaffe, project `PROJ`. The checked-in
-`.planaffe` file names the project, so no command has to. `pa` needs
-`PLANAFFE_URL` and `PLANAFFE_TOKEN` in the environment and nothing else; it is
-never interactive, writes data to stdout and errors to stderr, and `--json`
-prints the object as the API answered it. That token is an agent's, and one
-agent normally stands for one installation rather than for one run: another run
-on the same machine may be signing with the same name.
+`.planaffe` file names the project, so no command has to. `pa` takes its
+instance and its token from `PLANAFFE_URL` and `PLANAFFE_TOKEN` in the
+environment, which is how an agent is given one; it is never interactive, writes
+data to stdout and errors to stderr, and `--json` prints the object as the API
+answered it. That token is an agent's, and one agent normally stands for one
+installation rather than for one run: another run on the same machine may be
+signing with the same name. Check with `pa me` that it is an agent's — a run
+started from a person's shell inherits whatever token that shell carries, and
+work done under a user's enters the history as that person's word; if `pa me`
+names a user, stop and say so rather than work under it.
 
 ### Taking a ticket and giving it back
 
