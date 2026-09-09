@@ -8,8 +8,8 @@ import { useSession } from "@/session/useSession";
 import { PageHeader } from "@/shared/PageHeader";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { reporting } from "@/shared/report";
-import { date, submitting } from "./forms";
-import { Row, RowMenu, Rows, Said, Section, SettingsShell } from "./SettingsShell";
+import { date, day, submitting } from "./forms";
+import { Choose, ListHead, Row, RowMenu, Rows, Said, Section, SettingsShell } from "./SettingsShell";
 
 type User = Schemas["UserSummary"];
 type AccessLink = Schemas["AccessLink"];
@@ -59,13 +59,50 @@ function NotYours() {
   </div></>;
 }
 
+/**
+ * Which users the list shows without being asked, and what else it can be
+ * asked for.
+ *
+ * A deactivated user is the same case as a deleted project: still there,
+ * still referenced by everything they wrote, and not what anybody opening
+ * the list came to see. So the default is the two live states, and the rest
+ * is a choice.
+ */
+const states = {
+  live: { label: "Active and invited", holds: (state: string) => state !== "deactivated" },
+  active: { label: "Active", holds: (state: string) => state === "active" },
+  invited: { label: "Invited", holds: (state: string) => state === "invited" },
+  deactivated: { label: "Deactivated", holds: (state: string) => state === "deactivated" },
+  all: { label: "Every state", holds: () => true },
+} as const;
+
+const userSorts = {
+  name: { label: "Name", by: (a: User, b: User) => a.name.localeCompare(b.name) },
+  state: { label: "State", by: (a: User, b: User) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name) },
+} as const;
+
 function Users() {
+  const { me } = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [notice, setNotice] = useState("");
   const [issued, setIssued] = useState<AccessLink>();
+  const [search, setSearch] = useState("");
+  const [state, setState] = useState<keyof typeof states>("live");
+  const [sort, setSort] = useState<keyof typeof userSorts>("name");
   async function load() { setUsers((await api.GET("/users")).data ?? []); }
   useEffect(() => { void (async () => { await load(); })(); }, []);
   const report = reporting(setNotice, load);
+
+  // Name and email, because those are the two things somebody looking for a
+  // person actually has. The list is not paginated, so the server is not
+  // asked again for a narrowing it already answered.
+  const looked = search.trim().toLowerCase();
+  const shown = users
+    .filter((u) => states[state].holds(u.state))
+    .filter((u) => looked === "" || u.name.toLowerCase().includes(looked) || u.email.toLowerCase().includes(looked))
+    .sort(userSorts[sort].by);
+
+  const narrowed = looked !== "" || state !== "live";
 
   // The form is taken before the await: React empties `currentTarget` once
   // the event has been dispatched, and reading it back threw where the list
@@ -88,8 +125,22 @@ function Users() {
         <label className="flex gap-2 text-sm sm:col-span-3"><input name="administrator" type="checkbox" /> Administrator</label>
       </form>
       {issued && <Handover issued={issued} />}
-      <Rows empty="No users.">
-        {users.map((u) => <UserRow key={u.id} user={u} report={report} onIssued={setIssued} />)}
+      <ListHead
+        label="Search"
+        placeholder="Name or email"
+        search={search}
+        onSearch={setSearch}
+        said={narrowed ? `${shown.length} of ${users.length} users` : undefined}
+      >
+        <Choose label="State" value={state} onChange={(next) => setState(next as keyof typeof states)}>
+          {Object.entries(states).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
+        </Choose>
+        <Choose label="Sort" value={sort} onChange={(next) => setSort(next as keyof typeof userSorts)}>
+          {Object.entries(userSorts).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
+        </Choose>
+      </ListHead>
+      <Rows empty={emptily(users.length, looked)}>
+        {shown.map((u) => <UserRow key={u.id} user={u} itself={u.id === me.id} report={report} onIssued={setIssued} />)}
       </Rows>
       <Said notice={notice} />
     </Section>
@@ -120,6 +171,19 @@ function Handover({ issued }: { issued: AccessLink }) {
   );
 }
 
+/**
+ * The two ways a list can have no rows, which are not the same sentence.
+ *
+ * An instance with no projects yet is a fact about the instance; a search that
+ * matched none of twelve is a fact about the search, and telling somebody "No
+ * projects." while twelve of them sit behind a typo is a lie the reader has no
+ * way to see through (`docs/human-interface.md`).
+ */
+function emptily(held: number, looked: string, what = "users") {
+  if (held === 0) return `No ${what}.`;
+  return looked === "" ? `Nothing matches the filter.` : `Nothing matches \u201c${looked}\u201d.`;
+}
+
 /** A write on this screen, and the one sentence it leaves behind. */
 type Report = ReturnType<typeof reporting>;
 
@@ -141,7 +205,7 @@ type Report = ReturnType<typeof reporting>;
  * its own trigger down with it, so the row keeps the open state and the dialog
  * stands beside the menu.
  */
-function UserRow({ user, report, onIssued }: { user: User; report: Report; onIssued: (issued: AccessLink) => void }) {
+function UserRow({ user, itself, report, onIssued }: { user: User; itself: boolean; report: Report; onIssued: (issued: AccessLink) => void }) {
   const [asking, setAsking] = useState<"deactivate" | "demote">();
   const deactivated = user.state === "deactivated";
 
@@ -167,12 +231,20 @@ function UserRow({ user, report, onIssued }: { user: User; report: Report; onIss
                 one no invitation left to hand over. */}
             {user.state === "invited" && <DropdownMenuItem onClick={() => void hand("/users/{id}/invitation-link", `Invitation link for ${user.name} issued.`)}>Invitation link</DropdownMenuItem>}
             {user.state === "active" && <DropdownMenuItem onClick={() => void hand("/users/{id}/recovery-link", `Password link for ${user.name} issued.`)}>Password link</DropdownMenuItem>}
+            {/* The two acts that lock somebody out are not offered on the
+                reader's own row. The server already refuses to leave the
+                instance without an active administrator, but that guard
+                catches only the last one: an instance with two administrators
+                lets either of them demote or deactivate themselves, and the
+                second way into the same dead end is worth not offering at
+                all. It is a row the reader cannot mistake for somebody
+                else's, so nothing has to say why the entries are missing. */}
             {user.administrator
-              ? <DropdownMenuItem onClick={() => setAsking("demote")}>Demote</DropdownMenuItem>
+              ? !itself && <DropdownMenuItem onClick={() => setAsking("demote")}>Demote</DropdownMenuItem>
               : <DropdownMenuItem onClick={() => void report(api.PATCH("/users/{id}", { params: { path: { id: user.id } }, body: { administrator: true } }), `${user.name} is now an administrator.`)}>Make admin</DropdownMenuItem>}
             {deactivated
               ? <DropdownMenuItem onClick={() => void report(api.POST("/users/{id}/reactivate", { params: { path: { id: user.id } } }), `${user.name} is active again.`)}>Reactivate</DropdownMenuItem>
-              : <DropdownMenuItem variant="destructive" onClick={() => setAsking("deactivate")}>Deactivate</DropdownMenuItem>}
+              : !itself && <DropdownMenuItem variant="destructive" onClick={() => setAsking("deactivate")}>Deactivate</DropdownMenuItem>}
           </RowMenu>
           <ActionDialog
             open={asking === "deactivate"}
@@ -212,36 +284,119 @@ function Projects() {
   );
 }
 
-function useAdminProjects(): AdminProject[] {
+/**
+ * The instance's projects, as the server was asked for them.
+ *
+ * `deleted` is a parameter of `GET /admin/projects` and defaults to `false`
+ * there, and this used to ask for `all` and then show everything — so a
+ * project deleted months ago was read again on every opening by everybody.
+ * Which of the two is wanted is the reader's switch, and it is answered by
+ * the server rather than hidden by the client: what is not shown is also not
+ * fetched.
+ */
+function useAdminProjects(deleted: "false" | "all") {
   const [projects, setProjects] = useState<AdminProject[]>([]);
+  const load = useCallback(async () => (await api.GET("/admin/projects", { params: { query: { deleted } } })).data ?? [], [deleted]);
 
+  // Flipping the switch twice quickly asks twice, and the answer to the
+  // request that was replaced must not land on top of the answer to the one
+  // that replaced it.
   useEffect(() => {
     let current = true;
     void (async () => {
-      const { data } = await api.GET("/admin/projects", { params: { query: { deleted: "all" } } });
-      if (current) setProjects(data ?? []);
+      const found = await load();
+      if (current) setProjects(found);
     })();
     return () => { current = false; };
-  }, []);
+  }, [load]);
 
-  return projects;
+  return { projects, reload: async () => { setProjects(await load()); } };
 }
 
+const projectSorts = {
+  key: { label: "Key", by: (a: AdminProject, b: AdminProject) => a.key.localeCompare(b.key) },
+  name: { label: "Name", by: (a: AdminProject, b: AdminProject) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key) },
+  created: { label: "Newest first", by: (a: AdminProject, b: AdminProject) => b.created_at.localeCompare(a.created_at) },
+} as const;
+
 function ProjectList() {
-  const projects = useAdminProjects();
+  const [deleted, setDeleted] = useState<"false" | "all">("false");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<keyof typeof projectSorts>("key");
+  const [notice, setNotice] = useState("");
+  const { projects, reload } = useAdminProjects(deleted);
+  const report = reporting(setNotice, reload);
+
+  const looked = search.trim().toLowerCase();
+  const shown = projects
+    .filter((p) => looked === "" || p.key.toLowerCase().includes(looked) || p.name.toLowerCase().includes(looked))
+    .sort(projectSorts[sort].by);
 
   return (
-    <Section title="Projects" description="Every project of the instance, deleted ones included.">
-      <Rows empty="No projects.">
-        {projects.map((p) => (
-          <Row
-            key={p.key}
-            title={<Link className="hover:underline" to={p.key}>{p.key} · {p.name}</Link>}
-            detail={p.deleted_at ? `Deleted ${date(p.deleted_at)}` : undefined}
-          />
-        ))}
+    <Section title="Projects" description="Every project of the instance. Deleted ones are fetched on request.">
+      <ListHead
+        label="Search"
+        placeholder="Key or name"
+        search={search}
+        onSearch={setSearch}
+        said={looked === "" ? undefined : `${shown.length} of ${projects.length} projects`}
+      >
+        <Choose label="Deleted" value={deleted} onChange={(next) => setDeleted(next as "false" | "all")}>
+          <option value="false">Hidden</option>
+          <option value="all">Shown</option>
+        </Choose>
+        <Choose label="Sort" value={sort} onChange={(next) => setSort(next as keyof typeof projectSorts)}>
+          {Object.entries(projectSorts).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
+        </Choose>
+      </ListHead>
+      <Rows empty={emptily(projects.length, looked, "projects")}>
+        {shown.map((p) => <ProjectRow key={p.key} project={p} report={report} />)}
       </Rows>
+      <Said notice={notice} />
     </Section>
+  );
+}
+
+/**
+ * One project and the two acts its lifecycle has.
+ *
+ * Restoring was a floor below this, on the access screen of the project it
+ * belongs to, and deleting was not in this interface at all although
+ * `DELETE /projects/{key}` has always been there: whoever wanted to be rid of
+ * a project had to open it and find the switch in its own settings. A row
+ * that says a project is deleted is the row that should be able to undo it.
+ *
+ * Restoring asks nothing — it takes nothing away and it is the answer to a
+ * mistake. Deleting asks, and the question says what goes: everything in the
+ * project, reversible only while the grace period runs, and the key stays
+ * taken until then so a restore cannot land on a name somebody else took.
+ */
+function ProjectRow({ project, report }: { project: AdminProject; report: Report }) {
+  const [asking, setAsking] = useState(false);
+  const gone = project.deleted_at !== null;
+
+  return (
+    <Row
+      title={<Link className="hover:underline" to={project.key}>{project.key} · {project.name}</Link>}
+      detail={project.deleted_at === null ? `Created ${day(project.created_at)}` : `Created ${day(project.created_at)} · Deleted ${date(project.deleted_at)}`}
+      action={
+        <>
+          <RowMenu label={`Actions for ${project.key}`}>
+            {gone
+              ? <DropdownMenuItem onClick={() => void report(api.POST("/projects/{key}/restore", { params: { path: { key: project.key } } }), `${project.key} restored.`)}>Restore</DropdownMenuItem>
+              : <DropdownMenuItem variant="destructive" onClick={() => setAsking(true)}>Delete</DropdownMenuItem>}
+          </RowMenu>
+          <ActionDialog
+            open={asking}
+            onOpenChange={setAsking}
+            title={`Delete project ${project.key}?`}
+            description={`${project.key} and everything in it — issues, epics, pages and releases — disappears from the instance. It can be restored during the instance grace period, and its key stays taken until that is over, so nothing else can move into it in the meantime.`}
+            confirmLabel="Delete"
+            onConfirm={async () => { await report(api.DELETE("/projects/{key}", { params: { path: { key: project.key } } }), `${project.key} deleted.`); }}
+          />
+        </>
+      }
+    />
   );
 }
 

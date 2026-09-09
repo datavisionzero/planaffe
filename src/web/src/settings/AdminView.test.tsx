@@ -10,6 +10,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const maintainer = { id: aUser.id, name: "maintainer", email: "maintainer@example.test", state: "active", administrator: true };
 const invited = { id: "0199a000-0000-7000-8000-000000000002", name: "newcomer", email: "newcomer@example.test", state: "invited", administrator: false };
+const colleague = { id: "0199a000-0000-7000-8000-000000000003", name: "colleague", email: "colleague@example.test", state: "active", administrator: true };
 
 function admin(routes: Parameters<typeof installInstance>[0], at = "/admin/users") {
   const instance = installInstance({
@@ -79,26 +80,29 @@ it("offers no access to grant when everybody already has it", async () => {
 // be `.then(load)`: the list reloaded unchanged and nothing said why.
 const refusal = (status: number, detail: string) => ({ status, body: { type: "about:blank", title: "refused", status, detail } });
 
-it("says why the last administrator cannot be demoted", async () => {
+// The row acted on is somebody else's: an administrator is no longer offered
+// either act on their own row. Whatever the instance refuses, and for whatever
+// reason, the screen owes the reader the sentence.
+it("says why an administrator cannot be demoted", async () => {
   admin({
-    "GET /users": [maintainer],
-    [`PATCH /users/${maintainer.id}`]: refusal(422, "Deactivation or demotion would leave no active administrator."),
+    "GET /users": [maintainer, colleague],
+    [`PATCH /users/${colleague.id}`]: refusal(422, "Deactivation or demotion would leave no active administrator."),
   });
   const user = userEvent.setup();
 
-  await confirm(user, "maintainer", "Demote");
+  await confirm(user, "colleague", "Demote");
 
   expect(await screen.findByRole("status")).toHaveTextContent("Deactivation or demotion would leave no active administrator.");
 });
 
-it("says why the last administrator cannot be deactivated", async () => {
+it("says why an administrator cannot be deactivated", async () => {
   admin({
-    "GET /users": [maintainer],
-    [`POST /users/${maintainer.id}/deactivate`]: refusal(422, "Deactivation or demotion would leave no active administrator."),
+    "GET /users": [maintainer, colleague],
+    [`POST /users/${colleague.id}/deactivate`]: refusal(422, "Deactivation or demotion would leave no active administrator."),
   });
   const user = userEvent.setup();
 
-  await confirm(user, "maintainer", "Deactivate");
+  await confirm(user, "colleague", "Deactivate");
 
   expect(await screen.findByRole("status")).toHaveTextContent("Deactivation or demotion would leave no active administrator.");
 });
@@ -203,12 +207,17 @@ it("reactivates and promotes without a question", async () => {
   });
   const user = userEvent.setup();
 
+  // A deactivated user is not what the list shows without being asked.
+  await user.selectOptions(await screen.findByLabelText("State"), "Deactivated");
+
+  // The result count is a live region of its own, so the notice is found by
+  // what it says and then held to being announced.
   await act(user, "newcomer", "Make admin");
-  expect(await screen.findByRole("status")).toHaveTextContent("newcomer is now an administrator.");
+  expect(await screen.findByText("newcomer is now an administrator.")).toHaveAttribute("role", "status");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   await act(user, "newcomer", "Reactivate");
-  expect(await screen.findByRole("status")).toHaveTextContent("newcomer is active again.");
+  expect(await screen.findByText("newcomer is active again.")).toHaveAttribute("role", "status");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(instance.calls.some((call) => call.url.includes("/reactivate"))).toBe(true);
 });
@@ -270,4 +279,125 @@ it("offers each user only the link their state has", async () => {
   await user.click(await screen.findByRole("button", { name: "Actions for newcomer" }));
   expect(await screen.findByRole("menuitem", { name: "Invitation link" })).toBeInTheDocument();
   expect(screen.queryByRole("menuitem", { name: "Password link" })).not.toBeInTheDocument();
+});
+
+// Both lists said everything at once. The default of each is now the live
+// half, and the rest is fetched or shown on request.
+it("shows only live projects until the deleted are asked for", async () => {
+  const gone = { ...aProject, key: "OLD", name: "retired", deleted_at: "2026-09-01T10:00:00Z" };
+  const instance = admin({
+    "GET /users": [maintainer],
+    "GET /admin/projects": (request: Request) =>
+      new URL(request.url).searchParams.get("deleted") === "all"
+        ? [{ ...aProject, deleted_at: null }, gone]
+        : [{ ...aProject, deleted_at: null }],
+  }, "/admin/projects");
+  const user = userEvent.setup();
+
+  await screen.findByRole("link", { name: "PLAN · planaffe" });
+  expect(screen.queryByRole("link", { name: "OLD · retired" })).not.toBeInTheDocument();
+
+  // Not hidden in the client: the parameter exists and the server answers it.
+  const asked = instance.calls.map((call) => new URL(call.url)).filter((url) => url.pathname === "/admin/projects");
+  expect(asked.every((url) => url.searchParams.get("deleted") === "false")).toBe(true);
+
+  await user.selectOptions(screen.getByLabelText("Deleted"), "Shown");
+
+  expect(await screen.findByRole("link", { name: "OLD · retired" })).toBeInTheDocument();
+  expect(instance.calls.some((call) => new URL(call.url).searchParams.get("deleted") === "all")).toBe(true);
+});
+
+// A deleted project's row is the row that should be able to undo it, and the
+// deletion that was only in the project's own settings is offered here too.
+it("restores and deletes a project from its own row", async () => {
+  let deleted = true;
+  const instance = admin({
+    "GET /users": [maintainer],
+    "GET /admin/projects": () => [{ ...aProject, deleted_at: deleted ? "2026-09-01T10:00:00Z" : null }],
+    "POST /projects/PLAN/restore": () => { deleted = false; return { status: 204 }; },
+    "DELETE /projects/PLAN": { status: 204 },
+  }, "/admin/projects");
+  const user = userEvent.setup();
+
+  await user.selectOptions(await screen.findByLabelText("Deleted"), "Shown");
+  await screen.findByText(/Created .* · Deleted /);
+  await act(user, "PLAN", "Restore");
+
+  expect(await screen.findByText("PLAN restored.")).toHaveAttribute("role", "status");
+
+  // Deleting takes everything in the project with it, so it asks first and
+  // says what goes.
+  await act(user, "PLAN", "Delete");
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog).toHaveTextContent("issues, epics, pages and releases");
+  expect(instance.calls.some((call) => call.method === "DELETE")).toBe(false);
+
+  await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+  expect(instance.calls.some((call) => call.method === "DELETE")).toBe(true);
+});
+
+it("finds a project by key or by name, and says what a search left", async () => {
+  admin({
+    "GET /users": [maintainer],
+    "GET /admin/projects": [{ ...aProject, deleted_at: null }, { ...aProject, key: "LOG", name: "logaffe", deleted_at: null }],
+  }, "/admin/projects");
+  const user = userEvent.setup();
+
+  await screen.findByRole("link", { name: "PLAN · planaffe" });
+  await user.type(screen.getByLabelText("Search"), "log");
+
+  expect(screen.queryByRole("link", { name: "PLAN · planaffe" })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "LOG · logaffe" })).toBeInTheDocument();
+  expect(screen.getByText("1 of 2 projects")).toBeInTheDocument();
+
+  // An instance with no projects and a search that matched none of two are
+  // not the same sentence.
+  await user.clear(screen.getByLabelText("Search"));
+  await user.type(screen.getByLabelText("Search"), "nothing");
+  expect(screen.getByText("Nothing matches “nothing”.")).toBeInTheDocument();
+  expect(screen.queryByText("No projects.")).not.toBeInTheDocument();
+});
+
+// Deactivated users stood among the active ones, and the row somebody was
+// looking for had to be found by eye.
+it("hides deactivated users until the filter asks for them, and searches by name and email", async () => {
+  const retired = { ...invited, id: "0199a000-0000-7000-8000-000000000004", name: "retired", email: "retired@example.test", state: "deactivated" };
+  admin({ "GET /users": [maintainer, invited, retired] });
+  const user = userEvent.setup();
+
+  await screen.findByText("maintainer@example.test · active · administrator");
+  expect(screen.getByText("newcomer@example.test · invited")).toBeInTheDocument();
+  expect(screen.queryByText("retired@example.test · deactivated")).not.toBeInTheDocument();
+
+  await user.selectOptions(screen.getByLabelText("State"), "Every state");
+  expect(screen.getByText("retired@example.test · deactivated")).toBeInTheDocument();
+  expect(screen.getByText("3 of 3 users")).toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Search"), "newcomer@example");
+  expect(screen.getByText("newcomer@example.test · invited")).toBeInTheDocument();
+  expect(screen.queryByText("maintainer@example.test · active · administrator")).not.toBeInTheDocument();
+  expect(screen.getByText("1 of 3 users")).toBeInTheDocument();
+
+  await user.clear(screen.getByLabelText("Search"));
+  await user.type(screen.getByLabelText("Search"), "nobody");
+  expect(screen.getByText("Nothing matches “nobody”.")).toBeInTheDocument();
+});
+
+// The server refuses to leave the instance without an active administrator,
+// but that catches only the last one. With two of them either can lock
+// themselves out, and the interface does not offer the way in.
+it("offers the reader neither deactivation nor demotion on their own row", async () => {
+  admin({ "GET /users": [maintainer, colleague] });
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Actions for maintainer" }));
+  expect(await screen.findByRole("menuitem", { name: "Password link" })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "Deactivate" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "Demote" })).not.toBeInTheDocument();
+
+  // Somebody else's row keeps both.
+  await user.keyboard("{Escape}");
+  await user.click(await screen.findByRole("button", { name: "Actions for colleague" }));
+  expect(await screen.findByRole("menuitem", { name: "Deactivate" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Demote" })).toBeInTheDocument();
 });

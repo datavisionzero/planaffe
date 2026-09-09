@@ -1,8 +1,9 @@
 import { MoreHorizontalIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/shared/PageHeader";
 
@@ -96,6 +97,68 @@ export function Section({ title, description, children }: { title: string; descr
       {description && <p className="mb-3 text-sm text-muted-foreground">{description}</p>}
       <div className="rounded-md border p-3">{children}</div>
     </section>
+  );
+}
+
+/**
+ * A labelled native select, sized like the `Input` standing beside it.
+ *
+ * The list heads need two of these and the access form needs one, and a
+ * `<label>` around the control is how the rest of these screens says what a
+ * field is: the name belongs to the control whether or not an id survives a
+ * refactor.
+ */
+export function Choose({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode }) {
+  const id = useId();
+
+  return (
+    <div className="grid gap-1 text-sm font-medium">
+      <label htmlFor={id}>{label}</label>
+      <select
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 rounded-md border bg-background px-2 text-sm font-normal"
+      >
+        {children}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * The head a list of any length carries: a search, whatever narrows it, and
+ * what is left.
+ *
+ * Both lists of the instance administration said everything at once and could
+ * not be asked anything. They are the same problem twice — ten projects of
+ * which three are deleted, every user of every state in one run — so this is
+ * the same answer once, and each list passes the one control that is its own.
+ *
+ * The count is a `status` and not a heading: it changes while somebody types,
+ * and what changes under a reader who cannot see it has to be spoken.
+ */
+export function ListHead({ label, placeholder, search, onSearch, said, children }: {
+  label: string;
+  placeholder: string;
+  search: string;
+  onSearch: (search: string) => void;
+  /** The result count, where something is narrowing the list. */
+  said?: string;
+  /** The filter and the sort, which are each list's own. */
+  children: ReactNode;
+}) {
+  const id = useId();
+
+  return (
+    <div className="mb-3 grid gap-2 sm:grid-cols-[2fr_1fr_1fr]">
+      <div className="grid gap-1 text-sm font-medium">
+        <label htmlFor={id}>{label}</label>
+        <Input id={id} type="search" value={search} placeholder={placeholder} onChange={(event) => onSearch(event.target.value)} className="font-normal" />
+      </div>
+      {children}
+      {said !== undefined && <p role="status" className="text-xs text-muted-foreground sm:col-span-3">{said}</p>}
+    </div>
   );
 }
 

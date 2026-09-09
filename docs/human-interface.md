@@ -64,8 +64,8 @@ Markdown and never a document model of its own
 | `/:project/settings/general` | Project settings · General | name, the two switches and project deletion | area list folds above the area |
 | `/:project/settings/instructions` | Project settings · Instructions | which page of the wiki every agent is handed with every ticket, and a link into it | area list folds above the area |
 | `/:project/settings/members` | Project settings · Members | who has access to the project | area list folds above the area |
-| `/admin/users` | Administration · Users | invite, role and lifecycle, each row's acts in its menu | area list folds above the area |
-| `/admin/projects` | Administration · Projects | every project of the instance, deleted ones included | area list folds above the area |
+| `/admin/users` | Administration · Users | invite, role and lifecycle, searchable and filtered by state; each row's acts in its menu | area list folds above the area |
+| `/admin/projects` | Administration · Projects | the instance's live projects, searchable and sortable; deleted ones on request, restored or deleted from the row | area list folds above the area |
 | `/admin/projects/:key` | Administration · One project | who has access to it, and granting or removing it | area list folds above the area |
 | `/admin/email` | Administration · Transactional email | the SMTP status and a test message | area list folds above the area |
 
@@ -380,7 +380,37 @@ last one can neither be deactivated nor demoted.
 Deactivating and demoting ask before they act, and the dialog writes the
 consequences out rather than asserting them; reactivating and granting the role
 do not. A question in front of every act is no longer a warning, only a second
-click.
+click. **Neither is offered on the reader's own row.** The server's guard
+catches only the last active administrator, so with two of them either can lock
+themselves out; that is the second way into the same dead end, and the
+interface does not offer it.
+
+### The two lists
+
+Both are the same list twice — users and projects — and they carry the same
+head: a search, the one filter that decides what is shown without being asked,
+a sort, and the number left when something narrows them. That count is a
+`status`, because it changes while somebody types.
+
+**What a list shows unasked is the live half.** The user list leaves the
+deactivated out, and the project list does not even fetch the deleted:
+`deleted` is a parameter of `GET /admin/projects`, so what is not shown is not
+asked for either, rather than fetched and hidden. Both are one choice away —
+the state filter, and "Deleted: shown".
+
+Searching is done in the client, because neither list is paginated: projects by
+key and name, users by name and email. Projects sort by key, by name or newest
+first; users by name or by state. An empty instance and a search that matched
+nothing are different sentences, the same distinction the wiki and the issue
+list make.
+
+A project's row carries its own lifecycle: **restore** where it is deleted,
+**delete** where it is not. Restoring asks nothing — it takes nothing away and
+it is the answer to a mistake. Deleting asks, and the question says that
+everything in the project goes with it, that the grace period is how long it
+can come back, and that the key stays taken until then. Restoring used to be a
+floor lower, on the project's own access screen, and deleting was only in the
+project's settings.
 
 The user administration also hands over the two links that lead into an account:
 an invited user's activation link and an active user's password link. They are

@@ -2,6 +2,9 @@
 
 export const date = (value: string) => new Date(value).toLocaleString();
 
+/** The same instant where the hour says nothing: a project was created on a day. */
+export const day = (value: string) => new Date(value).toLocaleDateString();
+
 /**
  * A form submitted to the instance. React empties `currentTarget` once the
  * event has been dispatched, so the form is taken here and handed to the
