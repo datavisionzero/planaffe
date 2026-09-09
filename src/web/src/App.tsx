@@ -4,6 +4,7 @@ import { SignIn } from "@/session/SignIn";
 import { SessionProvider } from "@/session/Session";
 import { Activate } from "@/session/Activate";
 import { Recover } from "@/session/Recover";
+import { DeviceLogin } from "@/session/DeviceLogin";
 import { Shell } from "@/shell/Shell";
 import { useLocation, useNavigate } from "react-router";
 
@@ -70,6 +71,12 @@ export function App() {
   if (location.pathname === "/activate") return <Activate onActivated={(me) => { setStanding({ at: "known", me }); navigate("/"); }} />;
   if (location.pathname === "/recover") return <Recover />;
 
+  // The confirmation page of ADR 0025 stands outside the shell, like the two
+  // above: it is one decision about one console, not a screen of the product.
+  // Somebody who is not signed in falls through to the sign-in below and is
+  // left here afterwards rather than sent to the overview.
+  if (location.pathname === "/device" && standing.at === "known") return <DeviceLogin me={standing.me} />;
+
   switch (standing.at) {
     case "asking":
       // Not a blank page: the frame of the sign-in screen is already the
@@ -101,7 +108,7 @@ export function App() {
       );
 
     case "stranger":
-      return <SignIn onSignedIn={(me) => { setStanding({ at: "known", me }); navigate("/"); }} />;
+      return <SignIn onSignedIn={(me) => { setStanding({ at: "known", me }); if (location.pathname !== "/device") navigate("/"); }} />;
 
     case "known":
       return (
