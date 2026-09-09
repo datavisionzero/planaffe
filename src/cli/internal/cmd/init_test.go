@@ -176,6 +176,11 @@ func TestInitJsonSaysWhatItDid(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatal(err)
 	}
+	// A run from PLANAFFE_TOKEN is told about `pa login` rather than told to
+	// keep the variable: an agent started from that shell inherits it (ADR 0025).
+	if !strings.Contains(result.Next[0], "pa login --url "+server.URL) {
+		t.Errorf("unexpected next steps %q", result.Next)
+	}
 	if result.URL != server.URL || result.Project.Key != "PLAN" || !result.Project.Created || result.File == "" || len(result.Next) != 2 {
 		t.Fatalf("unexpected result: %s", out)
 	}

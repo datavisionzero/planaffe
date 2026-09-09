@@ -431,7 +431,7 @@ func progress(p api.Progress) string {
 }
 
 // Me prints the caller as GET /me answers.
-func Me(w io.Writer, me api.Me) {
+func Me(w io.Writer, me api.Me, from string) {
 	role := ""
 	if me.Administrator {
 		role = "  administrator"
@@ -440,7 +440,14 @@ func Me(w io.Writer, me api.Me) {
 	if me.Owner != nil {
 		fmt.Fprintf(w, "owner: %s\n", me.Owner.Name)
 	}
-	fmt.Fprintf(w, "token: %s…  since %s\n", me.Token.Prefix, me.Token.CreatedAt.Format("2006-01-02"))
+	fmt.Fprintf(w, "token: %s…  since %s", me.Token.Prefix, me.Token.CreatedAt.Format("2006-01-02"))
+	// Where pa read it matters more than it looks: it is the difference
+	// between working as yourself and working under whatever the environment
+	// handed this shell (ADR 0025).
+	if from != "" {
+		fmt.Fprintf(w, "  from %s", from)
+	}
+	fmt.Fprintln(w)
 	metadata(w, me.Metadata, me.MetadataReportedAt)
 }
 

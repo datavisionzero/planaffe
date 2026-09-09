@@ -109,10 +109,7 @@ func newInit(g *globals) *cobra.Command {
 				Identity: initIdentity{Name: me.JSON200.Name, Kind: string(me.JSON200.Kind)},
 				Project:  initProject{Key: project.Key, Name: project.Name, Created: created},
 				File:     file,
-				Next: []string{
-					fmt.Sprintf("Keep the two variables in your shell: export PLANAFFE_URL=%s and export PLANAFFE_TOKEN=<the token you used here>.", cfg.URL),
-					"Copy the AGENTS.md block into the repository so an agent knows this project is tracked here: docs/agents-md.md.",
-				},
+				Next:     next(cfg),
 			}
 
 			if g.json {
@@ -194,5 +191,26 @@ func printInit(out io.Writer, result initResult) {
 	fmt.Fprintln(out, "\nStill yours to do:")
 	for _, step := range result.Next {
 		fmt.Fprintf(out, "  - %s\n", step)
+	}
+}
+
+// next is what is left for a person after `init`, and which of the two it says
+// first depends on how they got here. A human who is working from
+// PLANAFFE_TOKEN is told about `pa login` rather than told to keep the variable:
+// a user token in a shell profile is inherited by every agent started from that
+// shell (ADR 0025).
+func next(cfg config.Config) []string {
+	const agents = "Copy the AGENTS.md block into the repository so an agent knows this project is tracked here: docs/agents-md.md."
+
+	if cfg.TokenFrom == config.EnvToken {
+		return []string{
+			fmt.Sprintf("Run `pa login --url %s` so this machine keeps your token in its keychain, and take PLANAFFE_TOKEN out of your shell: an agent started from it inherits whatever is in there.", cfg.URL),
+			agents,
+		}
+	}
+
+	return []string{
+		fmt.Sprintf("Nothing to keep in your shell: pa reads %s and your token from %s.", cfg.URL, cfg.TokenFrom),
+		agents,
 	}
 }

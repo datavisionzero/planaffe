@@ -16,6 +16,7 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/client"
 	"github.com/datavisionzero/planaffe/src/cli/internal/config"
 	"github.com/datavisionzero/planaffe/src/cli/internal/exit"
+	"github.com/datavisionzero/planaffe/src/cli/internal/keychain"
 	"github.com/datavisionzero/planaffe/src/cli/internal/version"
 )
 
@@ -27,6 +28,12 @@ type Env struct {
 	Stdout io.Writer
 	Stderr io.Writer
 	HTTP   *http.Client
+	// Store is where `login` keeps a token; the zero value is the machine's
+	// own keychain. A test supplies its own so that nothing touches the store
+	// the person running the tests signs in with.
+	Store *keychain.Store
+	// Settings is where pa's own configuration file is; empty is the real place.
+	Settings string
 }
 
 // Run executes args and returns the exit code. Nothing here is ever
@@ -89,6 +96,7 @@ func newRoot(env Env) *cobra.Command {
 		return &config.UsageError{Message: err.Error()}
 	})
 
+	root.AddCommand(newLogin(g), newLogout(g))
 	root.AddCommand(newInit(g), newNext(g), newNeedsYou(g), newStanding(g), newExport(g), newIssue(g), newQuestion(g), newProject(g), newLabel(g), newEpic(g), newPage(g), newRelease(g))
 	root.AddCommand(identityCommands(g)...)
 	return root
@@ -109,7 +117,18 @@ func (g *globals) loadForWait(seconds int) (config.Config, *client.Client, error
 		dir, _ = os.Getwd()
 	}
 
-	cfg, err := config.Load(getenv, dir)
+	settings, err := g.readSettings()
+	if err != nil {
+		return config.Config{}, nil, err
+	}
+
+	store := g.store()
+	cfg, err := config.Resolve(config.Input{
+		Getenv:       getenv,
+		Dir:          dir,
+		Settings:     settings,
+		ReadKeychain: store.Get,
+	})
 	if err != nil {
 		return cfg, nil, err
 	}
@@ -145,4 +164,58 @@ func requireProject(cfg config.Config) (string, error) {
 		return "", &config.UsageError{Message: "no project: pass --project KEY, or put a .planaffe file with `project = KEY` in the repository."}
 	}
 	return cfg.Project, nil
+}
+
+// store is the keychain this invocation uses: the machine's own, unless a test
+// supplied one.
+func (g *globals) store() keychain.Store {
+	if g.env.Store != nil {
+		return *g.env.Store
+	}
+	return keychain.System()
+}
+
+// settingsPath is where pa keeps what it knows between invocations.
+func (g *globals) settingsPath() (string, error) {
+	if g.env.Settings != "" {
+		return g.env.Settings, nil
+	}
+	getenv := g.env.Getenv
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	return config.SettingsPath(getenv)
+}
+
+func (g *globals) readSettings() (config.Settings, error) {
+	path, err := g.settingsPath()
+	if err != nil {
+		return config.Settings{}, err
+	}
+	return config.ReadSettings(path)
+}
+
+func (g *globals) writeSettings(settings config.Settings) error {
+	path, err := g.settingsPath()
+	if err != nil {
+		return err
+	}
+	return config.WriteSettings(path, settings)
+}
+
+// msg is where pa says things to a person: stderr, so that stdout stays the
+// data an agent parses (docs/cli.md, Commitments to agents).
+func (g *globals) msg() io.Writer {
+	if g.env.Stderr == nil {
+		return os.Stderr
+	}
+	return g.env.Stderr
+}
+
+// out is where the data goes.
+func (g *globals) out() io.Writer {
+	if g.env.Stdout == nil {
+		return os.Stdout
+	}
+	return g.env.Stdout
 }

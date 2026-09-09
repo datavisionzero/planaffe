@@ -66,7 +66,12 @@ func New(cfg config.Config, httpClient *http.Client) (*Client, error) {
 		cfg.URL,
 		api.WithHTTPClient(httpClient),
 		api.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
-			req.Header.Set("Authorization", "Bearer "+cfg.Token)
+			// `login` is the one command that talks to an instance with nothing
+			// in its hand; an empty bearer would be a token the door has to
+			// refuse rather than a request that never presented one.
+			if cfg.Token != "" {
+				req.Header.Set("Authorization", "Bearer "+cfg.Token)
+			}
 			req.Header.Set("User-Agent", UserAgent())
 			if req.Method != http.MethodGet && req.Method != http.MethodHead {
 				c.writes++
@@ -121,6 +126,12 @@ func Check(resp *http.Response, body []byte) error {
 	message := p.Message()
 	if message == "" {
 		message = fmt.Sprintf("the instance answered %s", resp.Status)
+		// No problem document on a 404 or a 405 is the older instance's answer
+		// to an endpoint this build knows and that one does not — the sibling
+		// of the HTML case in notJSON, and it deserves the same sentence.
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+			message += " with no problem document — most likely it does not have this endpoint yet; `pa version` says what it is"
+		}
 	}
 
 	return &Failure{Code: code, Message: message, Problem: p}

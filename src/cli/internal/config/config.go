@@ -1,6 +1,7 @@
 // Package config is where pa learns which instance it talks to and as whom:
-// two environment variables, and an optional .planaffe file in the repository
-// that fixes the project (VISION 6.1, 13).
+// two environment variables, the configuration file `pa login` writes, the
+// keychain it keeps a token in, and an optional .planaffe file in the
+// repository that fixes the project (VISION 6.1, 13; ADR 0025).
 package config
 
 import (
@@ -19,13 +20,27 @@ import (
 // Project file).
 const FileName = ".planaffe"
 
+// The environment, in one place because it is a contract with CI, with
+// containers and with whatever harness starts an agent.
+const (
+	EnvURL   = "PLANAFFE_URL"
+	EnvToken = "PLANAFFE_TOKEN"
+)
+
+// Keychain is what ResolveToken says a token came from when it read one.
+const Keychain = "the keychain"
+
 // Config is what a command runs with.
 type Config struct {
-	// URL is the instance, from PLANAFFE_URL.
+	// URL is the instance, from PLANAFFE_URL or from what `pa login` wrote.
 	URL string
-	// Token is the caller's token, from PLANAFFE_TOKEN; the server tells a user
-	// token from an agent token, pa never says which it holds (ADR 0015).
+	// Token is the caller's token; the server tells a user token from an agent
+	// token, pa never says which it holds (ADR 0015).
 	Token string
+	// TokenFrom is where that token was read: PLANAFFE_TOKEN, the path of a
+	// token file, or the keychain. `pa me` shows it, and `pa logout` refuses to
+	// revoke what pa did not put there.
+	TokenFrom string
 	// Project is the project key, from the file or from --project.
 	Project string
 	// Repo is the `repo` label of this repository, from the file, or empty.
@@ -34,27 +49,42 @@ type Config struct {
 	File string
 }
 
+// Input is everything Resolve reads, so that a test supplies all of it and
+// nothing reaches around it to the real machine.
+type Input struct {
+	Getenv func(string) string
+	Dir    string
+	// Settings is pa's own configuration file, already read.
+	Settings Settings
+	// ReadKeychain answers the token this machine kept for an instance. Nil
+	// where there is no store to ask, which is not an error until nothing else
+	// answered either.
+	ReadKeychain func(instance string) (string, error)
+}
+
 // UsageError is a mistake in the environment or the arguments: exit 2.
 type UsageError struct{ Message string }
 
 func (e *UsageError) Error() string { return e.Message }
 
-// Load reads the environment and looks for the project file from dir upwards.
-// Every value the file sets can be overridden by a flag; that is the caller's,
-// after Load.
-func Load(getenv func(string) string, dir string) (Config, error) {
-	cfg := Config{URL: strings.TrimSpace(getenv("PLANAFFE_URL")), Token: strings.TrimSpace(getenv("PLANAFFE_TOKEN"))}
-
-	if cfg.URL == "" {
-		return cfg, &UsageError{"PLANAFFE_URL is not set: the address of the instance, scheme and host."}
-	}
-	if u, err := url.Parse(cfg.URL); err != nil || !u.IsAbs() || (u.Scheme != "http" && u.Scheme != "https") {
-		return cfg, &UsageError{fmt.Sprintf("PLANAFFE_URL is %q; it has to be an absolute http or https address.", cfg.URL)}
-	}
-	if cfg.Token == "" {
-		return cfg, &UsageError{"PLANAFFE_TOKEN is not set: a user token or an agent token."}
+// Resolve is the whole ladder: the address, the token and the project file.
+func Resolve(in Input) (Config, error) {
+	address, err := in.ResolveURL()
+	if err != nil {
+		return Config{}, err
 	}
 
+	token, from, err := in.ResolveToken(address)
+	if err != nil {
+		return Config{URL: address}, err
+	}
+
+	cfg := Config{URL: address, Token: token, TokenFrom: from}
+
+	dir := in.Dir
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
 	path, found := find(dir)
 	if found {
 		file, err := parse(path)
@@ -67,6 +97,63 @@ func Load(getenv func(string) string, dir string) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// ResolveURL answers which instance this invocation talks to: the environment,
+// then the instance `pa login` wrote down.
+func (in Input) ResolveURL() (string, error) {
+	address := strings.TrimSpace(in.getenv(EnvURL))
+	if address == "" {
+		address = strings.TrimSpace(in.Settings.Instance)
+	}
+	if address == "" {
+		return "", &UsageError{fmt.Sprintf(
+			"no instance: set %s, or run `pa login --url https://planaffe.example`.", EnvURL)}
+	}
+
+	address = strings.TrimRight(address, "/")
+	if u, err := url.Parse(address); err != nil || !u.IsAbs() || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", &UsageError{fmt.Sprintf(
+			"%s is %q; it has to be an absolute http or https address.", EnvURL, address)}
+	}
+	return address, nil
+}
+
+// ResolveToken answers the token and where it came from.
+//
+// The environment wins, always: it is how an agent receives its own token and
+// how CI holds one, so a `pa login` on the machine can never quietly
+// re-identify a run (ADR 0025). A file the user named out loud is next, because
+// they named it. The keychain is last, and is where `login` puts a token unless
+// it was told otherwise.
+func (in Input) ResolveToken(address string) (token string, from string, err error) {
+	if value := strings.TrimSpace(in.getenv(EnvToken)); value != "" {
+		return value, EnvToken, nil
+	}
+
+	if path := strings.TrimSpace(in.Settings.TokenFile); path != "" {
+		value, err := ReadTokenFile(path)
+		if err != nil {
+			return "", "", err
+		}
+		return value, path, nil
+	}
+
+	if in.ReadKeychain != nil {
+		if value, err := in.ReadKeychain(address); err == nil && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value), Keychain, nil
+		}
+	}
+
+	return "", "", &UsageError{fmt.Sprintf(
+		"no token for %s: run `pa login`, or put a user token or an agent token in %s.", address, EnvToken)}
+}
+
+func (in Input) getenv(name string) string {
+	if in.Getenv == nil {
+		return ""
+	}
+	return in.Getenv(name)
 }
 
 type projectFile struct {

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/datavisionzero/planaffe/src/cli/internal/exit"
+	"github.com/datavisionzero/planaffe/src/cli/internal/keychain"
 )
 
 // fake is an instance as far as `pa next` needs one: it records what it was
@@ -71,6 +72,10 @@ func run(t *testing.T, server *httptest.Server, dir string, args ...string) (cod
 		Stdout: &out,
 		Stderr: &errOut,
 		HTTP:   server.Client(),
+		// pa keeps a configuration file now (ADR 0025); no test may read the
+		// one belonging to whoever is running the tests.
+		Settings: filepath.Join(t.TempDir(), "config"),
+		Store:    &keychain.Store{Set: func(string, string) error { return nil }, Get: func(string) (string, error) { return "", keychain.ErrNotFound }, Delete: func(string) error { return nil }},
 	})
 	return code, out.String(), errOut.String()
 }

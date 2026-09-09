@@ -30,7 +30,7 @@ func newMe(g *globals) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "me", Short: "Who the token says you are: the identity, its kind, its role, the token it came in under.", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, c, err := g.load()
+			cfg, c, err := g.load()
 			if err != nil {
 				return err
 			}
@@ -44,7 +44,7 @@ func newMe(g *globals) *cobra.Command {
 			if g.json {
 				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
 			}
-			render.Me(cmd.OutOrStdout(), *resp.JSON200)
+			render.Me(cmd.OutOrStdout(), *resp.JSON200, cfg.TokenFrom)
 			return nil
 		},
 	}
@@ -92,7 +92,7 @@ func newMeSet(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_, c, err := g.load()
+			cfg, c, err := g.load()
 			if err != nil {
 				return err
 			}
@@ -106,7 +106,7 @@ func newMeSet(g *globals) *cobra.Command {
 			if g.json {
 				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
 			}
-			render.Me(cmd.OutOrStdout(), *resp.JSON200)
+			render.Me(cmd.OutOrStdout(), *resp.JSON200, cfg.TokenFrom)
 			return nil
 		},
 	}
