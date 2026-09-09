@@ -21,7 +21,11 @@ func aStanding(key, standing, because, needsYou, work string) string {
 }
 
 func TestStandingPrintsOneLinePerProjectInTheOrderTheInstanceGave(t *testing.T) {
-	oldest := time.Now().Add(-6 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	// Six days on the nose leaves the assertion below standing on the fraction
+	// of a second between building the fixture and rendering it: `waiting`
+	// truncates hours, and 143 of them are five days. An hour of slack costs
+	// nothing and makes the line six days on every day this runs.
+	oldest := time.Now().Add(-(6*24 + 1) * time.Hour).UTC().Format(time.RFC3339)
 	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
 		if r.Method != http.MethodGet || r.URL.Path != "/standing" {
 			return 404, `{"type":"/problems/not-found","status":404}`
