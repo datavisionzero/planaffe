@@ -7,13 +7,28 @@ like `gh` and `glab`; `pa next` is the one verb that is its own object.
 
 ## Configuration
 
-Two environment variables and one file, and nothing to log into:
+Two environment variables, two files, and one login:
 
 | | |
 |---|---|
 | `PLANAFFE_URL` | the instance, scheme and host |
 | `PLANAFFE_TOKEN` | a user token or an agent token; the server tells them apart, `pa` never says which it holds (ADR 0015) |
+| `~/.config/planaffe/config` | what `pa login` wrote: the instance, and the path of a token file where one was chosen. No credential is in it |
+| the keychain | where `pa login` keeps the user token it collected (ADR 0025) |
 | `.planaffe` | the project file (`CONTEXT.md`): checked in at the root of a repository, found from the working directory upwards |
+
+**The ladder is fixed, and `pa me` says which rung answered.** The address is
+`PLANAFFE_URL`, then the instance `pa login` wrote down. The token is
+`PLANAFFE_TOKEN`, then a token file the user named out loud, then the keychain.
+
+The environment wins, always. That is how an agent receives its own token, how
+CI holds one and how a container is told who it is — so a `pa login` on the
+machine can never quietly re-identify a run. It is also why a human at the
+console should stop putting their own token in a shell profile: every agent
+started from that shell inherits it, and with it a claim that never expires and
+a close that goes past `review` (ADR 0025).
+
+`$XDG_CONFIG_HOME` moves the configuration file where it says.
 
 The project file is `key = value` lines, `#` for comments, and knows two keys:
 
@@ -54,10 +69,10 @@ The table of `docs/api.md`, derived from the status and the problem document:
 |---|---|
 | 0 | success |
 | 1 | unexpected: a 500, an answer `pa` cannot parse, a bug in `pa` |
-| 2 | usage: bad arguments, `PLANAFFE_URL` or `PLANAFFE_TOKEN` unset, a `.planaffe` file `pa` cannot read |
+| 2 | usage: bad arguments, no instance and no login, no token anywhere, a `.planaffe` file `pa` cannot read |
 | 3 | not found, deleted included |
-| 4 | refused: validation, and every 422 |
-| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `release-exists` |
+| 4 | refused: validation, every 422, and the 410 of a one-time thing that is gone — a used link, a device login that ran out |
+| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `release-exists`, `device-pending` |
 | 6 | stale |
 | 7 | denied: 401, 403 |
 | 8 | empty: `next` found nothing, or another waiting command reached its deadline |
@@ -78,10 +93,12 @@ wrong, because that is the mistake a newcomer makes first: an address nothing
 answered at is exit 10 naming `PLANAFFE_URL`, a token the instance does not
 know is exit 7 naming `PLANAFFE_TOKEN`. Then it takes the project of that key
 or creates it, writes the `.planaffe` — over an existing one only with
-`--force` — and prints what is left for a person: the two variables in the
-shell, and the `AGENTS.md` block of [`agents-md.md`](./agents-md.md). Nothing
-is asked: a directory whose name makes no key is an error saying so, not a
-prompt (VISION 6.1).
+`--force` — and prints what is left for a person: the `AGENTS.md` block of
+[`agents-md.md`](./agents-md.md), and, where the run came in on
+`PLANAFFE_TOKEN`, `pa login` — a human's token in a shell profile is inherited
+by every agent started from that shell (ADR 0025). Nothing is asked: a
+directory whose name makes no key is an error saying so, not a prompt
+(VISION 6.1).
 
 ```
 pa next                      # the ready-for-agents list, in the order next hands out
@@ -178,10 +195,27 @@ pa release rename v1.2.O v1.2.0         # the newest publication only
 pa release retract v1.2.0               # take the publication back; it is the open release again
 ```
 
+Signing in (ADR 0025) — the device-code flow, because SSH sessions, CI jobs,
+containers and agent sandboxes have no browser of their own:
+
+```
+pa login [--url ADDRESS]                   # prints a code, waits for a human to confirm it in a browser
+pa login --token-file ~/.config/planaffe/token   # write it to a file you chose, instead of the keychain
+pa logout                                  # revoke this machine's token and forget it
+```
+
+`login` prints eight characters and the address to open, polls on the interval
+the instance names, and stops when the instance says refused, expired or
+unknown. What it collects is an ordinary user token; the secret is never
+printed, not even under `--json`. Where there is no keychain — a headless Linux
+without a Secret Service, most often — it says so, **writes nothing**, and names
+the two ways on. `logout` refuses a token that came from `PLANAFFE_TOKEN`: `pa`
+did not put it there, and it is most likely an agent's.
+
 Identities (ADR 0015) — a secret is printed once, to stdout, and nowhere else:
 
 ```
-pa me                                      # who the token says you are
+pa me                                      # who the token says you are, and where pa read the token
 pa me set --kind codex --harness cli --environment container --version 1.2.3
                                            # agents report stable metadata; `none` clears a field
 pa version                                 # pa's version and the instance's; exit 9 when they do not fit

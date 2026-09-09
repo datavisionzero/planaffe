@@ -159,8 +159,23 @@ prints the administrator's name and `administrator`.
 **Stop if:** exit 10 — that is `PLANAFFE_URL`, and the address is wrong. Exit 7
 is `PLANAFFE_TOKEN`, and the token is not the one from step 3.
 
-To keep them, put both lines in a file the shell reads at startup, with mode
-`0600`, and **not** in the repository.
+**Do not keep the token in your shell.** It works, and it is what an agent's
+environment is for — but a user token in a shell profile is inherited by every
+agent started from that shell, and with it a claim that never expires and a
+close that goes past `review`
+([ADR 0025](./adr/0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)).
+Once you have set a password in the browser, run
+
+```sh
+pa login --url http://localhost
+```
+
+which prints a short code, waits while you confirm it in the browser, and keeps
+the token it collects in this machine's keychain. Then take `PLANAFFE_TOKEN`
+back out of the environment; `PLANAFFE_URL` goes with it, because `pa login`
+wrote the address down. Where there is no keychain — a headless Linux without a
+Secret Service — `pa` says so and names the two ways on rather than writing the
+token anywhere you did not choose.
 
 ## Step 8 — Connect the repository whose tickets these are
 

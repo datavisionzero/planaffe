@@ -138,6 +138,16 @@ produced into `internal/api/` by `go generate` and never committed;
 It ships as its own release artifact — a static binary per platform, built by the
 release workflow — and is versioned with the server it was cut from.
 
+**It keeps two things between invocations now, and neither is a credential in a
+file it chose** ([ADR 0025](./adr/0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)):
+`~/.config/planaffe/config`, which holds the instance and the path of a token
+file where one was named, and an entry in the operating system's keychain,
+reached through `internal/keychain` — three functions injected into the command
+tree, so that a test never touches the store belonging to whoever is running
+the tests. `internal/config` is where the ladder lives: the environment, then a
+named file, then the keychain, and every command is told which of the three
+answered.
+
 Operational verbs that need the database are **not** here: migrations, backups
 and the first account belong to the .NET binary that has the connection string.
 `pa` is a client of the public API and nothing else, which is what lets it run
@@ -185,7 +195,9 @@ types `npm run generate` writes from the contract — and it adds the CSRF proof
 to cookie-authenticated writes.
 
 The application signs in with email and password and keeps only an opaque
-session cookie (`session/`). The bootstrap user token may be exchanged once to
+session cookie (`session/`). `session/DeviceLogin.tsx` is the other half of
+`pa login`: `/device`, outside the shell like activation and recovery, where a
+human confirms what a terminal printed (ADR 0025). The bootstrap user token may be exchanged once to
 set the first administrator's password, but is never kept in browser storage.
 Bearer tokens remain the CLI and direct API door (ADR 0015). A local `npm run build` lands in
 `src/Planaffe.Api/wwwroot/`, which the API serves with every path no endpoint

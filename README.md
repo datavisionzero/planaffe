@@ -39,6 +39,12 @@ are standing:
   labels, and the three administration areas. Bulk changes, export and the
   waiting operations stay with the CLI on purpose.
 
+The console signs in through a browser: `pa login` runs the device-code flow —
+a short code in the terminal, confirmed in a browser on any machine — and keeps
+the user token it collects in the operating system's keychain
+([ADR 0025](docs/adr/0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)).
+An agent still receives its token in `PLANAFFE_TOKEN`, which keeps precedence.
+
 What is left is not a missing area but the polish inside one: the screens are
 sharpened ticket by ticket until 1.0 is worth publishing.
 

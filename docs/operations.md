@@ -56,6 +56,13 @@ The bootstrap token is the first administrator's user token — what the CLI
 carries as `PLANAFFE_TOKEN`. The first agent gets its own token from that
 administrator, one command later (`POST /agents`, `pa agent create`).
 
+After that, a human at the console signs in with `pa login` rather than keeping
+a token in a shell profile: the device-code flow, confirmed in the browser, with
+the token kept in the machine's keychain
+([ADR 0025](./adr/0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)).
+`PLANAFFE_TOKEN` keeps precedence over that keychain and stays the way an agent
+and a CI job receive theirs.
+
 The three waiting commands (`pa next --claim --wait`, `pa issue ask --wait`,
 and `pa needs-you --wait`) hold one HTTP request open for as long as one hour.
 A reverse proxy in front of the instance must therefore allow request and

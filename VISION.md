@@ -90,6 +90,7 @@ The CLI is the interface for agents and for console-minded humans. It has to be 
 - Ask questions, retrieve open questions, answer them.
 - Output either human-readable or machine-readable (JSON), so that agents can parse deterministically.
 - Authentication via token, usable across projects, with a clearly set "current project". A token is either an **agent** or a **user's key** (12.): an agent works under its own identity, a human at the console works as themselves — with a claim that does not expire and a close that is a human's word.
+- **A human signs in; an agent is handed its token.** `pa login` runs the device-code flow — the CLI prints a short code, a person confirms it in a browser on any machine — and keeps what it collects in the operating system's keychain. What it collects is an ordinary user token, delivered without going through a clipboard. An agent's token still arrives in the environment, which keeps precedence, so a login on the machine can never re-identify a run; and a human no longer has to leave their own key in a shell profile that every agent started there inherits ([ADR 0025](docs/adr/0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)).
 - Description texts are passed as Markdown via stdin or a file — no forced editor, agent-friendly.
 
 The goal: an agent can carry out its entire working cycle without ever touching the UI — find a suitable issue, claim it, work on it, document the result, close it.
@@ -538,7 +539,7 @@ Multi-user is built in from the start — even if the first user works alone, th
 
 ### The life of a token
 
-- **A human creates it, never an agent.** The back channel above is one-way for exactly this reason: an agent that can issue itself a second token has escaped its own identity.
+- **A human creates it, never an agent.** The back channel above is one-way for exactly this reason: an agent that can issue itself a second token has escaped its own identity. A user token is created in the interface or collected by a console through a **device login** the human confirms in a browser (6.1); both are the same act by a human, and neither is a road an agent can take.
 - **The secret is shown once**, at creation. What is stored is a hash and a short readable prefix, so tokens can be told apart in a list without any of them being recoverable.
 - **Revoking takes effect immediately, and the identity survives it.** A revoked token still names the agent in every claim and every history entry it wrote; it simply cannot authenticate any more. Tokens and users are never deleted for that reason ([ADR 0013](docs/adr/0013-deleting-is-a-soft-delete-with-a-floor-and-identities-are-never-deleted.md)).
 - **No expiry date in the MVP.** A token that expires on a date wakes nobody — it fails in the middle of an agent run, and the same argument that keeps the due date out (8., 17.) keeps this out. Revocation is the answer, and it is deliberate rather than scheduled.
@@ -573,6 +574,9 @@ The first five minutes are a success criterion (16.), so the path to the first i
 2. **The first administrator and their user token come from environment variables** on the first start. There is no setup wizard and no first-run screen — a product whose first principle is that everything works without the UI must not require the UI to become usable. The first agent gets its own token from that administrator, one command later. The administrator may exchange that bootstrap token once in the browser to set a password and create a browser session; the token is never stored there.
 3. `pa project create` with the key that will prefix every issue in it.
 4. `pa issue create`. That is the fifth minute.
+
+Whoever prefers not to keep a token in their shell runs `pa login` instead of
+step 2's variable, and confirms it in the browser they set the password in.
 
 Every further human is invited by an administrator. planaffe sends the one-time
 link through configured SMTP; behind it the invited user sets their password.

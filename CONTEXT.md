@@ -63,8 +63,28 @@ _Avoid_: API key, secret, service account, credential
 **User Token**:
 A user's key to the CLI: it authenticates as the user and is no identity of its
 own — no name, no metadata, no back channel. Created by the user, shown once,
-revoked rather than deleted.
+revoked rather than deleted. It is created in the interface, or collected by a
+console through a **Device Login**; the two produce the same thing.
 _Avoid_: personal access token, API key, session token, login
+
+**Device Login**:
+One `pa login` in progress: the console prints a **User Code**, a human confirms
+it in a browser, and the console collects a **User Token** by polling with a
+**Device Code**. It is the one thing here that ends by the clock — ten minutes —
+rather than by an act, because what expires is the request and not the token it
+produces.
+_Avoid_: device flow, device authorization, pairing, sign-in request
+
+**User Code**:
+The short code a device login prints and a human types into a browser: eight
+characters from the twenty consonants of RFC 8628, shown as `XXXX-XXXX`. It is
+not a credential; it names a request to the human confirming it.
+_Avoid_: pairing code, PIN, one-time code, verification code
+
+**Device Code**:
+The long secret a console keeps to itself and polls a device login with. Stored
+as its hash, never read back, and never shown to anybody.
+_Avoid_: device secret, poll token, request token
 
 **Administrator**:
 The role that administers the instance itself — users, projects, and everything

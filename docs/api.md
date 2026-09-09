@@ -263,6 +263,7 @@ person. Extension members carry what the code needs — the holder on
 | 409 | `last-administrator` | deactivation or demotion would leave no active administrator |
 | 409 | `email-exists` | an invitation or confirmed email would duplicate a normalized address |
 | 410 | `secret-expired` | an invitation, recovery or email-change secret is used, replaced or expired |
+| 410 | `device-expired` | a device login ran out, or its token has already been collected; a device code works once |
 | 412 | `stale` | `If-Match` does not match the object's `updated_at`; the body carries the current object under `current` |
 | 422 | `transition` | the status does not allow the act — closing a closed issue, claiming one in `review` |
 | 422 | `cycle` | the blocker would close a cycle; `path` lists the keys |
@@ -272,6 +273,8 @@ person. Extension members carry what the code needs — the holder on
 | 422 | `wait-too-long` | `wait` exceeds the server's one-hour ceiling; `maximum` is 3600 |
 | 422 | `too-many` | a bulk change contains more than 100 issue keys |
 | 422 | `smtp-not-configured` | an action that must send email cannot do so |
+| 409 | `device-pending` | nobody has confirmed this device login yet; the one refusal that means keep polling |
+| 403 | `device-denied` | a human refused this device login, or it is no longer theirs to decide |
 | 429 | `login-throttled` | too many failed sign-ins for the account or source address; `Retry-After` is set |
 | 500 | `internal` | a bug; the response carries nothing else |
 
@@ -288,10 +291,10 @@ can branch without parsing:
 |---|---|---|
 | 0 | success | 2xx |
 | 1 | unexpected | 500, a response the CLI cannot parse, a bug in the CLI |
-| 2 | usage | bad arguments, `PLANAFFE_URL` or `PLANAFFE_TOKEN` unset, a `.planaffe` file the CLI cannot read |
+| 2 | usage | bad arguments, no instance and no login, no token anywhere, a `.planaffe` file the CLI cannot read |
 | 3 | not found | 404 `not-found`, 404 `deleted` |
-| 4 | refused | 400 `validation`, 400 `unknown-field`, 422 of every type |
-| 5 | conflict | 409 `claim-held`, 409 `claim-lost`, 409 `idempotency-mismatch`, 409 `release-exists` |
+| 4 | refused | 400 `validation`, 400 `unknown-field`, 422 of every type, and 410 — a one-time thing that is gone cannot be retried |
+| 5 | conflict | 409 `claim-held`, 409 `claim-lost`, 409 `idempotency-mismatch`, 409 `release-exists`, 409 `device-pending` |
 | 6 | stale | 412 `stale` |
 | 7 | denied | 401, 403 |
 | 8 | empty | `next` found nothing; in cut two also a `--wait` that reached its deadline |
@@ -350,12 +353,15 @@ one role and project access:
   and questions in every project, and read projects and its own identity. It may
   not create or change a project, a user, an agent or a token, and may not
   list agents or tokens ([ADR 0015](./adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)).
+  It may not read or confirm a device login either, for the same reason: an
+  agent that could confirm one would be issuing itself a second identity
+  ([ADR 0025](./adr/0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)).
   A comment is the one thing narrower than that line: only its author may
   rewrite it, and an agent takes away only its own
   ([ADR 0022](./adr/0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md)).
 - **A user may do everything an agent may**, plus create projects and change
-  their switches, create agents and their own tokens, rename and revoke agents
-  they own, and list agents — and take away anybody's comment, which is the
+  their switches, create agents and their own tokens, confirm or refuse a device
+  login, rename and revoke agents they own, and list agents — and take away anybody's comment, which is the
   same clearing up ADR 0013 conceded for issues.
 - **An administrator** may in addition create users, rename and revoke any
   agent, and delete projects. Whoever bootstrapped the instance is one.
@@ -896,6 +902,7 @@ way to read what the lists already say (ADR 0012).
 | `DELETE` | `/sessions/{id}` | user | revoke one of the caller's sessions; 204 |
 | `DELETE` | `/sessions` | user | revoke every session except the current one; 204 |
 | `POST` | `/me/password` | user | `{ current_password, password }` → 204; revokes every other session |
+| `DELETE` | `/me/token` | token caller | revoke the token this request presented; 204. A browser session is told its own exit is `DELETE /session` |
 | `PATCH` | `/me` | user | `{ name }` → 200 `User`; email and password have their own confirmation-aware acts |
 | `POST` | `/me/email` | user | `{ email }` → 202; sends a confirmation link to the new address while the old remains active |
 | `POST` | `/me/email/confirm` | user | `{ secret }` → 200 `User`; consumes the link and changes the address |
@@ -926,6 +933,48 @@ a link mailed a minute ago stops working.
 where `PLANAFFE_PUBLIC_URL` is set, and the root-relative path otherwise, to be
 resolved against the address the caller reached the instance at. It is never
 assembled from an inbound `Host` header.
+
+### The device login
+
+The console's way in ([ADR 0025](./adr/0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)):
+`pa login` prints a short code, a human confirms it in a browser, and the
+console collects an ordinary **user token**. Two of the four are anonymous,
+because the machine asking has nothing yet.
+
+| method | path | who | does |
+|---|---|---|---|
+| `POST` | `/device-logins` | anyone | begin one → `DeviceLoginBegun`: the `device_code` the CLI keeps, the `user_code` it prints, `verification_uri`, `verification_uri_complete`, `expires_in_seconds` and `interval_seconds` |
+| `POST` | `/device-logins/redeem` | anyone | `{ device_code }` → `DeviceLoginRedeemed`: the user token once, with the user it belongs to. `device-pending` until a human presses something |
+| `GET` | `/device-logins/{code}` | user | what the confirmation page draws: the `user_code` as it is read, and `expires_at` |
+| `POST` | `/device-logins/{code}/decide` | user | `{ approve }` — confirm it, or say the human did not start it |
+
+**Both addresses come back relative**, because the instance is being asked by a
+client that already has the host; joining the halves is the CLI's job, and what
+it prints is read by a person who has to open it.
+
+**The user code is not the credential.** Eight characters from the twenty
+consonants of RFC 8628, shown as `XXXX-XXXX`, and forgiven any case, spaces or
+dashes on the way back in. What it protects is a request that still needs a
+signed-in human to press a button. The device code carries 256 bits and is
+stored as its SHA-256.
+
+**Four of the five states end the polling.** `device-pending` is the one that
+does not; `device-denied`, `device-expired` and `not-found` all mean stop. A
+code that never existed and one that has run out are the same answer on the
+confirmation page — telling them apart would tell somebody guessing which of
+their guesses was half right.
+
+**An agent may neither read nor confirm a login**, and is told `forbidden`: an
+agent that could confirm one would be issuing itself a second identity
+(VISION 12). Beginning a login is limited per source address, in a window of
+its own, so that a machine making them cannot lock a person out of the password
+screen.
+
+**What comes out is a user token and not a session**, which is the one place
+this differs from the sibling project's flow. A session expires, and VISION 12
+has already said what this product thinks of a credential that ends on a date;
+a token is revoked deliberately, is listed under `GET /tokens` like every other,
+and ends with `DELETE /me/token`.
 
 ### User lifecycle and project access
 

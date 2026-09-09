@@ -39,6 +39,7 @@ Markdown and never a document model of its own
 | `/login` | Sign in | email, password, recovery link | centred single column |
 | `/activate` | Accept invitation or bootstrap | name/email context and password setup | centred single column |
 | `/recover` | Recover password | request form or new-password form | centred single column |
+| `/device` | Sign in a console | the code a terminal printed, what confirming grants, and the two decisions | centred single column |
 | `/projects` | Overview | one tile per project: its standing, the reason for it and its three counts, worst first | one column of tiles |
 | `/projects/new` | Create project | immutable key, name and two project switches | centred single column |
 | `/:project/ready` | Ready | shared issue list with workable defaults | two-line rows, no horizontal scroll |
@@ -342,7 +343,7 @@ breakpoint and carries the rest.
 | Release | list, open, preview exact membership, copy as Markdown | edit notes, publish, put an issue into the open release or take it out, rename or take back the newest publication |
 | Label | list and inspect use | create, edit name, group and description, rename or dissolve a group, delete, restore |
 | Project | switch, see how every project one has access to stands, and inspect settings/members/instructions | create; edit name, switches and the instructions page; delete or restore when administrator |
-| Identity | inspect own profile, sessions, tokens and agents | change own name, verified email and password; revoke sessions/tokens; create or revoke own tokens and agents |
+| Identity | inspect own profile, sessions, tokens and agents; read a device login by its code | change own name, verified email and password; revoke sessions/tokens; create or revoke own tokens and agents; confirm or refuse a device login |
 | Administration | inspect all users, project assignments, deleted projects and SMTP status | invite/resend, hand over an invitation or password link, deactivate/reactivate, change administrator role, assign projects, send test email |
 
 Closing an epic with open issues warns but succeeds. Adding an issue to a closed
@@ -366,6 +367,7 @@ who lacks authority for a visible administrative action receives `403`.
 | Assign or remove project access | no | no | yes |
 | Delete or restore a project | no | no | yes |
 | Manage own password, sessions and user tokens | yes | no | yes, for self |
+| Confirm or refuse a device login | yes | no | yes, for self |
 | Manage own agents | yes | no | yes, for self |
 | Invite or deactivate users; change administrator role | no | no | yes |
 | Hand over an invitation or password link | no | no | yes |
@@ -388,6 +390,21 @@ history could not make visible afterwards. Both are offered whether or not SMTP
 is configured, because a control that appears and disappears with an operating
 setting explains itself to nobody; without SMTP they are the only way in at all
 ([ADR 0018](./adr/0018-transactional-email-is-an-optional-instance-capability.md)).
+
+`/device` is the confirmation half of `pa login`
+([ADR 0025](./adr/0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)),
+and it stands outside the shell like the other three above: it is one decision
+about one console, not a screen of the product. Somebody who is not signed in
+meets the sign-in screen and is **left here afterwards** rather than sent to the
+overview — the one place sign-in remembers where it came from.
+
+The page says what the confirmation grants before the button that grants it: a
+key to this instance as the person confirming, with everything they can see and
+do, and one that does not expire on its own. Refusing is no harder to reach than
+approving, because a refusal somebody has to hunt for is a refusal nobody makes.
+An expired, decided or unknown code says which of those it was — except that a
+code that never existed and one that ran out are the same sentence, since
+telling them apart would tell a guesser which of their guesses was half right.
 
 Opening an address that is not the caller's is a permission state and not a
 redirect: `/admin` without the role says that the instance administration
