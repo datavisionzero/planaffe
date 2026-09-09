@@ -86,6 +86,14 @@ builder.Services.AddScoped<CompletePasswordRecovery>();
 builder.Services.AddScoped<ListBrowserSessions>();
 builder.Services.AddScoped<ChangePassword>();
 
+// The device-code login of ADR 0025: two the CLI calls with nothing in its
+// hand, two the browser calls with the session a human already has.
+builder.Services.AddScoped<BeginDeviceLogin>();
+builder.Services.AddScoped<ShowDeviceLogin>();
+builder.Services.AddScoped<DecideDeviceLogin>();
+builder.Services.AddScoped<RedeemDeviceLogin>();
+builder.Services.AddScoped<RevokeMyToken>();
+
 // The two dials of the instance, read once from the environment; a value that
 // is not a positive number stops the start here, where the message names it.
 builder.Services.AddSingleton(InstanceSettings.FromVariables(
@@ -231,6 +239,7 @@ app.MapOpenApi();
 app.MapInstance();
 app.MapIdentities();
 app.MapBrowserIdentity();
+app.MapDeviceLogins();
 app.MapProjects();
 app.MapLabels();
 app.MapIssues();

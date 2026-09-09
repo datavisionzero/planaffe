@@ -27,6 +27,16 @@ public sealed class LoginThrottle(TimeProvider clock)
         lock (gate) { Add("account:" + normalizedEmail); Add("address:" + sourceAddress); TrimStore(); }
     }
     public void Succeeded(string normalizedEmail) { lock (gate) attempts.TryRemove("account:" + normalizedEmail, out _); }
+
+    /// <summary>
+    /// Device logins begun from one address, in their own window. Separate from
+    /// the sign-in counters on purpose: a machine that begins logins must not be
+    /// able to lock a person out of the password screen.
+    /// </summary>
+    public bool IsDeviceBlocked(string sourceAddress) { lock (gate) return Count("device:" + sourceAddress) >= AddressLimit; }
+
+    /// <inheritdoc cref="IsDeviceBlocked"/>
+    public void DeviceBegun(string sourceAddress) { lock (gate) { Add("device:" + sourceAddress); TrimStore(); } }
     private int Count(string key) { if (!attempts.TryGetValue(key, out var queue)) return 0; Prune(queue); return queue.Count; }
     private void Add(string key) { var queue = attempts.GetOrAdd(key, _ => new()); Prune(queue); queue.Enqueue(clock.GetUtcNow()); }
     private void Prune(Queue<DateTimeOffset> queue) { var floor = clock.GetUtcNow() - Window; while (queue.TryPeek(out var time) && time <= floor) queue.Dequeue(); }

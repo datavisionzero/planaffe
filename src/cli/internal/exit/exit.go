@@ -46,6 +46,11 @@ func FromResponse(status int, p *problem.Problem) int {
 		return Refused
 	case status == 409:
 		return Conflict
+	// 410 is a one-time thing that is gone: a link already used, a device
+	// login that ran out. The caller cannot retry it, which is what Refused
+	// means; it is not a bug in pa, which is what the default would say.
+	case status == 410:
+		return Refused
 	case status == 412:
 		return Stale
 	default:

@@ -287,6 +287,108 @@
         }
       }
     },
+    "/device-logins": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Begin a device login: the code the CLI prints, and the code it polls with.",
+        "operationId": "BeginDeviceLogin",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLoginBegun"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/device-logins/redeem": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Collect the user token a confirmed login produced. Once, and `device-pending` until then.",
+        "operationId": "RedeemDeviceLogin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedeemDeviceLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLoginRedeemed"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/projects": {
       "get": {
         "tags": [
@@ -1407,6 +1509,202 @@
           "required": true
         },
         "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/device-logins/{code}": {
+      "get": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "The login a typed code names, if one is still waiting. Users only.",
+        "operationId": "ReadDeviceLogin",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingDeviceLogin"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/device-logins/{code}/decide": {
+      "post": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Confirm or refuse a device login. Users only, by the browser session they already have.",
+        "operationId": "DecideDeviceLogin",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideDeviceLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingDeviceLogin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/token": {
+      "delete": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Revoke the token this request presented — what `pa logout` calls.",
+        "operationId": "RevokeMyToken",
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "204": {
             "description": "No Content"
           }
@@ -6972,6 +7270,20 @@
           }
         }
       },
+      "DecideDeviceLoginRequest": {
+        "required": [
+          "approve"
+        ],
+        "type": "object",
+        "properties": {
+          "approve": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
       "DeleteIssuesRequest": {
         "required": [
           "keys"
@@ -6986,6 +7298,62 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "DeviceLoginBegun": {
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_uri",
+          "verification_uri_complete",
+          "expires_in_seconds",
+          "interval_seconds"
+        ],
+        "type": "object",
+        "properties": {
+          "device_code": {
+            "type": "string"
+          },
+          "user_code": {
+            "type": "string"
+          },
+          "verification_uri": {
+            "type": "string"
+          },
+          "verification_uri_complete": {
+            "type": "string"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DeviceLoginRedeemed": {
+        "required": [
+          "token",
+          "user",
+          "email",
+          "administrator"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "$ref": "#/components/schemas/IssuedToken"
+          },
+          "user": {
+            "$ref": "#/components/schemas/IdentityRef"
+          },
+          "email": {
+            "type": "string"
+          },
+          "administrator": {
+            "type": "boolean"
           }
         }
       },
@@ -8149,6 +8517,22 @@
           }
         }
       },
+      "PendingDeviceLogin": {
+        "required": [
+          "user_code",
+          "expires_at"
+        ],
+        "type": "object",
+        "properties": {
+          "user_code": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Priority": {
         "maximum": 4,
         "minimum": 0,
@@ -8540,6 +8924,20 @@
         "type": "object",
         "properties": {
           "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RedeemDeviceLoginRequest": {
+        "required": [
+          "device_code"
+        ],
+        "type": "object",
+        "properties": {
+          "device_code": {
             "type": [
               "null",
               "string"

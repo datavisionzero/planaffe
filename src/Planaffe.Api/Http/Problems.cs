@@ -29,13 +29,13 @@ public static class Problems
     {
         RefusalCode.Validation or RefusalCode.UnknownField or RefusalCode.CursorInvalid => StatusCodes.Status400BadRequest,
         RefusalCode.Unauthenticated => StatusCodes.Status401Unauthorized,
-        RefusalCode.Csrf or RefusalCode.Forbidden or RefusalCode.ClaimProtected =>
+        RefusalCode.Csrf or RefusalCode.Forbidden or RefusalCode.ClaimProtected or RefusalCode.DeviceDenied =>
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.Deleted => StatusCodes.Status404NotFound,
         RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.ReleaseExists
-            or RefusalCode.EmailExists or RefusalCode.LastAdministrator =>
+            or RefusalCode.EmailExists or RefusalCode.LastAdministrator or RefusalCode.DevicePending =>
             StatusCodes.Status409Conflict,
-        RefusalCode.SecretExpired => StatusCodes.Status410Gone,
+        RefusalCode.SecretExpired or RefusalCode.DeviceExpired => StatusCodes.Status410Gone,
         RefusalCode.Stale => StatusCodes.Status412PreconditionFailed,
         RefusalCode.Transition or RefusalCode.Cycle or RefusalCode.HasIssues or RefusalCode.OneLevel
             or RefusalCode.OtherProject or RefusalCode.EpicInherited or RefusalCode.HasSubIssues or RefusalCode.UnknownLabel
@@ -77,6 +77,9 @@ public static class Problems
         RefusalCode.SmtpNotConfigured => "Transactional email is not configured",
         RefusalCode.EmailExists => "That email address already belongs to a user",
         RefusalCode.SecretExpired => "The one-time link is expired or has already been used",
+        RefusalCode.DevicePending => "Nobody has confirmed this login yet",
+        RefusalCode.DeviceDenied => "This login was refused, or is no longer yours to decide",
+        RefusalCode.DeviceExpired => "This login is expired or has already been collected",
         RefusalCode.LastAdministrator => "The instance must keep one active administrator",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),
