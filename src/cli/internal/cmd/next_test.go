@@ -313,7 +313,11 @@ func TestUsageMistakesAreExitTwo(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	code = Run(context.Background(), []string{"next"}, Env{Getenv: func(string) string { return "" }, Dir: t.TempDir(), Stdin: strings.NewReader(""), Stdout: &out, Stderr: &out})
+	// An empty Getenv is not an empty environment: without a Settings path of
+	// its own this reads the configuration file of whoever runs the tests, and
+	// on a machine that has run `pa login` the URL is found and the case under
+	// test never happens. The helper above isolates it; this call has to too.
+	code = Run(context.Background(), []string{"next"}, Env{Getenv: func(string) string { return "" }, Dir: t.TempDir(), Stdin: strings.NewReader(""), Stdout: &out, Stderr: &out, Settings: filepath.Join(t.TempDir(), "config")})
 	if code != exit.Usage || !strings.Contains(out.String(), "PLANAFFE_URL") {
 		t.Fatalf("missing variables: code %d, output %q", code, out.String())
 	}
