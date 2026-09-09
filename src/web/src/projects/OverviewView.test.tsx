@@ -27,13 +27,20 @@ function project(key: string, standing: string, because: string, over: Record<st
   };
 }
 
+// The tile reads its age against the clock the browser has, not against the
+// `now` this file fixes for the pure functions below. A fixture with a date
+// written into it therefore says a different number every day it is run — and
+// did, until it stopped matching. Six days and an hour before whenever this
+// runs is six days, and stays six days.
+const sixDaysAgo = new Date(Date.now() - (6 * 24 + 1) * 3_600_000).toISOString();
+
 it("names the step, the reason and the counts, and leads at the reason", async () => {
   installInstance({
     "GET /standing": {
       agents: 1,
       projects: [
         project("PLAN", "neglected", "question", {
-          needs_you: { question: 2, review: 0, unready: 0, stuck: 0, oldest: "2026-08-31T12:00:00Z" },
+          needs_you: { question: 2, review: 0, unready: 0, stuck: 0, oldest: sixDaysAgo },
           work: { in_progress: 3, ready: 12, open: 41 },
         }),
         project("HOST", "idle", "no_agent", { work: { in_progress: 0, ready: 0, open: 7 } }),
