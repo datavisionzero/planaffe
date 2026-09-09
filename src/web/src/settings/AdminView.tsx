@@ -8,7 +8,7 @@ import { useSession } from "@/session/useSession";
 import { PageHeader } from "@/shared/PageHeader";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { reporting } from "@/shared/report";
-import { date, day, submitting } from "./forms";
+import { date, day, restorableUntil, submitting } from "./forms";
 import { Choose, ListHead, Row, RowMenu, Rows, Said, Section, SettingsShell } from "./SettingsShell";
 
 type User = Schemas["UserSummary"];
@@ -372,13 +372,14 @@ function ProjectList() {
  * taken until then so a restore cannot land on a name somebody else took.
  */
 function ProjectRow({ project, report }: { project: AdminProject; report: Report }) {
+  const { me } = useSession();
   const [asking, setAsking] = useState(false);
   const gone = project.deleted_at !== null;
 
   return (
     <Row
       title={<Link className="hover:underline" to={project.key}>{project.key} · {project.name}</Link>}
-      detail={project.deleted_at === null ? `Created ${day(project.created_at)}` : `Created ${day(project.created_at)} · Deleted ${date(project.deleted_at)}`}
+      detail={project.deleted_at === null ? `Created ${day(project.created_at)}` : `Created ${day(project.created_at)} · Deleted ${date(project.deleted_at)} · restorable until at least ${restorableUntil(project.deleted_at, me.deletion_grace_days)}`}
       action={
         <>
           <RowMenu label={`Actions for ${project.key}`}>
@@ -401,6 +402,7 @@ function ProjectRow({ project, report }: { project: AdminProject; report: Report
 }
 
 function ProjectAccess() {
+  const { me } = useSession();
   const { key } = useParams();
   const [project, setProject] = useState<AdminProject>();
   const [users, setUsers] = useState<User[]>([]);
@@ -431,7 +433,7 @@ function ProjectAccess() {
       <p className="mb-3 text-sm"><Link className="text-brand hover:underline" to="..">All projects</Link></p>
       {project?.deleted_at != null ? (
         <>
-          <p className="mb-3 text-sm text-muted-foreground">Deleted {date(project.deleted_at)}.</p>
+          <p className="mb-3 text-sm text-muted-foreground">Deleted {date(project.deleted_at)} · restorable until at least {restorableUntil(project.deleted_at, me.deletion_grace_days)}.</p>
           <Button size="sm" variant="outline" onClick={() => void report(api.POST("/projects/{key}/restore", { params: { path: { key: key! } } }), `${key} restored.`)}>Restore</Button>
         </>
       ) : (

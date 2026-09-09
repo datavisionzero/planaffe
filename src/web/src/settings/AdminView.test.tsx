@@ -307,6 +307,24 @@ it("shows only live projects until the deleted are asked for", async () => {
   expect(instance.calls.some((call) => new URL(call.url).searchParams.get("deleted") === "all")).toBe(true);
 });
 
+// PLAN-65 asked the row for this sentence and could not have it: the date is
+// `deleted_at` plus a grace period the browser had never been told. It is on
+// `GET /me` now, and the row does the addition (PLAN-73).
+it("says how long a deleted project can still come back", async () => {
+  admin({
+    "GET /users": [maintainer],
+    "GET /admin/projects": [{ ...aProject, deleted_at: "2026-09-01T10:00:00Z" }],
+  }, "/admin/projects");
+  const user = userEvent.setup();
+
+  await user.selectOptions(await screen.findByLabelText("Deleted"), "Shown");
+
+  // Seven days on from the first, and "at least" because the purge is
+  // opportunistic and the grace period is a floor (ADR 0013).
+  const until = new Date("2026-09-08T10:00:00Z").toLocaleDateString();
+  expect(await screen.findByText(new RegExp(`Deleted .* · restorable until at least ${until}`))).toBeInTheDocument();
+});
+
 // A deleted project's row is the row that should be able to undo it, and the
 // deletion that was only in the project's own settings is offered here too.
 it("restores and deletes a project from its own row", async () => {

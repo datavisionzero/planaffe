@@ -32,7 +32,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "The caller: identity, role, owner and the token it came in under.",
+        "summary": "The caller: identity, role, owner, the token it came in under, and the instance's deletion grace.",
         "operationId": "ReadMe",
         "responses": {
           "200": {
@@ -8057,7 +8057,8 @@
           "owner",
           "token",
           "metadata",
-          "metadata_reported_at"
+          "metadata_reported_at",
+          "deletion_grace_days"
         ],
         "type": "object",
         "properties": {
@@ -8116,6 +8117,10 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "deletion_grace_days": {
+            "type": "number",
+            "format": "double"
           }
         }
       },

@@ -78,6 +78,7 @@ export const aUser = {
   token: { prefix: "pa_abcd", created_at: "2026-09-02T10:00:00Z" },
   metadata: null,
   metadata_reported_at: null,
+  deletion_grace_days: 7,
 };
 
 export const aProject = {

@@ -26,7 +26,7 @@ public static class InstanceEndpoints
                 readMe.ExecuteAsync(cancellationToken))
             .RequireAuthorization()
             .WithName("ReadMe")
-            .WithSummary("The caller: identity, role, owner and the token it came in under.")
+            .WithSummary("The caller: identity, role, owner, the token it came in under, and the instance's deletion grace.")
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
         return endpoints;

@@ -119,7 +119,7 @@ Set in `deploy/.env`; read once, at start.
 | `PLANAFFE_SMTP_FROM_ADDRESS` | with SMTP | | sender email address |
 | `PLANAFFE_SMTP_FROM_NAME` | no | `planaffe` | sender display name |
 | `PLANAFFE_CLAIM_EXPIRY_HOURS` | no | `4` | how long an agent's claim lives without a write of the holder's (VISION 11); a user's never expires |
-| `PLANAFFE_DELETION_GRACE_DAYS` | no | `7` | how long a deleted issue, epic, label or project can be restored before the purge may take it (ADR 0013); a floor, not a deadline |
+| `PLANAFFE_DELETION_GRACE_DAYS` | no | `7` | how long a deleted issue, epic, label or project can be restored before the purge may take it (ADR 0013); a floor, not a deadline. Every signed-in caller reads it as `deletion_grace_days` on `GET /me`, which is what lets a screen say until when something comes back |
 | `PLANAFFE_LOG_ENDPOINT` | no | | a logaffe instance to log into, scheme and host; set together with the token (ADR 0008) |
 | `PLANAFFE_LOG_TOKEN` | no | | the ingest token of the logaffe project the entries belong to |
 | `PLANAFFE_LOG_LEVEL` | no | `Information` | the floor: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal` |

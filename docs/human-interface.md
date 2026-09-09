@@ -412,6 +412,17 @@ can come back, and that the key stays taken until then. Restoring used to be a
 floor lower, on the project's own access screen, and deleting was only in the
 project's settings.
 
+A deleted row says both dates: **`Created <day> · Deleted <date> · restorable
+until at least <day>`**, and the project's own access screen says the second
+half above its restore button. Whoever reads a deletion is asking whether it
+can still be undone, and a date the reader has to work out from an instance
+variable they have never seen is not an answer. The browser does the addition
+itself: `GET /me` carries `deletion_grace_days`, so one number answers this row
+and answers epics, pages and labels the same way when their screens come to
+ask. **"At least"** is not hedging — the purge is opportunistic, so the grace
+period is a floor and a project nobody writes to keeps its deleted rows longer
+([ADR 0013](adr/0013-deleting-is-a-soft-delete-with-a-floor-and-identities-are-never-deleted.md)).
+
 The user administration also hands over the two links that lead into an account:
 an invited user's activation link and an active user's password link. They are
 shown once and carried over by the administrator, who therefore never learns

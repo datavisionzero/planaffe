@@ -64,6 +64,32 @@ public sealed class InstanceEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task The_caller_learns_the_instances_deletion_grace()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var client = instance.ClientWith(AnInstance.BootstrapToken);
+
+        var me = await client.GetFromJsonAsync<JsonElement>("/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal(7, me.GetProperty("deletion_grace_days").GetDouble());
+    }
+
+    [Fact]
+    public async Task The_deletion_grace_is_the_one_the_operator_set()
+    {
+        // The number is on /me and not on every list carrying a deleted_at, so
+        // this is the only place a client can be wrong about it (PLAN-73).
+        await using var instance = await AnInstance.ConfiguredAsync(
+            postgres,
+            new Dictionary<string, string?> { ["PLANAFFE_DELETION_GRACE_DAYS"] = "3" });
+        using var client = instance.ClientWith(AnInstance.BootstrapToken);
+
+        var me = await client.GetFromJsonAsync<JsonElement>("/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, me.GetProperty("deletion_grace_days").GetDouble());
+    }
+
+    [Fact]
     public async Task The_version_needs_no_token_and_is_on_every_response()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

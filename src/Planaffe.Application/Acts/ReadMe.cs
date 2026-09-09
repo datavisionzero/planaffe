@@ -17,8 +17,17 @@ public sealed record TokenRef(string Prefix, DateTimeOffset CreatedAt);
 
 /// <summary>
 /// The caller, as <c>GET /me</c> answers: an <see cref="IdentityRef"/> plus
-/// <c>administrator</c>, the <c>owner</c> of an agent, and the token.
+/// <c>administrator</c>, the <c>owner</c> of an agent, the token — and the one
+/// dial of the instance a client has to know to read a date it is shown.
 /// </summary>
+/// <param name="DeletionGraceDays">
+/// How long a deleted thing can be restored, as
+/// <c>PLANAFFE_DELETION_GRACE_DAYS</c> sets it. It is here rather than on every
+/// list that carries a <c>deleted_at</c>, because a screen that has the span
+/// can say the sentence for projects, epics, pages and labels alike without a
+/// field per list (PLAN-73). It is a floor and not a deadline (ADR 0013), so
+/// what a client computes from it is "restorable until at least".
+/// </param>
 public sealed record Me(
     Guid Id,
     IdentityKind Kind,
@@ -28,13 +37,14 @@ public sealed record Me(
     IdentityRef? Owner,
     TokenRef? Token,
     AgentMetadata? Metadata,
-    DateTimeOffset? MetadataReportedAt);
+    DateTimeOffset? MetadataReportedAt,
+    double DeletionGraceDays);
 
 /// <summary>
 /// Who am I — the one read every client makes first, to learn which kind of
 /// token it holds and under which name it will appear in the history.
 /// </summary>
-public sealed class ReadMe(ICallerIdentity callerIdentity, IIdentities identities)
+public sealed class ReadMe(ICallerIdentity callerIdentity, IIdentities identities, InstanceSettings settings)
 {
     public async Task<Me> ExecuteAsync(CancellationToken cancellationToken)
     {
@@ -59,6 +69,7 @@ public sealed class ReadMe(ICallerIdentity callerIdentity, IIdentities identitie
             owner is null ? null : IdentityRef.Of(owner),
             caller.SessionId is null ? new TokenRef(caller.TokenPrefix, caller.TokenCreatedAt) : null,
             agent?.Metadata,
-            agent?.MetadataReportedAt);
+            agent?.MetadataReportedAt,
+            settings.DeletionGrace.TotalDays);
     }
 }
