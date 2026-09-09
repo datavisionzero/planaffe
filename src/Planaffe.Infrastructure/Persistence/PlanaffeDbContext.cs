@@ -48,6 +48,9 @@ public sealed class PlanaffeDbContext(DbContextOptions<PlanaffeDbContext> option
     public DbSet<OneTimeSecret> OneTimeSecrets => Set<OneTimeSecret>();
     public DbSet<BrowserSession> BrowserSessions => Set<BrowserSession>();
 
+    /// <summary>One <c>pa login</c> in progress (ADR 0025).</summary>
+    public DbSet<DeviceLogin> DeviceLogins => Set<DeviceLogin>();
+
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<ProjectAccess> ProjectAccesses => Set<ProjectAccess>();

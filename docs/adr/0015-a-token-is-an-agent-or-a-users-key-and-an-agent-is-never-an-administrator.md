@@ -26,6 +26,14 @@ machine can read — the identity escape VISION 12 exists to close. A user token
 the same mechanism as the agent token, carried the same way, told apart by the
 server.
 
+This paragraph no longer holds, and
+[ADR 0025](./0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)
+says why: `pa login` puts nothing on disk and introduces no second mechanism —
+it collects a user token through a browser and keeps it in the operating
+system's keychain. The escape it was written against turned out to run the
+other way, through the environment variable an agent inherits from the shell it
+was started in. The rest of this ADR is untouched.
+
 **Not the agent's token, used by its owner.** Ownership answers *which* human is
 behind a token; it does not make the token's acts a human's acts. Review
 required, the expiring claim and the history all rest on telling the two apart.

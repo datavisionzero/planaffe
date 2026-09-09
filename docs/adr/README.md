@@ -48,3 +48,4 @@ material value to understanding the decision.
 - [0022 – A comment can be corrected and withdrawn by its author](./0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md)
 - [0023 – A dependency is a decision a human takes](./0023-a-dependency-is-a-decision-a-human-takes.md)
 - [0024 – The overview grades attention, not backlog size](./0024-the-overview-grades-attention-not-backlog-size.md)
+- [0025 – The console signs in through a browser, and what it keeps is a user token](./0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)

@@ -890,6 +890,51 @@ column and the index the section above describes. That is not a nicety: the
 wiki is flat because the search is what a hierarchy would have been for, so a
 page nothing finds is a page nothing leads to.
 
+## Device logins
+
+One `pa login` in progress (ADR 0025). It is the only row in this schema that
+ends by the clock rather than by an act.
+
+```sql
+create table device_login (
+    id                  uuid        not null primary key,
+    device_code_hash    bytea       not null unique,
+    user_code           varchar(8)  not null,
+    created_at          timestamptz not null,
+    expires_at          timestamptz not null,
+    approved_at         timestamptz,
+    approved_by_user_id uuid        references identity (id),
+    denied_at           timestamptz,
+    redeemed_at         timestamptz,
+    issued_token_id     uuid
+);
+
+create unique index one_live_login_per_code on device_login (user_code)
+    where approved_at is null and denied_at is null and redeemed_at is null;
+create index device_login_expiry on device_login (expires_at);
+```
+
+The CLI keeps the **device code** — 256 bits, `Base64Url` — and the table keeps
+only its SHA-256, the way it keeps a token secret. The **user code** is stored
+in the clear because it is not a credential: eight consonants, good for ten
+minutes, identifying a request to the human who has to be shown the code they
+typed. Confirming still takes a browser session of that human's.
+
+**The state is derived on read**, in the order of what already happened:
+redeemed, then denied, then expired, then approved, then pending. A redeemed
+login stays redeemed after it expires, and an approval nobody collected in time
+is expired rather than approved — otherwise a device code left in a CI log
+would still be worth something an hour later.
+
+`issued_token_id` records which user token the login produced. It carries no
+foreign key: the token is an ordinary user token from that moment on, revoked
+and listed like every other, and a device login is not a thing tokens hang off.
+
+**Rows are swept, not kept.** Beginning a login deletes those that expired more
+than an hour ago. The grace is what lets the CLI be told `device-expired`
+rather than `not-found` for the whole of its own ten-minute window, and an hour
+is long enough that no poll can outlive it.
+
 ## Bootstrap
 
 On startup, after the migrations, the instance looks at `identity`. If the table
