@@ -41,7 +41,7 @@ public sealed class ContractTests(PostgresFixture postgres)
         Assert.Equal(
             [
                 "/admin/projects", "/admin/smtp", "/admin/smtp/test",
-                "/agents", "/agents/{id}",
+                "/agents", "/agents/{id}", "/agents/{id}/token",
                 "/comments/{id}",
                 "/device-logins", "/device-logins/redeem", "/device-logins/{code}", "/device-logins/{code}/decide",
                 "/email-changes/confirm",

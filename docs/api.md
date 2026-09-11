@@ -361,7 +361,7 @@ one role and project access:
   ([ADR 0022](./adr/0022-a-comment-can-be-corrected-and-withdrawn-by-its-author.md)).
 - **A user may do everything an agent may**, plus create projects and change
   their switches, create agents and their own tokens, confirm or refuse a device
-  login, rename and revoke agents they own, and list agents — and take away anybody's comment, which is the
+  login, rename, revoke and rotate the token of agents they own, and list agents — and take away anybody's comment, which is the
   same clearing up ADR 0013 conceded for issues.
 - **An administrator** may in addition create users, rename and revoke any
   agent, and delete projects. Whoever bootstrapped the instance is one.
@@ -401,9 +401,10 @@ Where a rule differs between a user and an agent, the endpoint below says so.
 | `POST` | `/me/email` | user | `{ email }` — send a one-hour confirmation link to the new, still-unused address → 202 |
 | `POST` | `/email-changes/confirm` | anyone | `{ secret }` — consume the link and make its address effective → 204 |
 | `POST` | `/agents` | user | `{ name? }` → 201 with the agent (`IdentityRef` plus `owner`, `created_at`) and, once, `token: { prefix, secret }`. An omitted name is assigned |
-| `GET` | `/agents` | user | every agent with its owner, prefix, `created_at` and `revoked_at`; no pagination |
+| `GET` | `/agents` | user | every agent with its owner and its current token — the one that works, or the last that did — as `prefix`, `created_at` and `revoked_at`; no pagination |
 | `PATCH` | `/agents/{id}` | owner or administrator | `{ name }` — rename; the history keeps the id, so old entries show the new name |
 | `DELETE` | `/agents/{id}` | owner or administrator | revoke: `revoked_at` set, 204. The identity stays (ADR 0013) |
+| `POST` | `/agents/{id}/token` | owner or administrator | rotate: the token it holds is revoked and the next one issued in one transaction → 201 with `{ prefix, secret }`, shown once. A revoked agent authenticates again ([ADR 0026](./adr/0026-an-agents-token-is-rotated-and-revoking-is-no-longer-a-dead-end.md)) |
 | `GET` | `/tokens` | user | the caller's own user tokens: id, prefix, `created_at`, `revoked_at` |
 | `POST` | `/tokens` | user | 201 with `{ id, prefix, secret }` — a further key for the caller, shown once |
 | `DELETE` | `/tokens/{id}` | user | revoke one of the caller's own; 204 |

@@ -37,10 +37,12 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
         builder.Property(t => t.SecretHash).HasColumnName("secret_hash").IsRequired();
         builder.HasIndex(t => t.SecretHash).IsUnique().HasDatabaseName("token_secret_hash");
 
-        // An agent has exactly one token; a user as many as they create.
+        // An agent has exactly one token that works; a user as many as they
+        // create. Revoked rows are outside the filter, so rotating an agent's
+        // token can leave the old one standing beside the new (ADR 0026).
         builder.HasIndex(t => t.IdentityId)
             .IsUnique()
-            .HasFilter("kind = 'agent'")
+            .HasFilter("kind = 'agent' and revoked_at is null")
             .HasDatabaseName("token_agent");
 
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();

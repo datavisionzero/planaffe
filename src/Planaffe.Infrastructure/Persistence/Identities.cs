@@ -46,10 +46,16 @@ public sealed class Identities(PlanaffeDbContext context) : IIdentities
     public async Task<IReadOnlyList<User>> ListUsersAsync(CancellationToken cancellationToken) =>
         await context.Users.OrderBy(u => u.CreatedAt).ThenBy(u => u.Id).ToListAsync(cancellationToken);
 
-    // One statement for the list: the agent, its owner and its one token,
-    // which the partial unique index `token_agent` guarantees is one. Projected
-    // to a plain shape and built afterwards: EF Core translates joins on
-    // columns, not the construction of a record out of three entities.
+    // One statement for the list: the agent, its owner and its tokens.
+    // Projected to a plain shape and built afterwards: EF Core translates joins
+    // on columns, not the construction of a record out of three entities.
+    //
+    // An agent has one token that works and, once it has been rotated, the
+    // revoked ones behind it (ADR 0026). The row carries the current one, which
+    // is the working token where there is one and the last that worked where
+    // there is not — so a revoked agent still says when it was retired instead
+    // of dropping out of the list. The grouping keeps the order of the agents,
+    // which the query already sorted.
     public async Task<IReadOnlyList<AgentRow>> ListAgentsAsync(CancellationToken cancellationToken)
     {
         var rows = await (
@@ -60,7 +66,17 @@ public sealed class Identities(PlanaffeDbContext context) : IIdentities
             orderby agent.CreatedAt, agent.Id
             select new { agent, owner, token }).ToListAsync(cancellationToken);
 
-        return [.. rows.Select(row => new AgentRow(row.agent, row.owner, row.token))];
+        return
+        [
+            .. rows
+                .GroupBy(row => row.agent.Id)
+                .Select(tokensOfOne => tokensOfOne
+                    .OrderByDescending(row => row.token.RevokedAt is null)
+                    .ThenByDescending(row => row.token.CreatedAt)
+                    .ThenByDescending(row => row.token.Id)
+                    .First())
+                .Select(row => new AgentRow(row.agent, row.owner, row.token)),
+        ];
     }
 
     // One SaveChanges is one transaction: the identity and its token arrive

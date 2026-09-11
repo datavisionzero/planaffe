@@ -30,6 +30,8 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 			return 200, `{"id":"0198e0c0-0000-7000-8000-000000000003","kind":"user","name":"other","email":"other@example.test","state":"deactivated","administrator":false,"created_at":"2026-09-02T14:00:00.000000Z"}`
 		case r.URL.Path == "/users":
 			return 200, `[{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer","administrator":true,"created_at":"2026-09-02T14:00:00.000000Z"}]`
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/agents/") && strings.HasSuffix(r.URL.Path, "/token"):
+			return 201, issued
 		case r.Method == http.MethodPost && r.URL.Path == "/agents":
 			return 201, `{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"quiet-otter-42","owner":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"created_at":"2026-09-02T14:00:00.000000Z","token":` + issued + `}`
 		case r.URL.Path == "/agents":
@@ -66,6 +68,7 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		{[]string{"agent", "list"}, "GET", "/agents", nil, "quiet-otter-42", ""},
 		{[]string{"agent", "view", "0198e0c0-0000-7000-8000-000000000001"}, "GET", "/agents", nil, "environment: container", ""},
 		{[]string{"agent", "rename", "0198e0c0-0000-7000-8000-000000000001", "--name", "brisk-heron-7"}, "PATCH", "/agents/0198e0c0-0000-7000-8000-000000000001", map[string]any{"name": "brisk-heron-7"}, "renamed to brisk-heron-7", ""},
+		{[]string{"agent", "rotate", "0198e0c0-0000-7000-8000-000000000001"}, "POST", "/agents/0198e0c0-0000-7000-8000-000000000001/token", nil, "token: pa_secret-shown-once", "stopped working"},
 		{[]string{"agent", "revoke", "0198e0c0-0000-7000-8000-000000000001"}, "DELETE", "/agents/0198e0c0-0000-7000-8000-000000000001", nil, "revoked", ""},
 		// The same three by name. A name is unique across users and agents and
 		// never shaped like a UUID, so it goes into the path as it stands; the
@@ -74,6 +77,7 @@ func TestIdentityVerbsPrintSecretsOnceAndHitTheirEndpoints(t *testing.T) {
 		{[]string{"agent", "view", "quiet-otter-42"}, "GET", "/agents", nil, "environment: container", ""},
 		{[]string{"agent", "view", "QUIET-OTTER-42"}, "GET", "/agents", nil, "environment: container", ""},
 		{[]string{"agent", "rename", "quiet-otter-42", "--name", "brisk-heron-7"}, "PATCH", "/agents/quiet-otter-42", map[string]any{"name": "brisk-heron-7"}, "renamed to brisk-heron-7", ""},
+		{[]string{"agent", "rotate", "quiet-otter-42"}, "POST", "/agents/quiet-otter-42/token", nil, "token: pa_secret-shown-once", "stopped working"},
 		{[]string{"agent", "revoke", "quiet-otter-42"}, "DELETE", "/agents/quiet-otter-42", nil, "revoked", ""},
 		{[]string{"user", "deactivate", "other"}, "POST", "/users/other/deactivate", nil, "other deactivated", ""},
 		// A link the instance answered as a path, because it has not been told

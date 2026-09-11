@@ -8,9 +8,11 @@ namespace Planaffe.Domain.Identities;
 /// <para>
 /// <see cref="Kind"/> is copied from the identity so that authentication needs
 /// no join — that is the one thing ADR 0015 asks the server to do on every
-/// request. An agent has exactly one token and a user as many as they create;
-/// the partial unique index on the table holds the former, and there is no act
-/// that adds a token to an agent.
+/// request. An agent has exactly one token that works and a user as many as
+/// they create; the partial unique index on the table holds the former,
+/// counting only the rows that are not revoked. Rotating an agent's token
+/// revokes the one row and adds the next (ADR 0026); nothing else gives an
+/// agent a second one.
 /// </para>
 /// <para>
 /// The secret is shown once and stored as its SHA-256; <see cref="Prefix"/> is

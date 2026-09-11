@@ -73,6 +73,7 @@ builder.Services.AddScoped<CreateAgent>();
 builder.Services.AddScoped<ListAgents>();
 builder.Services.AddScoped<RenameAgent>();
 builder.Services.AddScoped<RevokeAgent>();
+builder.Services.AddScoped<RotateAgentToken>();
 builder.Services.AddScoped<ListTokens>();
 builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<RevokeToken>();

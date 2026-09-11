@@ -336,7 +336,7 @@ func adminSuffix(administrator bool) string {
 }
 
 func newAgent(g *globals) *cobra.Command {
-	cmd := &cobra.Command{Use: "agent", Short: "Agents: the identities runs work under, each with exactly one token."}
+	cmd := &cobra.Command{Use: "agent", Short: "Agents: the identities runs work under, each with exactly one token that works."}
 	var name string
 	create := &cobra.Command{
 		Use: "create [--name NAME]", Short: "Create an agent and its token, printed once. A name is assigned when none is given.", Args: cobra.NoArgs,
@@ -434,6 +434,31 @@ func newAgent(g *globals) *cobra.Command {
 		},
 	}
 	rename.Flags().StringVar(&newName, "name", "", "the new name")
+	// The one thing about an agent that could not be changed until it could:
+	// a leaked secret, or one simply old enough to replace, meant revoking the
+	// agent and creating a second one under a second name (ADR 0026).
+	rotate := &cobra.Command{
+		Use: "rotate AGENT", Short: "Give an agent its next token, by name or id, printed once; the one it holds stops working. A revoked agent works again.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			resp, err := c.RotateAgentTokenWithResponse(cmd.Context(), args[0])
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON201)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s rotated\ntoken: %s\n", args[0], resp.JSON201.Secret)
+			fmt.Fprintln(cmd.ErrOrStderr(), "pa: the token is shown once, and the one it replaces stopped working — a run still holding it fails on its next request.")
+			return nil
+		},
+	}
 	revoke := &cobra.Command{
 		Use: "revoke AGENT", Short: "Revoke an agent's token, by name or id. The identity stays, naming the agent in everything it did.", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -455,7 +480,7 @@ func newAgent(g *globals) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(create, list, view, rename, revoke)
+	cmd.AddCommand(create, list, view, rename, rotate, revoke)
 	return cmd
 }
 

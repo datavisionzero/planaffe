@@ -229,7 +229,9 @@ pa user deactivate USER · pa user reactivate USER
 pa user administrator USER --enabled=true|false
 pa me email ADDRESS                         # sends confirmation to the new address
 pa agent create [--name NAME]              # users only; the agent's one token, once
-pa agent list · pa agent view AGENT · pa agent rename AGENT --name NAME · pa agent revoke AGENT
+pa agent list · pa agent view AGENT · pa agent rename AGENT --name NAME
+pa agent rotate AGENT                      # the next token, once; the one it held stops working
+pa agent revoke AGENT
 pa token create · pa token list · pa token revoke <id>   # a token has no name; its id is the only address
 ```
 

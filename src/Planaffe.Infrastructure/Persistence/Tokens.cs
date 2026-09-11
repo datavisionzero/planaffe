@@ -21,9 +21,9 @@ public sealed class Tokens(PlanaffeDbContext context) : ITokens
     public Task<Token?> FindAsync(Guid id, CancellationToken cancellationToken) =>
         context.Tokens.SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
 
-    public Task<Token?> FindAgentTokenAsync(Guid agentId, CancellationToken cancellationToken) =>
+    public Task<Token?> FindActiveAgentTokenAsync(Guid agentId, CancellationToken cancellationToken) =>
         context.Tokens.SingleOrDefaultAsync(
-            t => t.IdentityId == agentId && t.Kind == IdentityKind.Agent, cancellationToken);
+            t => t.IdentityId == agentId && t.Kind == IdentityKind.Agent && t.RevokedAt == null, cancellationToken);
 
     public async Task<IReadOnlyList<Token>> ListUserTokensAsync(Guid userId, CancellationToken cancellationToken) =>
         await context.Tokens
@@ -40,4 +40,19 @@ public sealed class Tokens(PlanaffeDbContext context) : ITokens
 
     public Task RecordRevocationAsync(Token token, CancellationToken cancellationToken) =>
         context.SaveChangesAsync(cancellationToken);
+
+    // One SaveChanges is one transaction: the revocation the act just made on
+    // the tracked row and the row beside it are written together, and
+    // `token_agent` — which counts only what is not revoked — sees one working
+    // token throughout.
+    public async Task RotateAgentTokenAsync(Token? revoked, Token issued, CancellationToken cancellationToken)
+    {
+        if (revoked is not null && context.Entry(revoked).State == EntityState.Detached)
+        {
+            context.Tokens.Update(revoked);
+        }
+
+        context.Tokens.Add(issued);
+        await context.SaveChangesAsync(cancellationToken);
+    }
 }

@@ -125,3 +125,64 @@ it("moves between areas from an area, without growing the address", async () => 
   expect(screen.getByTestId("at")).toHaveTextContent("/settings/profile");
   expect(await screen.findByRole("heading", { name: "Profile" })).toBeInTheDocument();
 });
+
+// A revoked token is kept for good, because the identity it names wrote things
+// that are still there (ADR 0013). That is no reason for it to stand in front
+// of the agent that still works.
+it("hides revoked agents until they are asked for", async () => {
+  const retired = { ...anAgent, id: "0199a000-0000-7000-8000-00000000000b", name: "two", token: { ...anAgent.token, revoked_at: "2026-09-04T10:00:00Z" } };
+  settings({ "GET /agents": [anAgent, retired] }, "/settings/agents");
+  const user = userEvent.setup();
+
+  expect(await screen.findByText("one")).toBeInTheDocument();
+  expect(screen.queryByText("two")).not.toBeInTheDocument();
+
+  await user.selectOptions(screen.getByLabelText("Revoked"), "shown");
+
+  expect(screen.getByText("two")).toBeInTheDocument();
+});
+
+// "No user tokens." in front of somebody who has three revoked ones is a lie
+// they have no way to see through.
+it("says that a list is empty because the revoked are hidden, not because it is", async () => {
+  settings({ "GET /tokens": [{ ...aToken, revoked_at: "2026-09-04T10:00:00Z" }] }, "/settings/tokens");
+
+  expect(await screen.findByText("No active user tokens. Revoked ones are hidden.")).toBeInTheDocument();
+});
+
+/** Open one of the agent row's acts, which stand in its menu. */
+async function act(user: ReturnType<typeof userEvent.setup>, of: string, what: string) {
+  await user.click(await screen.findByRole("button", { name: `Actions for ${of}` }));
+  await user.click(await screen.findByRole("menuitem", { name: what }));
+}
+
+// An agent's token used to be the one thing about it that could not be
+// changed: a leaked secret meant a second agent under a second name.
+it("shows the new secret once when an agent's token is rotated", async () => {
+  settings({
+    "GET /agents": [anAgent],
+    [`POST /agents/${anAgent.id}/token`]: { status: 201, body: { id: anAgent.id, prefix: "pa_next", secret: "pa_thenextsecret", created_at: "2026-09-11T10:00:00Z" } },
+  }, "/settings/agents");
+  const user = userEvent.setup();
+
+  await act(user, "one", "Rotate token");
+  await user.click(await screen.findByRole("button", { name: "Rotate token" }));
+
+  expect(await screen.findByText("pa_thenextsecret")).toBeInTheDocument();
+  expect(screen.getAllByRole("status").map((x) => x.textContent)).toContain("one has a new token.");
+});
+
+// Revoking was a dead end until this act existed, and the wording says which
+// of the two the reader is doing.
+it("offers a revoked agent a new token rather than a rotation, and no revoke", async () => {
+  const retired = { ...anAgent, token: { ...anAgent.token, revoked_at: "2026-09-04T10:00:00Z" } };
+  settings({ "GET /agents": [retired] }, "/settings/agents");
+  const user = userEvent.setup();
+
+  await user.selectOptions(await screen.findByLabelText("Revoked"), "shown");
+  await user.click(screen.getByRole("button", { name: "Actions for one" }));
+
+  expect(await screen.findByRole("menuitem", { name: "New token" })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "Rotate token" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "Revoke" })).not.toBeInTheDocument();
+});

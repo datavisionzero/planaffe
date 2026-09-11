@@ -57,7 +57,9 @@ _Avoid_: bot, assistant, client, integration, machine user
 The credential of an agent **and** its record: it carries the agent's name and
 the metadata the agent reports about itself, is created by a human, shown once,
 and revoked rather than deleted, so that everything it ever signed keeps its
-author.
+author. **Rotating** it is a human's act too: the agent's next token, shown once
+like the first, with the one it held revoked in the same breath — an agent has
+one token that works, and keeps the ones that no longer do.
 _Avoid_: API key, secret, service account, credential
 
 **User Token**:

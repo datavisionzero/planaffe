@@ -169,6 +169,16 @@ public static class IdentityEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        door.MapPost("/agents/{id}/token", async (string id, RotateAgentToken rotate, CancellationToken cancellationToken) =>
+            {
+                var issued = await rotate.ExecuteAsync(id, cancellationToken);
+                return Results.Created($"/agents/{id}/token", issued);
+            })
+            .WithName("RotateAgentToken")
+            .WithSummary("Give an agent its next token, by name or id, shown once; the one it had is revoked. A revoked agent works again. Its owner or an administrator.")
+            .Produces<IssuedToken>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         door.MapPatch("/me/metadata", (AgentMetadataRequest? request, ReportAgentMetadata report, CancellationToken cancellationToken) =>
             {
                 request ??= new AgentMetadataRequest();

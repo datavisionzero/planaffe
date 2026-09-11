@@ -16,7 +16,10 @@ public sealed record TokenSummary(Guid Id, string Prefix, DateTimeOffset Created
     public static TokenSummary Of(Token token) => new(token.Id, token.Prefix, token.CreatedAt, token.RevokedAt);
 }
 
-/// <summary>An agent as <c>GET /agents</c> lists them: its owner and its one token beside it.</summary>
+/// <summary>
+/// An agent as <c>GET /agents</c> lists them: its owner and its current token
+/// beside it — the one that works, or the last that did (ADR 0026).
+/// </summary>
 public sealed record AgentSummary(
     Guid Id,
     IdentityKind Kind,

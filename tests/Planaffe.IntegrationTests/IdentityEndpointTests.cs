@@ -176,6 +176,82 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.NoContent, again.StatusCode);
     }
 
+    // An agent's token was the one thing about it that could not be changed:
+    // replacing a leaked secret meant revoking the agent and creating a second
+    // one, which left the first name taken and its history under an identity
+    // nothing could act as again (ADR 0026).
+    [Fact]
+    public async Task An_agents_token_is_rotated_and_a_revoked_agent_is_given_one_back()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+
+        using var created = await admin.PostAsJsonAsync("/agents", new { name = "quiet-otter-42" }, Ct);
+        var agent = await created.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        var id = agent.GetProperty("id").GetGuid();
+        var first = agent.GetProperty("token").GetProperty("secret").GetString()!;
+
+        // The next token arrives shown once, like the first, and is another one.
+        using var rotated = await admin.PostAsync($"/agents/{id}/token", null, Ct);
+        Assert.Equal(HttpStatusCode.Created, rotated.StatusCode);
+        var issued = await rotated.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        var second = issued.GetProperty("secret").GetString()!;
+        Assert.NotEqual(first, second);
+        Assert.Equal(second[..8], issued.GetProperty("prefix").GetString());
+
+        // The secret it replaces is dead from the next request on, and the new
+        // one is the same agent — not a second identity under a second name.
+        using var withFirst = instance.ClientWith(first);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await withFirst.GetAsync("/me", Ct)).StatusCode);
+
+        using var withSecond = instance.ClientWith(second);
+        var me = await withSecond.GetFromJsonAsync<JsonElement>("/me", Ct);
+        Assert.Equal(id, me.GetProperty("id").GetGuid());
+        Assert.Equal("quiet-otter-42", me.GetProperty("name").GetString());
+
+        // The list holds one agent, carrying the token that works.
+        var agents = await admin.GetFromJsonAsync<JsonElement>("/agents", Ct);
+        var listed = Assert.Single(agents.EnumerateArray());
+        Assert.Equal(second[..8], listed.GetProperty("token").GetProperty("prefix").GetString());
+        Assert.Equal(JsonValueKind.Null, listed.GetProperty("token").GetProperty("revoked_at").ValueKind);
+
+        // And revoking is no longer a dead end: the same act gives it a third.
+        using var revoked = await admin.DeleteAsync($"/agents/{id}", Ct);
+        Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await withSecond.GetAsync("/me", Ct)).StatusCode);
+
+        using var again = await admin.PostAsync($"/agents/{id}/token", null, Ct);
+        Assert.Equal(HttpStatusCode.Created, again.StatusCode);
+        var third = (await again.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("secret").GetString()!;
+        using var withThird = instance.ClientWith(third);
+        Assert.Equal(HttpStatusCode.OK, (await withThird.GetAsync("/me", Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Only_the_owner_or_an_administrator_rotates_an_agents_token()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        using var other = instance.ClientWith(await instance.AddActiveUserAsync("other"));
+
+        using var created = await other.PostAsJsonAsync("/agents", new { name = "quiet-otter-42" }, Ct);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+
+        using var third = instance.ClientWith(await instance.AddActiveUserAsync("third"));
+        using var refused = await third.PostAsync($"/agents/{id}/token", null, Ct);
+        await Problem(refused, HttpStatusCode.Forbidden, "forbidden");
+
+        // A name that is nobody's agent misses the way an unknown id does.
+        using var missing = await admin.PostAsync("/agents/nobody-at-all-9/token", null, Ct);
+        await Problem(missing, HttpStatusCode.NotFound, "not-found");
+
+        using var byOwner = await other.PostAsync($"/agents/quiet-otter-42/token", null, Ct);
+        Assert.Equal(HttpStatusCode.Created, byOwner.StatusCode);
+
+        using var byAdmin = await admin.PostAsync($"/agents/{id}/token", null, Ct);
+        Assert.Equal(HttpStatusCode.Created, byAdmin.StatusCode);
+    }
+
     [Fact]
     public async Task An_agent_without_a_name_is_given_one()
     {
@@ -201,6 +277,7 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
             (HttpMethod.Post, "/users"), (HttpMethod.Get, "/users"),
             (HttpMethod.Post, "/agents"), (HttpMethod.Get, "/agents"),
             (HttpMethod.Get, "/tokens"), (HttpMethod.Post, "/tokens"),
+            (HttpMethod.Post, "/agents/somebody/token"),
         })
         {
             using var request = new HttpRequestMessage(method, path);

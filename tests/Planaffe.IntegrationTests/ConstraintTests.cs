@@ -84,7 +84,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task An_agent_has_exactly_one_token()
+    public async Task An_agent_has_exactly_one_token_that_works()
     {
         await using var db = await Migrated.SeededAsync(postgres);
         db.Context.Tokens.Add(Token.Issue(db.Agent, "pa_abcde", Migrated.Hash("one"), Migrated.Now));
@@ -96,6 +96,29 @@ public sealed class ConstraintTests(PostgresFixture postgres)
             () => db.Context.SaveChangesAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal("token_agent", Assert.IsType<PostgresException>(refusal.InnerException).ConstraintName);
+    }
+
+    // The index counts what is not revoked, which is what makes rotating an
+    // agent's token something other than deleting the row it had (ADR 0026).
+    [Fact]
+    public async Task A_revoked_agent_token_leaves_room_for_the_next_one()
+    {
+        await using var db = await Migrated.SeededAsync(postgres);
+        var first = Token.Issue(db.Agent, "pa_abcde", Migrated.Hash("one"), Migrated.Now);
+        db.Context.Tokens.Add(first);
+        await db.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        first.Revoke(Migrated.Now);
+        db.Context.Tokens.Add(Token.Issue(db.Agent, "pa_fghij", Migrated.Hash("two"), Migrated.Now));
+        await db.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await using var reader = db.Reader();
+        var tokens = await reader.Tokens
+            .Where(token => token.IdentityId == db.Agent.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Single(tokens, token => !token.Revoked);
     }
 
     [Fact]

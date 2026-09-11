@@ -99,7 +99,9 @@ public sealed class AuthenticateTokenTests
         // Not on the authentication path.
         public Task<Token?> FindAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public Task<Token?> FindAgentTokenAsync(Guid agentId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Token?> FindActiveAgentTokenAsync(Guid agentId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task RotateAgentTokenAsync(Token? revoked, Token issued, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<Token>> ListUserTokensAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
 

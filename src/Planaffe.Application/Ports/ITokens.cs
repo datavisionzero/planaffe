@@ -25,14 +25,27 @@ public interface ITokens
 
     Task<Token?> FindAsync(Guid id, CancellationToken cancellationToken);
 
-    /// <summary>The one token of an agent — there is exactly one (<c>token_agent</c>).</summary>
-    Task<Token?> FindAgentTokenAsync(Guid agentId, CancellationToken cancellationToken);
+    /// <summary>
+    /// The token an agent authenticates with: the one of its rows that is not
+    /// revoked, of which <c>token_agent</c> admits at most one. A revoked agent
+    /// has none, and that is what <c>null</c> means here — never a missing row.
+    /// </summary>
+    Task<Token?> FindActiveAgentTokenAsync(Guid agentId, CancellationToken cancellationToken);
 
     /// <summary>A user's tokens, oldest first, revoked ones included.</summary>
     Task<IReadOnlyList<Token>> ListUserTokensAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>A further token for an identity that already has one — a user's, always.</summary>
     Task AddAsync(Token token, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// An agent's next token beside the revocation of the one it replaces, in
+    /// one transaction: no agent ever holds two that work, and none is left
+    /// with none because a second statement failed.
+    /// <paramref name="revoked"/> is null where the agent had no working token
+    /// — a revoked agent being given one back.
+    /// </summary>
+    Task RotateAgentTokenAsync(Token? revoked, Token issued, CancellationToken cancellationToken);
 
     /// <summary>Writes back the revocation just made on <paramref name="token"/>.</summary>
     Task RecordRevocationAsync(Token token, CancellationToken cancellationToken);

@@ -3,7 +3,8 @@ using Planaffe.Domain.Identities;
 namespace Planaffe.Application.Ports;
 
 /// <summary>
-/// An agent as <c>GET /agents</c> reads it: the row, its owner and its one token.
+/// An agent as <c>GET /agents</c> reads it: the row, its owner and its current
+/// token — the one that is not revoked, or the last one that was not.
 /// </summary>
 public sealed record AgentRow(Agent Agent, Identity Owner, Token Token);
 
