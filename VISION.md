@@ -75,6 +75,7 @@ That is the promise the CLI carries for the whole product: **the unit of measure
 - No native mobile app. The web app is responsive and works well on a phone — nothing more.
 - No time tracking, no billing, no reports or BI.
 - No git hosting. We may integrate with GitHub/GitLab later, but we do not replace them.
+- No document management in the knowledge base (18.): Markdown pages in a shallow tree, not attachments, approvals, macros, WYSIWYG or a review workflow for texts.
 
 ## 6. Product Components
 
@@ -173,16 +174,17 @@ The structure is backed by research (see [`docs/research/hierarchy-and-fields.md
 
 ```
 Instance
-└── Project           (key, e.g. PLAN → PLAN-42)
-    └── Epic          (optional — groups issues under one theme)
-        └── Issue     (the unit of work)
-            └── Sub-issue  (optional, exactly one level deep)
+├── Project           (key, e.g. PLAN → PLAN-42)
+│   └── Epic          (optional — groups issues under one theme)
+│       └── Issue     (the unit of work)
+│           └── Sub-issue  (optional, exactly one level deep)
+└── Space             (the knowledge base's bracket, with its own access — 18.)
+    └── Page          (Markdown, nested at most three levels deep)
 Comments              (on issues)
-History               (on issues, written by the system)
+History               (on issues and pages, written by the system)
 Questions             (on issues, open or answered)
 Labels                (defined per project)
 Releases              (per project, across epics)
-Pages                 (per project, a flat wiki)
 Users                 (human or agent)
 ```
 
@@ -195,6 +197,7 @@ That is the same shape Jira (epic → story → subtask) and GitLab (epic → is
 - Issue IDs are project-scoped short IDs (`PLAN-42`), quotable in branch names, commits and pull requests.
 - **Sub-issues are full issues:** their own key from the same sequence (`PLAN-43`, not `PLAN-42.1`), their own status, their own claim, their own `result`. The only thing they inherit from the parent is the epic, and they cannot set a different one — a theme that applies to the parent applies to its parts. Priority is copied, not inherited: a sub-issue is born with its parent's priority as a starting value and goes its own way from there. Urgency is a property of the unit, and a breakdown should not lose it four times over.
 - **The parent's gates apply to its parts.** A sub-issue is not workable while its parent is parked in `backlog`, closed, or waiting on an open blocker (condition 8 in 10.). Derived, not copied: the parent's blocker dissolves once, and the children follow. Without this rule, breaking a blocked ticket down would unblock it — `next` would hand out the parts of a whole that is still waiting.
+- **The space is the second bracket, and the only one besides the project.** It carries the knowledge that belongs to no project, it carries access of its own, and nothing of the tracker reaches into it: no issue, no epic, no release, no key. Why it exists and what it costs is section 18.; the page below is where it came from.
 - **A parent does not close itself** when its last child closes. It only becomes workable again (see 10.): usually some assembly, an acceptance step or at least a `result` remains to be written. Whoever does not need that closes it with one command. Closing a parent with open children goes through, with a warning that lists them — they are no longer workable from then on, visibly rather than silently.
 
 ### The Epic
@@ -302,6 +305,8 @@ Epic and release are orthogonal and do not fight: the **epic says what belongs t
 
 ### The Page
 
+> **Superseded by the knowledge base (18.), 12 September 2026.** The page is built and works, and it leaves the project again: the knowledge this section is about turned out to have a larger bracket than a project has, and one that carries access of its own. What stands below stands as the reasoning — why knowledge belongs on the instance rather than in the repository, and why a product for work needs a place for thinking. What changes is where a page lives, who may see it, and that it may have children. Two sentences below are reversed outright and say so where they stand. The one text that cannot follow the page into a space is the instructions, which come back to the project as a field of their own (15.3, 18.).
+
 Everything above either is an issue or brackets one. A project also holds knowledge that is no assignment at all: the architecture, the conventions, what an operator has to know, the reasoning nobody wants to reconstruct twice. That is the **page** — a flat wiki, one per project.
 
 Two reasons put it here rather than in the repository, and 2.1 already made both of them for the tracker itself. **In a public repository every half-thought is public**, which is the problem planaffe exists for. And **whoever may see the tickets may see the knowledge**: project access is one rule, and a second place with a second permission model is one rule too many — that is, after all, why wikis exist next to trackers at all.
@@ -320,7 +325,7 @@ A third reason only became visible while this was being decided. **planaffe has 
 
 **`updated_at` is the version**, as on an issue and an epic, so a page inherits the `If-Match` guard the epic's living description already needs (`docs/api.md`, "Concurrency on text fields") instead of getting a mechanism of its own. Human and agent edit the same text here, and both may: an agent that may write tickets may write pages.
 
-**Flat, and it stays flat.** No tree, no hierarchy, no table of contents — the full-text search is the navigation, and it already exists. No permission per page beyond project access, no attachments or images (guiding principle 6), no comments on a page, no templates, no draft-versus-published state. Whoever has something that has to be done writes a ticket; everything else in section 7 is for that.
+**Flat, and it stays flat.** *(Reversed by 18.: under a space, a page has children, at most three levels deep.)* No tree, no hierarchy, no table of contents — the full-text search is the navigation, and it already exists. No permission per page beyond project access, no attachments or images (guiding principle 6), no comments on a page, no templates, no draft-versus-published state. Whoever has something that has to be done writes a ticket; everything else in section 7 is for that.
 
 **What a page replaces:**
 
@@ -330,7 +335,7 @@ A third reason only became visible while this was being decided. **planaffe has 
 | A second place for ideas | An idea that wants to become a ticket is the stub (15.4), and the stub has a queue. One that never will is a line on a page. An entity in between would have no queue — which is exactly how it becomes a graveyard. |
 | Project-wide instructions as a field on the project (15.3) | Those instructions are one page with a switch, not a second kind of Markdown hanging on the project. 15.3 is absorbed here. |
 
-**One page of a project is its instructions.** The project designates exactly one — `CONTEXT.md` calls it that — and every agent is handed it with every ticket, because it travels inside the context package (15.5) rather than on a route of its own. A switch on each page instead would have been more flexible and worse: three marked pages are three pages of context on every ticket, and the context budget is the resource this whole section is written around (6.1, 2.2). Whoever needs more instructions writes them into that one page, and notices it growing. Designating it is a user's act, never an agent's: an agent that could point the project at a page would be writing its own instructions. Nothing of the kind exists on the epic — the epic has its description, and that is already delivered.
+**One page of a project is its instructions.** *(Reversed by 18.: the instructions become a field on the project, because they are the one text that must follow project access and nothing else.)* The project designates exactly one — `CONTEXT.md` calls it that — and every agent is handed it with every ticket, because it travels inside the context package (15.5) rather than on a route of its own. A switch on each page instead would have been more flexible and worse: three marked pages are three pages of context on every ticket, and the context budget is the resource this whole section is written around (6.1, 2.2). Whoever needs more instructions writes them into that one page, and notices it growing. Designating it is a user's act, never an agent's: an agent that could point the project at a page would be writing its own instructions. Nothing of the kind exists on the epic — the epic has its description, and that is already delivered.
 
 ## 8. Issue Fields
 
@@ -527,6 +532,7 @@ Multi-user is built in from the start — even if the first user works alone, th
 - A hidden cross-project blocker still blocks, but reveals no key, title or
   status. Lists, search, export, `next`, `needs-you` and direct key reads all use
   the same central access check.
+- **Space access is the same assignment, a second time.** A space (18.) is seen by the users named on it, and an agent inherits its owner's spaces minus every space closed to agents. Creating a space and granting access to one are a human's acts, like everything else in this list.
 - No fine-grained permission system, no field- or status-level rights, no role matrix.
 
 **Two kinds of token, and the agent token is the agent.** A **user token** is a human's key to the CLI: it authenticates as the user, is no identity of its own, and has no name, no metadata and no back channel. The console-minded human of 6.1 works under it as themselves — with a claim that does not expire (11.) and a close that goes to `done` (9.). An **agent token** is not a human's second key but the identity an agent works under; everything below is about agent tokens. That holds from the MVP on, because none of it can be retrofitted later without devaluing the history:
@@ -628,7 +634,7 @@ The page (7.) is the one item decided after those three cuts had been designed. 
 - Password sign-in, revocable browser sessions, email invitation and password recovery
 - A complete CLI with machine-readable output
 - A responsive web interface
-- Pages: the project's flat wiki — Markdown addressed by a slug, with history and in the search (see 7.)
+- Pages: the project's flat wiki — Markdown addressed by a slug, with history and in the search (see 7.) — built, and withdrawn again when the knowledge base arrives (18.)
 - A Docker Compose setup and documentation
 
 **Not included (deliberately deferred):**
@@ -640,6 +646,7 @@ The page (7.) is the one item decided after those three cuts had been designed. 
 - Custom fields, workflow designer, automations
 - Due dates, estimations, issue types, milestones (see 7. and 8.)
 - An MCP server (very likely comes soon after the MVP — the CLI is enough at first)
+- The knowledge base with its spaces (18.) — it is the first large block after 1.0, not a part of it
 
 ## 15. Roadmap After the MVP
 
@@ -668,6 +675,8 @@ What that is good for: what does an epic really cost? Which model handles which 
 ### 15.3 Project-wide instructions for agents
 
 > **Absorbed into the page (7.) and built, 6 September 2026.** These instructions are one page the project designates, not a second kind of Markdown on the project, and building them separately would have left the product with two of them. They are delivered inside the context package (15.5) and nowhere else. What follows is the reasoning, which stands; only the place has changed — and one detail with it, because a switch on every page would have let the context grow by marking more of them.
+>
+> **And moved once more, 12 September 2026.** With the page leaving the project for a space of its own (18.), the instructions come back to the project as a field of their own. The argument against that field was that it would be a second kind of Markdown on the project; there is no longer a first. The argument for the field is stronger than it was: this is the one text every agent is handed with every ticket, and it must follow project access and no second rule.
 
 The user stores a text on the project that is delivered to every agent with every ticket — a kind of system prompt for the project. "Tests run with `just test`", "no new dependencies without asking", "migrations always reversible".
 
@@ -794,5 +803,148 @@ Two things remain open, and neither blocks the start:
 
 - **The question does not close its own loop.** An agent asks, releases the ticket, and the ticket waits — for a human who has to look into "needs you" of their own accord, because transactional identity email does not imply event notifications. It is the only loop in the system that does not close by itself, and it sits precisely between two agent runs. Two things narrow it without closing it: `pa issue ask --wait` keeps the loop inside one run while a human is at the keyboard, and `pa needs-you --wait` lets the human be woken by a one-liner of their own (10.). What remains is the unattended case, and there is a second half to it: the human answers by talking to *one* agent, while the ticket is later picked up by *another*, which sees the question and the answer but not the conversation around them. Neither is a blocker — both are the reason general notifications sit as high on the roadmap as they do (15.1), and they are the measure of whether the question was worth being a state of its own.
 
+A fourth review, on 12 September 2026, added the knowledge base (18.) — so far
+the only deliberate widening of the product's boundary. It leaves 1.0 untouched
+and is built after it; what it reverses in 7. is marked where those sentences
+stand, and its own open points are at the end of the section.
+
 With that, the vision and all three cuts are decided, and the order of building
 is settled ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)).
+
+## 18. The Knowledge Base
+
+The tracker answers one question: what has to be done. Everything in the
+sections above either is an assignment or brackets one. This section is about
+the other half of what a working instance holds — what is true regardless of
+any assignment, and what belongs to no project: how a company handles data
+protection, how a handover works, what was decided about a customer two years
+ago and why. The page (7.) was the first answer to that and it was cut too
+small: it hangs on a project, and knowledge of this kind has none.
+
+**It is one product, separated in the interface, not in the deployment.** A
+second application would mean a second identity model, a second search, a
+second CLI and a second container — and every argument in 2.1 for one place for
+tickets holds word for word for one place for knowledge. What it does need is a
+visible border: whoever is in the knowledge base is not in the tracker, the way
+Confluence is not Jira. One instance, one sign-in, two areas, and it is never
+in doubt which one you are in.
+
+### The space
+
+A **space** is the bracket of the knowledge base and the only thing in it that
+carries access: a company, a domain, a customer, a handbook. Pages live in it,
+nothing lives beside it. Why it is a bracket of its own rather than a project,
+and why the switch below names the agent instead of the interface, is
+[ADR 0027](docs/adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md).
+
+- **A human creates a space, never an agent.** The same line 12. draws for
+  users, projects and tokens ([ADR 0015](docs/adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)):
+  whoever may open brackets may open one nobody watches. It also keeps the
+  number of spaces small enough that granting access stays a decision somebody
+  takes rather than a chore — which is the whole reason the level exists.
+- **Access is granted per user, exactly as project access is.** A space is seen
+  by the users named on it. No rights per page, no roles, no inheritance to
+  reason about: the same coarse model as in 12., a second time, and not a
+  second kind of model.
+- **A space is open to agents or closed to them.** The switch sits on the
+  space, and it is about the **agent**, not about the CLI — a space closed to
+  agents is closed on every route an agent will ever have, the MCP server of
+  15.1 included. An agent inherits its owner's spaces minus every closed one,
+  and a closed space is not one it may see but not read: it is not there at
+  all, not in a list, not in a search result, not under its own address.
+- The point is not secrecy for its own sake. An instance an agent writes into
+  will hold texts an agent has no business reading — a personnel matter, a
+  customer's contract, the half of a company that has nothing to do with
+  software. Without the switch those texts stay out of the product altogether,
+  and the product is worth less for it.
+
+### The page in a space
+
+A page stays what "The Page" in 7. made it: a Markdown document with a title, a
+body, a history of who changed what, and `updated_at` as its version with the
+`If-Match` guard on it. Two things change, and both come from the bracket.
+
+- **It has a place in a tree.** Pages hang under the space and under each
+  other, **at most three levels deep**. The limit is deliberate and hard, like
+  the sub-issue's one level: unlimited depth is the mechanism by which wikis of
+  this kind rot, and three carries a company, a topic and its detail. Whoever
+  needs a fourth has found a second space.
+- **Its address carries the tree:** the space, then the names from the root
+  down. Renaming stays allowed and the old address leads nowhere afterwards,
+  for the reasons [ADR 0021](docs/adr/0021-a-pages-address-is-its-slug-not-a-key.md)
+  gives — what that decision has to be told is that a slug is now unique under
+  its parent rather than in a project.
+
+What the page deliberately does not gain along with the tree: no comments, no
+attachments, no WYSIWYG, no templates or macros, no draft-versus-published
+state, no approval step, no access of its own. Guiding principles 3 and 6 hold
+here unchanged. The tree is the one concession, and the bracket asked for it.
+
+### Search, and getting the text out
+
+**The search is the navigation, and it is now the second one.** One full-text
+search across the knowledge base, over titles and bodies, with the same
+Postgres means everything else uses (13.), and it never returns a page from a
+space the caller cannot see — human or agent, one central check as in 12. It
+stays separate from the ticket search: whoever searches the knowledge base is
+asking a different question from whoever searches tickets, and one result list
+mixing both would have to explain itself in every row.
+
+**A page leaves as the Markdown it is.** One click downloads it as a `.md`
+file, because the text was never ours to hold on to — `pg_dump` and `pa export`
+are the instance's way out (13.), and this is the reader's. The CLI prints the
+same body on stdout, so an agent needs nothing added for it. Whether a whole
+space travels as a folder of files is worth having and not settled here.
+
+### What the agent may do
+
+Everything a human does with pages, minus one act:
+
+- Read, create, edit, move and delete pages in the spaces open to it.
+- Search the knowledge base, and receive one page complete — as `issue view`
+  delivers one issue complete, while a list stays slim
+  ([ADR 0012](docs/adr/0012-a-list-returns-a-slim-issue-and-only-a-single-issue-is-complete.md)).
+- **Never create, rename or delete a space, and never grant access to one.**
+
+That is the whole border, and it is the one 12. already draws: the agent works
+inside the brackets, the human draws them.
+
+### What this changes, and what it costs
+
+**It contradicts 7., and the contradiction is deliberate.** "Flat, and it stays
+flat" was written about a project's wiki and is right about one; this is not
+one. And "whoever may see the tickets may see the knowledge" — the sentence
+that kept a second permission model out — is exactly what falls. Knowledge
+belonging to no project cannot inherit a project's access, so it has to carry
+its own; the bracket and the hierarchy are the same decision seen twice
+([ADR 0027](docs/adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)).
+
+**The project's wiki is withdrawn.** Two wikis side by side would be the
+configuration orgy 1. promises not to be: two addresses, two searches, two
+places to look for the same sentence, and a rule nobody remembers about which
+knowledge goes where. What was a project page becomes a page in a space. The
+project keeps its tickets, its epics and its releases — and its instructions.
+
+**The instructions come back to the project as a field of their own.** They are
+the one text that cannot move: every agent is handed them with every ticket
+(15.5), so they must follow project access and nothing else. In a space they
+could be closed to the agent that needs them or invisible to a user who has the
+project, and a text that is sometimes delivered is worse than one that is
+always there. The argument that once sent them into a page — a second kind of
+Markdown on the project — dies with the page (15.3).
+
+**And the plan loses its free ride.** 7. put the plan-before-the-tickets on a
+project page, where everyone with project access found it without being named
+anywhere. It now lives in a space somebody is named on. That is what a bracket
+of its own costs, it is paid once per person, and it is the smaller price
+against knowledge that has nowhere to go.
+
+**When.** After 1.0. The MVP (14.) does not grow by this, and
+[ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md) orders the three
+cuts it stands after — as the page already did.
+
+**What is open.** Whether a space carries a short key like a project or is
+named like a page; whether a whole space can be downloaded at once; whether the
+tree may be reordered by hand or sorts itself; and what happens to a page whose
+parent is deleted. None of them changes the shape above, and each belongs to
+the epic that hits it first.

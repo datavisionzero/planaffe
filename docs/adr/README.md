@@ -50,3 +50,4 @@ material value to understanding the decision.
 - [0024 – The overview grades attention, not backlog size](./0024-the-overview-grades-attention-not-backlog-size.md)
 - [0025 – The console signs in through a browser, and what it keeps is a user token](./0025-the-console-signs-in-through-a-browser-and-keeps-a-user-token.md)
 - [0026 – An agent's token is rotated, and revoking is no longer a dead end](./0026-an-agents-token-is-rotated-and-revoking-is-no-longer-a-dead-end.md)
+- [0027 – The knowledge base hangs on a space, not on a project](./0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)
