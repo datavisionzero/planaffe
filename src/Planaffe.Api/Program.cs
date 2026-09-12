@@ -185,6 +185,7 @@ builder.Services.AddScoped<ChangeSpacePage>();
 builder.Services.AddScoped<MoveSpacePage>();
 builder.Services.AddScoped<DeleteSpacePage>();
 builder.Services.AddScoped<RestoreSpacePage>();
+builder.Services.AddScoped<SearchSpacePages>();
 
 builder.Services.AddScoped<ReleaseAssembler>();
 builder.Services.AddScoped<ListReleases>();

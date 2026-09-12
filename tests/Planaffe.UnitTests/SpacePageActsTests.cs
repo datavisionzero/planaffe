@@ -644,6 +644,9 @@ public sealed class SpacePageActsTests
             Task.FromResult(_identities.FirstOrDefault(i => i.Id == id));
 
         // Everything below is a port these acts hold and never reach.
+        public Task<IReadOnlyList<SpacePageHitRow>> SearchAsync(
+            IReadOnlyCollection<Guid> spaceIds, string query, int limit, CancellationToken cancellationToken) => throw Unasked();
+
         public Task<Space?> FindLiveAsync(string name, CancellationToken cancellationToken) => throw Unasked();
 
         Task<Space?> ISpaces.FindByIdAsync(Guid id, CancellationToken cancellationToken) => throw Unasked();

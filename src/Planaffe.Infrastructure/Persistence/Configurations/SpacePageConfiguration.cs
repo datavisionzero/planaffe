@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using NpgsqlTypes;
 using Planaffe.Domain.Identities;
 using Planaffe.Domain.Spaces;
 
@@ -62,6 +63,16 @@ public sealed class SpacePageConfiguration : IEntityTypeConfiguration<SpacePage>
             .HasColumnName("body")
             .HasDefaultValue(string.Empty)
             .IsRequired();
+
+        // The tree is one way to a page and the search is the other, and in
+        // the knowledge base the second one is the navigation a second time
+        // (VISION 18) — so it is the same column and the same `simple`
+        // configuration as everywhere else (docs/storage.md, Full-text
+        // search), over the title and the body.
+        builder.Property<NpgsqlTsVector>("Search")
+            .HasColumnName("search")
+            .HasComputedColumnSql("to_tsvector('simple', title || ' ' || body)", stored: true);
+        builder.HasIndex("Search").HasMethod("GIN").HasDatabaseName("space_page_search");
 
         builder.Property(p => p.CreatedBy).HasColumnName("created_by").IsRequired();
         builder.HasOne<Identity>()

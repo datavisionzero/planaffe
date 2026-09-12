@@ -122,7 +122,7 @@ public sealed class SchemaTests(PostgresFixture postgres)
                 "pk_blocker", "pk_browser_session", "pk_comment", "pk_device_login", "pk_epic", "pk_epic_label", "pk_history", "pk_idempotency",
                 "pk_identity", "pk_identity_metadata", "pk_issue", "pk_issue_label", "pk_label", "pk_one_time_secret", "pk_page", "pk_page_label", "pk_project", "pk_project_access", "pk_question", "pk_release",
                 "pk_release_issue", "pk_space", "pk_space_access", "pk_space_page", "pk_token", "project_access_user", "project_key", "question_issue", "question_open", "question_search", "release_issue_issue",
-                "release_name", "release_open", "space_access_user", "space_name", "space_page_slug", "token_agent", "token_secret_hash",
+                "release_name", "release_open", "space_access_user", "space_name", "space_page_search", "space_page_slug", "token_agent", "token_secret_hash",
             ],
             indexes);
 

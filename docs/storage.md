@@ -660,11 +660,14 @@ alter table question add column search tsvector
     generated always as (to_tsvector('simple', question || ' ' || coalesce(answer, ''))) stored;
 alter table page add column search tsvector
     generated always as (to_tsvector('simple', title || ' ' || body)) stored;
+alter table space_page add column search tsvector
+    generated always as (to_tsvector('simple', title || ' ' || body)) stored;
 
-create index issue_search    on issue    using gin (search);
-create index comment_search  on comment  using gin (search);
-create index question_search on question using gin (search);
-create index page_search     on page     using gin (search);
+create index issue_search      on issue      using gin (search);
+create index comment_search    on comment    using gin (search);
+create index question_search   on question   using gin (search);
+create index page_search       on page       using gin (search);
+create index space_page_search on space_page using gin (search);
 ```
 
 `simple`, not `english`: ticket text is written in whatever language the
@@ -675,6 +678,18 @@ a search box: words, `"a phrase"`, `-not`. `q` on the issue list matches the
 issue's own vector or that of any of its comments or questions; on the
 question list it matches the question's. No ranking — the list keeps its
 order, and `q` is one filter beside `label`.
+
+**The knowledge base is the one exception, and it is deliberate.** There the
+search is the navigation rather than a filter on a list somebody is already
+reading (VISION 18), so `space_page` is read with `ts_rank_cd` deciding the
+order and `ts_headline` cutting an excerpt out of the body, in one statement
+that also walks the tree to say where each hit stands. The excerpt is marked
+with `chr(2)` and `chr(3)` rather than with the `<b>` Postgres would use, and
+the body has both characters taken out of it before the excerpt is cut: what
+leaves the instance is a sequence of pieces with a flag each, never markup
+(ADR 0007). The set of spaces to look in is a parameter of that statement and
+not a filter on top of it, so a space closed to an agent is missing from the
+rows and from their number alike.
 
 ### Wake-ups
 
@@ -1016,8 +1031,12 @@ ever come round to it. Roots go first and the `parent_id` cascade takes their
 descendants along, which is also what makes a purged subtree leave in one
 piece.
 
-Full-text search over these pages is not here yet; it arrives with the search
-over the knowledge base, and with the column and index that search needs.
+**The page is in the full-text search**, over its title and its body, with the
+column and the index the section above describes — and it is the one place in
+this schema where a full-text read ranks. The tree is one way to a page and the
+search is the other, and in the knowledge base the second one is the navigation
+a second time, so a hit carries an order and an excerpt rather than a place in
+a list.
 
 ## Device logins
 
