@@ -837,6 +837,13 @@ nothing lives beside it. Why it is a bracket of its own rather than a project,
 and why the switch below names the agent instead of the interface, is
 [ADR 0027](docs/adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md).
 
+**It is addressed by its name, not by a key** — `/spaces/handbook`, unique
+across the instance, because there is no bracket above it in which it could be
+unique instead. A space is named in running text like the pages in it, never
+quoted in a commit message, so [ADR 0021](docs/adr/0021-a-pages-address-is-its-slug-not-a-key.md)
+answers this one too: renaming is allowed, the old address leads nowhere
+afterwards, and the whole knowledge base reads in one address form.
+
 - **A human creates a space, never an agent.** The same line 12. draws for
   users, projects and tokens ([ADR 0015](docs/adr/0015-a-token-is-an-agent-or-a-users-key-and-an-agent-is-never-an-administrator.md)):
   whoever may open brackets may open one nobody watches. It also keeps the
@@ -943,8 +950,7 @@ against knowledge that has nowhere to go.
 [ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md) orders the three
 cuts it stands after — as the page already did.
 
-**What is open.** Whether a space carries a short key like a project or is
-named like a page; whether a whole space can be downloaded at once; whether the
+**What is open.** Whether a whole space can be downloaded at once; whether the
 tree may be reordered by hand or sorts itself; and what happens to a page whose
 parent is deleted. None of them changes the shape above, and each belongs to
 the epic that hits it first.
