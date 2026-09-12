@@ -833,6 +833,34 @@ pages the title and the body. A filter, not a ranking: the list keeps its
 order. The CLI: `pa issue list -q "…"`, `pa question list -q "…"`,
 `pa page list -q "…"`.
 
+**The knowledge base is searched apart from all of this, and it ranks.** `GET
+/pages?q=…` is one full-text search across every space the caller may see —
+`space` narrows it to one by name, `limit` is 1 to 100 and defaults to 20, and
+`q` is required: the address is a search and not a list of every page in the
+instance. It stays separate from the search above because whoever searches the
+knowledge base is asking a different question from whoever searches tickets,
+and one list holding both would have to explain itself in every row.
+
+An answer is `SpacePageHit[]`, best first — `ts_rank_cd` orders, and the
+space's name, the title and the address decide a tie, so the same question
+twice is the same list twice. This is the one full-text read in the product
+that ranks: everywhere else `q` is a filter and the list keeps its own order,
+while here the search is what a reader navigates by (VISION 18).
+
+A hit carries where the page stands and what matched, and no body: `path`,
+`space`, `space_title`, `title`, `trail` — the pages above it from the space
+down, each with its address and title — and `excerpt`, which is a sequence of
+`{ text, hit }` rather than a string with markup in it. A client shows the
+matched words without guessing which they were, and nothing the instance writes
+is put into a browser's tree as HTML
+([ADR 0007](./adr/0007-markdown-is-rendered-in-the-browser-and-never-as-html.md)).
+The complete page is read under its own address (ADR 0012).
+
+Access is the query and not a filter over its result: the spaces to look in go
+into the statement, so a space closed to an agent is missing from the hits and
+from their number alike, and naming it in `space` is `not-found` — the answer a
+space that never existed gives (ADR 0027). The CLI: `pa space search "…"`.
+
 **A page has to be findable this way**, more than anything else here does: the
 wiki is flat because the search is what replaces the navigation a hierarchy
 would have given it (VISION 7). The command palette therefore asks both lists
@@ -1094,6 +1122,7 @@ same guarantee and for the same reason.
 | `POST` | `/spaces/{name}/pages/move` | any | `{ path, space?, parent? }`: the page under another parent, in this space or another one, with everything below it. `space` absent stays here, `parent` absent means directly under the space |
 | `DELETE` | `/spaces/{name}/pages/{path}` | any | soft delete, the subtree with it; `{ deleted }` says how many pages went |
 | `POST` | `/spaces/{name}/pages/restore` | any | `{ path }`: back, with exactly what went along |
+| `GET` | `/pages` | any | `q` required, `space?`, `limit?` → `SpacePageHit[]`, best first: the one full-text search across the knowledge base |
 
 **The address carries the tree** ([ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)):
 `{path}` is the slugs from the space down, separated by slashes, at most three
@@ -1141,6 +1170,14 @@ one is the state the rule exists to prevent.
 belonging to a deleted page says so: it stays spent until the purge, so a
 restore can never land on a name somebody else took. Under its own address a
 deleted page answers `deleted` with `restorable_until`.
+
+**The search is `GET /pages` and stands outside the space on purpose.** It
+searches the knowledge base and not one space (VISION 18), so it cannot hang
+under `/spaces/{name}`; a catch-all is already there, and `/spaces/search`
+would spend a name somebody may give a space — the reason a space is created
+through a dialog rather than at `/spaces/new`. `/pages` is free: the project's
+wiki is `/projects/{key}/pages`, and this is the word the knowledge base ends
+up with. The section "Search" below says what it answers.
 
 **A page carries no labels.** A label is defined per project and a space has
 none; this is the bracket's consequence rather than a field left for later.

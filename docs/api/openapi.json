@@ -517,6 +517,84 @@
         }
       }
     },
+    "/pages": {
+      "get": {
+        "tags": [
+          "planaffe"
+        ],
+        "summary": "Full-text search over the titles and bodies of the knowledge base's pages, best first, in the spaces the caller may see. `q` takes the words a search box takes and is required; `space` narrows to one space by name; `limit` is 1 to 100 and defaults to 20. A hit carries where the page stands and an excerpt, never a body.",
+        "operationId": "SearchPages",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "space",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SpacePageHit"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users": {
       "post": {
         "tags": [
@@ -8814,6 +8892,21 @@
           }
         }
       },
+      "ExcerptSegment": {
+        "required": [
+          "text",
+          "hit"
+        ],
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "hit": {
+            "type": "boolean"
+          }
+        }
+      },
       "HistoryEntry": {
         "required": [
           "id",
@@ -10598,6 +10691,58 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "SpacePageHit": {
+        "required": [
+          "path",
+          "space",
+          "space_title",
+          "title",
+          "trail",
+          "excerpt"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "space": {
+            "type": "string"
+          },
+          "space_title": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "trail": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpacePageStep"
+            }
+          },
+          "excerpt": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExcerptSegment"
+            }
+          }
+        }
+      },
+      "SpacePageStep": {
+        "required": [
+          "path",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },

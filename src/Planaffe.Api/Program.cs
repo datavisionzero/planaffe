@@ -278,6 +278,7 @@ app.MapEpics();
 app.MapPages();
 app.MapSpaces();
 app.MapSpacePages();
+app.MapKnowledgeSearch();
 app.MapReleases();
 app.MapSmtp();
 

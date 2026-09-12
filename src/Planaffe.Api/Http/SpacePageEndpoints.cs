@@ -166,4 +166,47 @@ public static class SpacePageEndpoints
 
         return endpoints;
     }
+
+    /// <summary>
+    /// The one search across the knowledge base (VISION 18), and it is
+    /// deliberately not under a space.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>/spaces/{name}/pages</c> could not hold it twice over: it is the
+    /// tree, a catch-all follows it and no literal segment can follow that,
+    /// and a <c>q</c> there would be a search that never reaches past one
+    /// space. <c>/spaces/search</c> is out for the reason a space is created
+    /// through a dialog rather than at <c>/spaces/new</c> — <c>search</c> is a
+    /// name somebody may take.
+    /// </para>
+    /// <para>
+    /// So it is <c>/pages</c>, which is free: the project's wiki lives under
+    /// <c>/projects/{key}/pages</c>, and it is the word the knowledge base
+    /// ends up with anyway. Without <c>q</c> the answer is <c>validation</c>
+    /// rather than every page in the instance — the address is a search and
+    /// not a list.
+    /// </para>
+    /// </remarks>
+    public static IEndpointRouteBuilder MapKnowledgeSearch(this IEndpointRouteBuilder endpoints)
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+
+        endpoints.MapGet(
+                "/pages",
+                (string? q, string? space, int? limit, SearchSpacePages search, CancellationToken cancellationToken) =>
+                    search.ExecuteAsync(q, space, limit, cancellationToken))
+            .RequireAuthorization()
+            .WithName("SearchPages")
+            .WithSummary(
+                "Full-text search over the titles and bodies of the knowledge base's pages, best first, in the spaces the caller may see. "
+                + "`q` takes the words a search box takes and is required; `space` narrows to one space by name; `limit` is 1 to 100 and defaults to 20. "
+                + "A hit carries where the page stands and an excerpt, never a body.")
+            .Produces<IReadOnlyList<SpacePageHitShape>>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        return endpoints;
+    }
 }
