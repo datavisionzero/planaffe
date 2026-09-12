@@ -66,7 +66,8 @@ Markdown and never a document model of its own
 | `/:project/settings/members` | Project settings · Members | who has access to the project | area list folds above the area |
 | `/spaces` | Spaces | every space the caller may see, and which of them is closed to agents | one column of rows |
 | `/spaces/:name` | Space | what stands directly under it, with its page tree in the navigation | the tree folds into the drawer |
-| `/spaces/:name/pages/:path` | Page in a space | the rendered Markdown, the path from the root down above it, and the download; editing it is guarded and a conflict is shown, not lost | one column; the path wraps rather than scrolls |
+| `/spaces/:name/new` | Create page in a space | the page it hangs under, the slug, the title and the Markdown body | one column |
+| `/spaces/:name/pages/:path` | Page in a space | the rendered Markdown, the path from the root down above it, the download, and then the four acts on the tree; editing it is guarded and a conflict is shown, not lost | one column; the path wraps rather than scrolls |
 | `/admin/users` | Administration · Users | invite, role and lifecycle, searchable and filtered by state; each row's acts in its menu | area list folds above the area |
 | `/admin/projects` | Administration · Projects | the instance's live projects, searchable and sortable; deleted ones on request, restored or deleted from the row | area list folds above the area |
 | `/admin/projects/:key` | Administration · One project | who has access to it, and granting or removing it | area list folds above the area |
@@ -85,6 +86,18 @@ the slashes between them part of the address
 ([ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)).
 `new` and `settings` under a space are the space's own screens and can never be
 a page, because a page's address always begins with `pages/`.
+
+**Renaming and moving a page are acts with a sentence in front of them**, not
+fields in the form that edits its text. Both change the address of the page and
+of every page below it, nothing forwards, and links written to the old ones stop
+working — so the sentence says how many pages hang underneath before anything is
+confirmed. Deleting says the same number, and afterwards the answer's own: a
+caller who asked about one page is told that three went, and the way back stands
+on the screen that deleted them. A page whose parent is still deleted cannot come
+back alone; there the refusal is a link to the page above rather than a sentence
+to read twice. The parent offered for a new page is never one on the third level,
+because there is no fourth — and the instance refuses it as well, which is what
+the offer is not a guarantee of.
 
 **A page leaves as the Markdown it is.** One button downloads the body as a
 `.md` file named after the slug — the text verbatim, with nothing of ours put

@@ -1,9 +1,10 @@
 import { BotOffIcon } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/shared/PageHeader";
-import { spacePagePath } from "@/shell/views";
+import { spacePagePath, spacePath } from "@/shell/views";
 import { childrenOf } from "./tree";
 import { usePageTree, useSpaceList } from "./useSpaces";
 
@@ -33,6 +34,7 @@ export function SpaceView() {
             Closed to agents
           </Badge>
         )}
+        <Button size="sm" render={<Link to={`${spacePath(name!)}/new`} />}>New page</Button>
       </PageHeader>
 
       <div className="max-w-3xl flex-1 p-4 md:p-6">

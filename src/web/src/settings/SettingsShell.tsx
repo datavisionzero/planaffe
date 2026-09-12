@@ -101,32 +101,6 @@ export function Section({ title, description, children }: { title: string; descr
 }
 
 /**
- * A labelled native select, sized like the `Input` standing beside it.
- *
- * The list heads need two of these and the access form needs one, and a
- * `<label>` around the control is how the rest of these screens says what a
- * field is: the name belongs to the control whether or not an id survives a
- * refactor.
- */
-export function Choose({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode }) {
-  const id = useId();
-
-  return (
-    <div className="grid gap-1 text-sm font-medium">
-      <label htmlFor={id}>{label}</label>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-9 rounded-md border bg-background px-2 text-sm font-normal"
-      >
-        {children}
-      </select>
-    </div>
-  );
-}
-
-/**
  * The head a list of any length carries: a search, whatever narrows it, and
  * what is left.
  *

@@ -1,10 +1,11 @@
 import { DownloadIcon } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { api, byAddress, codeOf, describe, type Problem } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ActionDialog, TextActionDialog } from "@/shared/ActionDialog";
 import { Markdown } from "@/shared/Markdown";
 import { MarkdownField } from "@/shared/MarkdownField";
 import { PageHeader } from "@/shared/PageHeader";
@@ -13,7 +14,8 @@ import { stale } from "@/shared/stale";
 import { spacePagePath, spacePath } from "@/shell/views";
 import type { SpacePage } from "./context";
 import { asFile, download } from "./download";
-import { trailOf } from "./tree";
+import { MoveDialog } from "./MoveDialog";
+import { ancestorsOf, descendantsOf, takesChildren, trailOf } from "./tree";
 import { usePageTree, useSpaceList } from "./useSpaces";
 
 type Load =
@@ -40,8 +42,12 @@ export function SpacePageView() {
   // The editor belongs to the page in the address: walking to another page
   // leaves no form open over a text it was never about.
   const [editingAt, setEditingAt] = useState<string>();
+  // What a delete left behind, for the page in the address: the way back is
+  // on the screen that deleted it rather than on a blank one.
+  const [removed, setRemoved] = useState<{ at: string; page: SpacePage; pages: number }>();
   const load: Load = state !== undefined && state.at === at ? state.load : { at: "asking" };
   const editing = editingAt === at;
+  const gone = removed !== undefined && removed.at === at ? removed : undefined;
 
   useEffect(() => {
     let live = true;
@@ -91,8 +97,33 @@ export function SpacePageView() {
     );
   }
 
+  const known = (page: SpacePage) => setState({ at: `${name}/${page.path}`, load: { at: "known", page } });
+
+  if (gone !== undefined) {
+    return (
+      <Gone
+        name={name}
+        page={gone.page}
+        pages={gone.pages}
+        onRestored={(back) => {
+          setRemoved(undefined);
+          known(back);
+        }}
+      />
+    );
+  }
+
   if (load.at === "failed") {
-    return <Absent name={name} path={path} why={load.why} code={load.code} until={load.until} />;
+    return (
+      <Absent
+        name={name}
+        path={path}
+        why={load.why}
+        code={load.code}
+        until={load.until}
+        onRestored={(back) => known(back)}
+      />
+    );
   }
 
   const page = load.page;
@@ -138,6 +169,16 @@ export function SpacePageView() {
         )}
 
         <section className="mt-6 border-t py-5">
+          <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Actions</h2>
+          <Acts
+            name={name}
+            page={page}
+            onChanged={(changed) => setState({ at: `${name}/${changed.path}`, load: { at: "known", page: changed } })}
+            onDeleted={(pages) => setRemoved({ at, page, pages })}
+          />
+        </section>
+
+        <section className="mt-6 border-t py-5">
           <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">About</h2>
           <dl className="grid gap-1 text-sm sm:grid-cols-[8rem_1fr]">
             <dt className="text-muted-foreground">Address</dt><dd className="font-mono text-xs">{page.path}</dd>
@@ -148,6 +189,165 @@ export function SpacePageView() {
         </section>
       </div>
     </>
+  );
+}
+
+/**
+ * What can be done to a page and to the tree under it. Renaming and moving are
+ * acts with a sentence in front of them rather than fields in the form that
+ * edits the text: each of them changes the address of this page and of every
+ * page below it, and nothing forwards (ADR 0021, ADR 0028). With a subtree
+ * that is more than one broken link, so the sentence says how many pages hang
+ * underneath.
+ */
+function Acts({ name, page, onChanged, onDeleted }: {
+  name: string;
+  page: SpacePage;
+  onChanged: (page: SpacePage) => void;
+  onDeleted: (pages: number) => void;
+}) {
+  const navigate = useNavigate();
+  const { tree, reload } = usePageTree();
+  const below = tree.at === "known" ? descendantsOf(tree.pages, page.path).length : 0;
+  const withIt = below === 0 ? "" : ` ${below} ${below === 1 ? "page hangs" : "pages hang"} below it and ${below === 1 ? "goes" : "go"} along.`;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {takesChildren(page.depth) && (
+        <Button variant="outline" render={<Link to={`${spacePath(name)}/new?parent=${encodeURIComponent(page.path)}`} />}>
+          New page below
+        </Button>
+      )}
+      <TextActionDialog
+        trigger={<Button variant="outline">Rename page</Button>}
+        title={`Rename ${page.slug}?`}
+        description={`The page moves to a new address, and so does everything under it. Nothing forwards: the old addresses lead nowhere afterwards and links written to them stop working.${withIt}`}
+        label="New slug"
+        initialValue={page.slug}
+        submitLabel="Rename page"
+        onSubmit={async (slug) => {
+          const { data, error, response } = await api.PATCH("/spaces/{name}/pages/{path}", {
+            ...byAddress,
+            params: { path: { name, path: page.path } },
+            body: { slug },
+          });
+
+          if (data === undefined) throw new Error(describe(error, response.status));
+
+          await reload();
+          onChanged(data);
+          void navigate(spacePagePath(name, data.path), { replace: true });
+        }}
+      />
+      <MoveDialog
+        page={page}
+        onMoved={(moved) => {
+          onChanged(moved);
+          void navigate(spacePagePath(moved.space, moved.path), { replace: true });
+        }}
+      />
+      <ActionDialog
+        trigger={<Button variant="destructive">Delete page</Button>}
+        title={`Delete ${page.slug}?`}
+        description={`The page is hidden from the space and can be brought back while its grace period lasts; its address stays taken until then.${withIt}`}
+        confirmLabel="Delete page"
+        onConfirm={async () => {
+          const { data, error, response } = await api.DELETE("/spaces/{name}/pages/{path}", {
+            ...byAddress,
+            params: { path: { name, path: page.path } },
+          });
+
+          if (data === undefined) throw new Error(describe(error, response.status));
+
+          await reload();
+          onDeleted(data.deleted);
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * What a delete leaves on the screen it was done from. Deleting takes the
+ * subtree, so the number is the answer's and not a guess: a caller who asked
+ * about one page has to learn that three went.
+ */
+function Gone({ name, page, pages, onRestored }: {
+  name: string;
+  page: SpacePage;
+  pages: number;
+  onRestored: (page: SpacePage) => void;
+}) {
+  return (
+    <>
+      <PageHeader title={page.title} meta={page.slug} />
+      <div className="m-auto grid max-w-md justify-items-center gap-3 p-8 text-center">
+        <p role="status">
+          {pages === 1 ? "This page is deleted." : `This page and the ${pages - 1} below it are deleted.`}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {pages === 1
+            ? "It can be brought back while its grace period lasts, and its address stays taken until then."
+            : "They can be brought back together while the grace period lasts, and their addresses stay taken until then."}
+        </p>
+        <Restore name={name} path={page.path} onRestored={onRestored} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * Bringing a page back, with exactly the pages that went with it. A page whose
+ * parent is still deleted is `transition`, and the way on is the page above —
+ * which is in the address, so it is a link here rather than a sentence to
+ * read twice.
+ */
+function Restore({ name, path, onRestored }: { name: string; path: string; onRestored: (page: SpacePage) => void }) {
+  const { reload } = usePageTree();
+  const [busy, setBusy] = useState(false);
+  const [why, setWhy] = useState<{ said: string; above: string | undefined }>();
+  const above = ancestorsOf(path).at(-1);
+
+  async function run() {
+    setBusy(true);
+    setWhy(undefined);
+
+    try {
+      const { data, error, response } = await api.POST("/spaces/{name}/pages/restore", {
+        params: { path: { name } },
+        body: { path },
+      });
+
+      if (data === undefined) {
+        setWhy({ said: describe(error, response.status), above: codeOf(error) === "transition" ? above : undefined });
+        return;
+      }
+
+      await reload();
+      onRestored(data);
+    } catch {
+      setWhy({ said: "The instance did not answer.", above: undefined });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grid justify-items-center gap-2">
+      <Button variant="outline" disabled={busy} onClick={() => void run()}>
+        {busy ? "Working…" : "Restore page"}
+      </Button>
+      {why !== undefined && (
+        <p role="alert" className="text-xs text-destructive">
+          {why.said}{" "}
+          {why.above !== undefined && (
+            <Link className="text-brand hover:underline" to={spacePagePath(name, why.above)}>
+              Restore the page above first
+            </Link>
+          )}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -183,12 +383,13 @@ function Trail({ name, path }: { name: string; path: string }) {
  * — and a deleted page says that it is deleted and until when, because that is
  * a page somebody here can have back.
  */
-function Absent({ name, path, why, code, until }: {
+function Absent({ name, path, why, code, until, onRestored }: {
   name: string;
   path: string;
   why: string;
   code: string | undefined;
   until: string | undefined;
+  onRestored: (page: SpacePage) => void;
 }) {
   const deleted = code === "deleted";
 
@@ -204,6 +405,7 @@ function Absent({ name, path, why, code, until }: {
               : `It can be brought back until ${when(until)}, and its address stays taken until then.`
             : "It may have been renamed or moved, or it may sit in a space this account is not named on."}
         </p>
+        {deleted && <Restore name={name} path={path} onRestored={onRestored} />}
         <Link className="text-sm text-brand hover:underline" to={spacePath(name)}>
           Back to the space
         </Link>

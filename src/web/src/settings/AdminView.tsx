@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/session/useSession";
+import { Choose } from "@/shared/Choose";
 import { PageHeader } from "@/shared/PageHeader";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { reporting } from "@/shared/report";
 import { date, day, restorableUntil, submitting } from "./forms";
-import { Choose, ListHead, Row, RowMenu, Rows, Said, Section, SettingsShell } from "./SettingsShell";
+import { ListHead, Row, RowMenu, Rows, Said, Section, SettingsShell } from "./SettingsShell";
 
 type User = Schemas["UserSummary"];
 type AccessLink = Schemas["AccessLink"];

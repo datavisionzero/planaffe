@@ -5,9 +5,10 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/session/useSession";
 import { ActionDialog, TextActionDialog } from "@/shared/ActionDialog";
+import { Choose } from "@/shared/Choose";
 import { reporting } from "@/shared/report";
 import { date, submitting } from "./forms";
-import { Choose, Row, RowMenu, Rows, Said, Secret, Section, SettingsShell } from "./SettingsShell";
+import { Row, RowMenu, Rows, Said, Secret, Section, SettingsShell } from "./SettingsShell";
 
 type Session = Schemas["BrowserSessionSummary"];
 type Token = Schemas["TokenSummary"];
