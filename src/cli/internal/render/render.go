@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -446,6 +448,54 @@ func PageSummaries(w io.Writer, items []api.PageSummary) {
 		fmt.Fprintf(w, "%-24s %-10s %s\n", p.Slug, p.UpdatedAt.Format("2006-01-02"), p.Title)
 	}
 }
+
+// Terminal says whether w is a terminal — the one question that decides
+// whether anything but text is written. A buffer, a pipe and a file are all
+// "no", which is what keeps `pa space search … > hits.txt` free of escapes.
+func Terminal(w io.Writer) bool {
+	file, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+// Hits prints what the knowledge base's search found: a line per hit — the
+// space, the address and the title — and the excerpt under it, indented.
+//
+// The excerpt arrives as pieces with a flag each, so the words that matched
+// are known rather than guessed at. They are drawn bold where the output is a
+// terminal and as plain text everywhere else: an escape in a pipe is noise in
+// somebody's parser.
+func Hits(w io.Writer, hits []api.SpacePageHit, marked bool) {
+	for _, hit := range hits {
+		fmt.Fprintf(w, "%-16s %-32s %s\n", hit.Space, hit.Path, hit.Title)
+
+		if excerpt := excerpt(hit.Excerpt, marked); excerpt != "" {
+			fmt.Fprintf(w, "    %s\n", excerpt)
+		}
+	}
+}
+
+// excerpt is the pieces as one line. An excerpt is cut out of a body with line
+// breaks in it and a hit is a row, so every run of whitespace inside a piece
+// becomes one space; the space before a matched word sits at the end of the
+// piece before it, which is what keeps the words apart without counting them.
+func excerpt(pieces []api.ExcerptSegment, marked bool) string {
+	var line strings.Builder
+	for _, piece := range pieces {
+		text := whitespace.ReplaceAllString(piece.Text, " ")
+		if marked && piece.Hit {
+			line.WriteString("\x1b[1m" + text + "\x1b[0m")
+			continue
+		}
+		line.WriteString(text)
+	}
+	return strings.TrimSpace(line.String())
+}
+
+var whitespace = regexp.MustCompile(`\s+`)
 
 // progress spells the counts the way VISION 7 does: `5 of 7 closed · 4 done · 1 canceled`.
 func progress(p api.Progress) string {

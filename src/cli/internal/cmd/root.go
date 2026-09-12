@@ -97,7 +97,7 @@ func newRoot(env Env) *cobra.Command {
 	})
 
 	root.AddCommand(newLogin(g), newLogout(g))
-	root.AddCommand(newInit(g), newNext(g), newNeedsYou(g), newStanding(g), newExport(g), newIssue(g), newQuestion(g), newProject(g), newLabel(g), newEpic(g), newPage(g), newRelease(g))
+	root.AddCommand(newInit(g), newNext(g), newNeedsYou(g), newStanding(g), newExport(g), newIssue(g), newQuestion(g), newProject(g), newLabel(g), newEpic(g), newPage(g), newSpace(g), newRelease(g))
 	root.AddCommand(identityCommands(g)...)
 	return root
 }
@@ -156,6 +156,15 @@ func (g *globals) dir() string {
 	}
 	dir, _ := os.Getwd()
 	return dir
+}
+
+// getenv is the environment this invocation runs in — the test's, where it
+// supplied one.
+func (g *globals) getenv(name string) string {
+	if g.env.Getenv != nil {
+		return g.env.Getenv(name)
+	}
+	return os.Getenv(name)
 }
 
 // requireProject is the one thing a command in a repository never has to say.

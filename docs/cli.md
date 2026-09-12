@@ -185,6 +185,10 @@ pa page edit architecture --body-file - --if-match "<updated_at>"
 pa page rename architecture betriebshandbuch   # the old slug leads nowhere afterwards (ADR 0021)
 pa page delete architecture · pa page restore architecture
 
+pa space search "onboarding pate"           # the knowledge base: the space, the address, the title, the excerpt under it
+pa space search "vertrag" --space personal  # one space by name
+pa space search "claim-held" --limit 5 --json
+
 pa release list
 pa release view unreleased | pa release view v1.2.0
 pa release publish v1.2.0 [--description-file notes.md]
@@ -234,6 +238,29 @@ pa agent rotate AGENT                      # the next token, once; the one it he
 pa agent revoke AGENT
 pa token create · pa token list · pa token revoke <id>   # a token has no name; its id is the only address
 ```
+
+`pa space search` is the knowledge base's search and it is not the ticket
+search: whoever searches the knowledge base is asking a different question from
+whoever searches tickets, and one list holding both would have to explain
+itself in every row. It searches the titles and the bodies of the pages in
+every space the caller may see, best first — `--space` narrows to one by name,
+`--limit` is 1 to 100 — and a hit prints as the space, the address and the
+title, with the excerpt under it, on one line however many the body had. The
+words that matched are drawn bold where the output is a terminal and as plain
+text everywhere else, `NO_COLOR` included: the instance sends the excerpt in
+pieces that say which of them matched, so nothing here is guessed and nothing
+is written into a pipe that a parser has to step over. A search with no words
+is a usage mistake (exit 2) rather than a question to the instance; a space the
+caller has not got is `not-found` in the instance's own words, because it is
+the answer a space that does not exist gives (ADR 0027). Nothing found prints
+one sentence and is exit 0 — under `--json` it is the empty list and nothing
+else.
+
+The word is `space` rather than `page` on purpose. `pa page` is the project's
+wiki and points somewhere else entirely, and a `pa page search` answering about
+the knowledge base while `pa page list` answered about a project would be the
+one ambiguity this product must not have. The rest of what a person does with a
+space and its pages hangs under `pa space` as it arrives.
 
 A page is addressed by its slug, which is given and never derived from the
 title. Renaming is its own verb rather than a flag on `edit`, because moving an
