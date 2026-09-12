@@ -168,7 +168,7 @@ it("groups by epic when the epic is the sort key, and names the group without on
   // The head carries the key and the epic's own title, and the run that hangs
   // under no epic says so rather than trailing off the end of the list. The
   // key is asked of the head itself, because the rows under it name it too.
-  const heads = [...document.querySelectorAll("[role=presentation]")];
+  const heads = Array.from(document.querySelectorAll("[role=presentation]"));
   expect(heads.some((head) => head.textContent?.includes("PLAN-E1") && head.textContent?.includes("The shell"))).toBe(true);
   expect(screen.getByText("No epic")).toBeInTheDocument();
   // Heads are not options: the listbox still holds only the three issues.
