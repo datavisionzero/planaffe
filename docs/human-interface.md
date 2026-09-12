@@ -64,6 +64,8 @@ Markdown and never a document model of its own
 | `/:project/settings/general` | Project settings · General | name, the two switches and project deletion | area list folds above the area |
 | `/:project/settings/instructions` | Project settings · Instructions | which page of the wiki every agent is handed with every ticket, and a link into it | area list folds above the area |
 | `/:project/settings/members` | Project settings · Members | who has access to the project | area list folds above the area |
+| `/spaces` | Spaces | every space the caller may see, and which of them is closed to agents | one column of rows |
+| `/spaces/:name` | Space | what stands directly under it, with its page tree in the navigation | the tree folds into the drawer |
 | `/admin/users` | Administration · Users | invite, role and lifecycle, searchable and filtered by state; each row's acts in its menu | area list folds above the area |
 | `/admin/projects` | Administration · Projects | the instance's live projects, searchable and sortable; deleted ones on request, restored or deleted from the row | area list folds above the area |
 | `/admin/projects/:key` | Administration · One project | who has access to it, and granting or removing it | area list folds above the area |
@@ -79,15 +81,36 @@ addressed by its name, so `/PLAN/pages/architecture` is the whole address and
 there is no number to look up.
 
 The application shell persists around every project route. Its project switcher
-contains only projects the caller can access. The shell binds five shortcuts:
+contains only projects the caller can access. The shell binds six shortcuts:
 `⌘K` opens the command palette, `⌘B` folds the sidebar, `p` opens the project
-switcher, `c` creates an issue in the project the frame is standing in, and `?`
-opens the overview of every key the application binds. `p`, `c` and `?` are bare
-keys, because `⌘P` belongs to the browser's print dialog and an issue tracker is
-worth printing. Creating belongs to the project rather than to a list of it, so
-`c` answers on every screen of a project and not only on the three that are
-issue lists. Non-administrators do not see the admin entry,
+switcher, `s` opens the space switcher in the knowledge base, `c` creates an
+issue in the project the frame is standing in, and `?`
+opens the overview of every key the application binds. `p`, `s`, `c` and `?` are
+bare keys, because `⌘P` belongs to the browser's print dialog and an issue
+tracker is worth printing. Creating belongs to the project rather than to a list
+of it, so `c` answers on every screen of a project and not only on the three that
+are issue lists, and `s` answers where there is a space to switch, which is the
+same rule. Non-administrators do not see the admin entry,
 but hiding navigation is never the authorization check.
+
+**The knowledge base is the second area of the same application** (VISION 18).
+One shell, one sign-in, and the frame says which of the two a reader is in: under
+`/spaces` the header carries the space switcher where the tracker carries the
+project switcher, and the navigation carries the space's page tree where the
+tracker carries the views of a project. Neither borrows from the other — there is
+no project in the knowledge base and no space in the tracker — and the one door
+between them stands at the foot of the navigation, "Knowledge base" on one side
+and "Tracker" on the other. The two counts below are not in the knowledge base
+either: they are about work that is waiting, and nothing in a space waits for
+anybody.
+
+Several of the application's addresses are also addresses of the API —
+`/projects`, `/admin/projects`, `/spaces` — because the API carries no prefix of
+its own and both are served from one origin. Which of the two a `GET` belongs to
+is decided by the browser's own `Sec-Fetch-Dest: document`, and by an `Accept`
+asking for HTML where that header is absent: a navigation is the screen, and
+everything else is the instance. A path with an extension is never a screen, so
+the contract stays reachable in a browser tab.
 
 "Needs you" and "In progress" in that navigation carry counts — what is waiting
 for a human, and what is being worked on — so that a reader standing on another

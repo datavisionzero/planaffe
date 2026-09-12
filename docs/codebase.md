@@ -124,7 +124,13 @@ because routing matches literals without regard to case and a guard that
 compared the path let `/Issues/PLAN-1` past unchecked. It is not the only
 check: every act that loads project content asks the same scope itself, and
 collection acts carry it into their store queries, so search and unfiltered
-lists cannot step around it either. The later MCP server will be a second adapter over the same acts and
+lists cannot step around it either. Several of the SPA's addresses are
+endpoints as well — `/projects`, `/admin/projects`, `/spaces` — because the API
+carries no prefix and both are served from one origin, so
+`Http/BrowserNavigation.cs` is the one place that says which of the two a `GET`
+belongs to: it reads the browser's own `Sec-Fetch-Dest` before routing chooses,
+and `src/web/vite.config.ts` makes the same decision for the development server
+from the other side. The later MCP server will be a second adapter over the same acts and
 not a second way into the data.
 
 ## The CLI is a client, not a layer
@@ -166,8 +172,16 @@ published output.
 Its own layout follows the shell
 ([ADR 0006](./adr/0006-the-web-application-is-a-shell-before-it-is-a-screen.md)):
 one folder per area — `shell`, `issues`, `epics`, `pages`, `releases`,
-`projects`, `settings`, `session`, `shared`, `api` — where each area owns its screens and
-`shell/Shell.tsx` owns the routes. Every key the application binds is declared
+`projects`, `spaces`, `settings`, `session`, `shared`, `api` — where each area owns its screens and
+`shell/Shell.tsx` owns the routes. `spaces` is the knowledge base, which is the
+second area of the same application rather than a second application
+([ADR 0027](./adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)):
+the shell reads the address, and under `/spaces` the header carries the space
+switcher and the sidebar the space's page tree instead of a project's views.
+That tree is read once for the frame — `spaces/useSpaces.ts`, beside the spaces
+themselves — and handed to the screens through a context, because it is the
+navigation and the path above a page at the same time, and asking twice would
+make the two disagree. Every key the application binds is declared
 once in `shell/shortcuts.ts`, which the handlers in the shell, the list and the
 palette compare against and which `shell/ShortcutsDialog.tsx` draws, so the
 overview a reader opens cannot drift away from what is bound. What is waiting

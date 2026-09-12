@@ -16,10 +16,15 @@ import { ProjectsContext } from "@/projects/context";
 import { useProjects, type Projects } from "@/projects/useProjects";
 import { ReleasesView } from "@/releases/ReleasesView";
 import { SettingsView } from "@/settings/SettingsView";
+import { SpacesContext, TreeContext } from "@/spaces/context";
+import { SpaceSwitcher } from "@/spaces/SpaceSwitcher";
+import { SpacesView } from "@/spaces/SpacesView";
+import { SpaceView } from "@/spaces/SpaceView";
+import { useSpaceState, useTreeState } from "@/spaces/useSpaces";
 import { AdminView } from "@/settings/AdminView";
 import { ProjectSettingsView } from "@/settings/ProjectSettingsView";
 import { AccountMenu } from "./AccountMenu";
-import { AppSidebar } from "./AppSidebar";
+import { AppSidebar, type Area } from "./AppSidebar";
 import { AttentionContext } from "./attention";
 import { useAttentionState } from "./useAttention";
 import { Palette } from "./Palette";
@@ -56,8 +61,11 @@ export function Shell() {
   const navigate = useNavigate();
   const list = useProjects();
   const projects = list.projects;
+  const spaceList = useSpaceState();
+  const spaces = spaceList.spaces;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [spacesOpen, setSpacesOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const match = matchPath("/:project/*", location.pathname);
@@ -69,6 +77,26 @@ export function Shell() {
     projects.at === "known" && projectKey !== undefined
       ? projects.projects.find((project) => project.key === projectKey)
       : undefined;
+
+  // Which of the two areas the frame is standing in (VISION 18). It is read
+  // from the address like everything else about the frame: the knowledge base
+  // begins at `/spaces`, and nothing else in the application starts there.
+  const inSpace = matchPath("/spaces/:name/*", location.pathname) ?? matchPath("/spaces/:name", location.pathname);
+  const knowledge = location.pathname === "/spaces" || inSpace !== null;
+  const spaceName = inSpace?.params.name;
+  const openPage = matchPath("/spaces/:name/pages/*", location.pathname)?.params["*"];
+  const space =
+    spaces.at === "known" && spaceName !== undefined
+      ? spaces.spaces.find((one) => one.name === spaceName)
+      : undefined;
+
+  // The tree of the open space, read once for the frame and the screens
+  // together. Outside the knowledge base nothing is read at all.
+  const pageTree = useTreeState(spaceName);
+
+  const area: Area = knowledge
+    ? { at: "knowledge", space, name: spaceName, tree: pageTree.tree, path: openPage }
+    : { at: "tracker", project: current };
 
   // The keys the frame itself owns, read from `shortcuts.ts` so that this
   // handler and the overview it feeds cannot come apart. `p`, `?` and `c` are
@@ -96,6 +124,13 @@ export function Shell() {
       if (is("global:projects", event)) {
         event.preventDefault();
         setSwitcherOpen(true);
+      } else if (is("global:spaces", event) && knowledge) {
+        // The key of the area it belongs to, the way `c` is the key of a
+        // project: in the tracker there is no space switcher to open, and a
+        // shortcut that answers where its subject is not would be a surprise
+        // rather than a shortcut.
+        event.preventDefault();
+        setSpacesOpen(true);
       } else if (is("global:shortcuts", event)) {
         event.preventDefault();
         setShortcutsOpen(true);
@@ -109,7 +144,7 @@ export function Shell() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [current, navigate]);
+  }, [current, knowledge, navigate]);
 
   // How much is waiting for a human, held once for the frame: the sidebar
   // draws the number and the "Needs you" screen shares the wake pulse that
@@ -123,21 +158,36 @@ export function Shell() {
     // navigation): a screen that adds a project asks the frame to catch up
     // rather than leaving it on a list the new project is not in.
     <ProjectsContext.Provider value={list}>
+    <SpacesContext.Provider value={spaceList}>
+    <TreeContext.Provider value={pageTree}>
     <AttentionContext.Provider value={attention}>
     <SidebarProvider>
-      <AppSidebar project={current} />
+      <AppSidebar area={area} />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
           <SidebarTrigger className="md:hidden" />
           <Separator orientation="vertical" className="mr-1 h-4! md:hidden" />
-          <ProjectSwitcher
-            projects={projects}
-            current={current}
-            viewPath={currentView}
-            open={switcherOpen}
-            onOpenChange={setSwitcherOpen}
-            reload={list.reload}
-          />
+          {/* The bracket of the area the reader is in, and only that one:
+              there is no project in the knowledge base and no space in the
+              tracker, so the header carries one switcher and never two. */}
+          {knowledge ? (
+            <SpaceSwitcher
+              spaces={spaces}
+              current={space}
+              open={spacesOpen}
+              onOpenChange={setSpacesOpen}
+              reload={spaceList.reload}
+            />
+          ) : (
+            <ProjectSwitcher
+              projects={projects}
+              current={current}
+              viewPath={currentView}
+              open={switcherOpen}
+              onOpenChange={setSwitcherOpen}
+              reload={list.reload}
+            />
+          )}
           <div className="flex-1" />
           <Button
             variant="outline"
@@ -166,6 +216,8 @@ export function Shell() {
           <Route path="/settings/*" element={<SettingsView />} />
           <Route path="/admin/*" element={<AdminView />} />
           <Route path="/projects" element={<OverviewView />} />
+          <Route path="/spaces" element={<SpacesView />} />
+          <Route path="/spaces/:name" element={<SpaceView />} />
           <Route path="/projects/new" element={<NewProjectView />} />
           <Route path="/:project">
             <Route index element={<Navigate to="ready" replace />} />
@@ -196,11 +248,16 @@ export function Shell() {
         onOpenChange={setPaletteOpen}
         projects={known}
         current={current}
+        spaces={spaces.at === "known" ? spaces.spaces : []}
+        space={space}
+        pages={pageTree.tree.at === "known" ? pageTree.tree.pages : []}
         onShortcuts={() => setShortcutsOpen(true)}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </SidebarProvider>
     </AttentionContext.Provider>
+    </TreeContext.Provider>
+    </SpacesContext.Provider>
     </ProjectsContext.Provider>
   );
 }

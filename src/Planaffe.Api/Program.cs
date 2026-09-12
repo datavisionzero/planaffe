@@ -243,6 +243,11 @@ if (trustedProxies.Configured)
 app.UseSerilogRequestLogging();
 app.UsePlanaffeVersion();
 
+// Before routing, because this decides whose address a path is: several of the
+// application's screens stand where an endpoint also answers, and only the
+// browser's own headers say which of the two a request is (BrowserNavigation).
+app.UsePlanaffeBrowserNavigation();
+
 // Explicit, because two middlewares below read what routing decided rather than
 // what the caller typed: the project-scope door reads the endpoint's route
 // pattern, and the CSRF guard its `AllowAnonymous` metadata. A host adds this

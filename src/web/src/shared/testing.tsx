@@ -90,3 +90,36 @@ export const aProject = {
   created_at: "2026-09-02T10:00:00Z",
   updated_at: "2026-09-02T10:00:00Z",
 };
+
+export const aSpace = {
+  name: "handbook",
+  title: "The company handbook",
+  closed_to_agents: false,
+  author: { id: aUser.id, kind: "user" as const, name: aUser.name },
+  created_at: "2026-09-02T10:00:00Z",
+  updated_at: "2026-09-02T10:00:00Z",
+  deleted_at: null,
+};
+
+/**
+ * A page of a space, from its address: the slug, the parent and the depth are
+ * what the address already says (ADR 0028), so a test writes the address and
+ * not the same thing four times.
+ */
+export function aSpacePage(path: string, title: string, space = aSpace.name) {
+  const segments = path.split("/");
+
+  return {
+    path,
+    space,
+    slug: segments[segments.length - 1]!,
+    parent: segments.length > 1 ? segments.slice(0, -1).join("/") : null,
+    depth: segments.length - 1,
+    title,
+    body: "",
+    author: { id: aUser.id, kind: "user" as const, name: aUser.name },
+    updated_by: { id: aUser.id, kind: "user" as const, name: aUser.name },
+    created_at: "2026-09-02T10:00:00Z",
+    updated_at: "2026-09-02T10:00:00Z",
+  };
+}

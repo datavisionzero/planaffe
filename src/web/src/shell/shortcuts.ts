@@ -18,6 +18,7 @@ export type ShortcutId =
   | "global:palette"
   | "global:sidebar"
   | "global:projects"
+  | "global:spaces"
   | "global:shortcuts"
   | "global:create"
   | "list:next"
@@ -54,6 +55,11 @@ export const modLabel =
 export const shortcuts: Shortcut[] = [
   { id: "global:palette", key: "k", mod: true, what: "Search or jump to anything", group: "Global" },
   { id: "global:projects", key: "p", what: "Switch project", group: "Global" },
+  // The same job in the other area (VISION 18). Two keys rather than one that
+  // means different things in different places: the overview `?` draws says
+  // what each of them does, and "switch the bracket you are in" is not a
+  // sentence anybody would read as an answer.
+  { id: "global:spaces", key: "s", what: "Switch space, in the knowledge base", group: "Global" },
   { id: "global:sidebar", key: "b", mod: true, what: "Fold the navigation", group: "Global" },
   { id: "global:shortcuts", key: "?", what: "Show this list", group: "Global" },
   // Creating belongs to the project, not to a list of it: the key answered on

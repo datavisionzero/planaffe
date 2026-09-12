@@ -153,6 +153,33 @@ export function pagePath(project: string, slug: string): string {
   return `/${project}/pages/${encodeURIComponent(slug)}`;
 }
 
+/**
+ * The address of a space. The knowledge base is the second bracket and sits at
+ * the root beside the projects rather than inside one (ADR 0027), so its
+ * addresses start at `/spaces` — the same ones the contract uses, because a
+ * space is named in running text and one form of that name is enough.
+ */
+export function spacePath(name: string): string {
+  return `/spaces/${encodeURIComponent(name)}`;
+}
+
+/**
+ * The address of a page in a space: the space, then the slugs from the root
+ * down (ADR 0028). Each segment is escaped on its own — the slashes are the
+ * address and not something inside a name, which is the same thing the
+ * contract's catch-all parameter says.
+ *
+ * `pages` stands between the space and the path so that a page can never be
+ * confused with what the space itself carries: `/spaces/handbook/new` and
+ * `/spaces/handbook/settings` are the space's own screens, and no page reaches
+ * them because every page address begins with `pages/`.
+ */
+export function spacePagePath(space: string, path: string): string {
+  const segments = path.split("/").filter((segment) => segment !== "").map(encodeURIComponent);
+
+  return `${spacePath(space)}/pages/${segments.join("/")}`;
+}
+
 /** The key a `/:project/issues/:number` address names — the way back from `keyPath`. */
 export function pathKey(project: string, number: string): string {
   return `${project.toUpperCase()}-${number.toUpperCase()}`;

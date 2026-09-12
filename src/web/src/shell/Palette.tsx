@@ -8,7 +8,8 @@ import { useSession } from "@/session/useSession";
 import { cn } from "@/lib/utils";
 import { Keys } from "./ShortcutsDialog";
 import { is } from "./shortcuts";
-import { keyPath, keyPattern, pagePath, viewPath, views } from "./views";
+import type { Space, SpacePageSummary } from "@/spaces/context";
+import { keyPath, keyPattern, pagePath, spacePagePath, spacePath, viewPath, views } from "./views";
 
 type PageSummary = Schemas["PageSummary"];
 
@@ -40,6 +41,11 @@ const settle = 150;
  * search is what a hierarchy would have been, so this is how one is found at
  * all.
  *
+ * The knowledge base is in it as well, and honestly: the spaces, and the pages
+ * of the space the frame is standing in out of the tree it already holds. That
+ * is a way to a page whose title is known and it does not pretend to be more —
+ * one full-text search across the spaces is its own piece of work (VISION 18).
+ *
  * Owned rather than imported (ADR 0017): a filtered list with a roving index
  * inside a Base UI dialog, which is what a palette is before it does more.
  */
@@ -48,23 +54,30 @@ type PaletteProps = {
   onOpenChange: (open: boolean) => void;
   projects: Project[];
   current: Project | undefined;
+  /** The knowledge base as the frame holds it: the spaces, the open one, its tree. */
+  spaces: Space[];
+  space: Space | undefined;
+  pages: SpacePageSummary[];
   /** The overview of the keys, which the palette is one of the ways to. */
   onShortcuts: () => void;
 };
 
-export function Palette({ open, onOpenChange, projects, current, onShortcuts }: PaletteProps) {
+export function Palette({ open, onOpenChange, projects, current, spaces, space, pages, onShortcuts }: PaletteProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>Command palette</DialogTitle>
-          <DialogDescription>Search views, projects and commands, or type an issue key.</DialogDescription>
+          <DialogDescription>Search views, projects, spaces and commands, or type an issue key.</DialogDescription>
         </DialogHeader>
         {open && (
           <PaletteBody
             onOpenChange={onOpenChange}
             projects={projects}
             current={current}
+            spaces={spaces}
+            space={space}
+            pages={pages}
             onShortcuts={onShortcuts}
           />
         )}
@@ -74,7 +87,7 @@ export function Palette({ open, onOpenChange, projects, current, onShortcuts }: 
 }
 
 /** Mounted while the palette is open, so that its query starts empty every time. */
-function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<PaletteProps, "open">) {
+function PaletteBody({ onOpenChange, projects, current, spaces, space, pages, onShortcuts }: Omit<PaletteProps, "open">) {
   const navigate = useNavigate();
   const { setTheme } = useTheme();
   const { signOut } = useSession();
@@ -210,6 +223,42 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
       );
     }
 
+    // The knowledge base: the pages of the space that is open, then the
+    // spaces themselves. The pages come from the tree the frame read for the
+    // navigation, so this costs no request and reaches no further than the
+    // space the reader is in.
+    if (space !== undefined) {
+      for (const page of pages) {
+        list.push({
+          id: `space:page:${page.path}`,
+          label: page.title,
+          hint: page.path,
+          group: space.title,
+          run: go(spacePagePath(space.name, page.path)),
+        });
+      }
+    }
+
+    for (const other of spaces) {
+      if (other.name !== space?.name) {
+        list.push({
+          id: `space:${other.name}`,
+          label: other.title,
+          hint: other.name,
+          group: "Switch space",
+          run: go(spacePath(other.name)),
+        });
+      }
+    }
+
+    list.push({
+      id: "knowledge",
+      label: "Knowledge base",
+      hint: "The spaces you may see.",
+      group: "Go to",
+      run: go("/spaces"),
+    });
+
     list.push({ id: "create:project", label: "Create project", group: "Create", run: go("/projects/new") });
     list.push({
       id: "overview",
@@ -249,7 +298,7 @@ function PaletteBody({ onOpenChange, projects, current, onShortcuts }: Omit<Pale
     );
 
     return list;
-  }, [current, found, navigate, needle, onOpenChange, onShortcuts, projectKey, projects, searching, setTheme, signOut]);
+  }, [current, found, navigate, needle, onOpenChange, onShortcuts, pages, projectKey, projects, searching, setTheme, signOut, space, spaces]);
 
   const matching = useMemo(() => {
     const lowered = needle.toLowerCase();

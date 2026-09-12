@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router";
-import { SettingsIcon } from "lucide-react";
+import { LibraryIcon, SettingsIcon, SquareKanbanIcon } from "lucide-react";
 import type { Project } from "@/api/client";
 import {
   Sidebar,
@@ -16,25 +16,30 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useSession } from "@/session/useSession";
+import type { Space, Tree } from "@/spaces/context";
+import { SpaceNav } from "@/spaces/SpaceNav";
 import type { Attention } from "./attention";
 import { useAttention } from "./useAttention";
 import { viewPath, views } from "./views";
 
 /**
- * The left navigation of ADR 0006: the views of the current project, in two
- * groups. On a phone the same component is the drawer the header button
- * opens — one application, not a reduced one.
+ * Which of the two areas the frame is standing in (VISION 18). One application
+ * and one shell, and the navigation is what tells them apart: the tracker's
+ * views on one side, a space's page tree on the other, and never both at once.
  */
-export function AppSidebar({ project }: { project: Project | undefined }) {
+export type Area =
+  | { at: "tracker"; project: Project | undefined }
+  | { at: "knowledge"; space: Space | undefined; name: string | undefined; tree: Tree; path: string | undefined };
+
+/**
+ * The left navigation of ADR 0006. On a phone the same component is the drawer
+ * the header button opens — one application, not a reduced one.
+ */
+export function AppSidebar({ area }: { area: Area }) {
   const { me } = useSession();
   const { setOpenMobile } = useSidebar();
   const { pathname } = useLocation();
-  const attention = useAttention();
-
-  const groups = [
-    { id: "views", label: "Views" },
-    { id: "structure", label: "Structure" },
-  ] as const;
+  const close = () => setOpenMobile(false);
 
   return (
     <Sidebar collapsible="offcanvas">
@@ -46,58 +51,137 @@ export function AppSidebar({ project }: { project: Project | undefined }) {
       </SidebarHeader>
 
       <SidebarContent>
-        <nav aria-label="Views of the project">
-        {groups.map((group) => (
-          <SidebarGroup key={group.id}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {views
-                  .filter((view) => view.group === group.id)
-                  .map((view) => {
-                    const path = project === undefined ? "" : viewPath(project.key, view);
-                    const count = drawn(counted(view.id, attention));
-                    return <SidebarMenuItem key={view.id}>
-                      {project === undefined ? (
-                        <SidebarMenuButton disabled>
-                          <view.icon />
-                          <span>{view.label}</span>
-                        </SidebarMenuButton>
-                      ) : (
-                        <SidebarMenuButton
-                          isActive={pathname === path || pathname.startsWith(`${path}/`)}
-                          // The count belongs to the name of the link, not
-                          // beside it: a screen reader says "Needs you, 3"
-                          // rather than reading two fragments in a row.
-                          aria-label={count === null ? undefined : `${view.label}, ${count}`}
-                          render={
-                            <NavLink
-                              to={path}
-                              onClick={() => setOpenMobile(false)}
-                            />
-                          }
-                        >
-                          <view.icon />
-                          <span>{view.label}</span>
-                        </SidebarMenuButton>
-                      )}
-                      {count !== null && project !== undefined && <SidebarMenuBadge aria-hidden>{count}</SidebarMenuBadge>}
-                    </SidebarMenuItem>;
-                  })}
-                {group.id === "structure" && project !== undefined && <SidebarMenuItem><SidebarMenuButton isActive={pathname === `/${project.key}/settings`} render={<NavLink to={`/${project.key}/settings`} onClick={() => setOpenMobile(false)} />}><SettingsIcon /><span>Project settings</span></SidebarMenuButton></SidebarMenuItem>}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
-        </nav>
+        {area.at === "tracker" ? (
+          <ProjectNav project={area.project} pathname={pathname} onWalk={close} />
+        ) : (
+          <KnowledgeNav area={area} pathname={pathname} onWalk={close} />
+        )}
       </SidebarContent>
 
       <SidebarFooter className="px-3 pb-3">
+        {/* The one way across the border, in the one place it can be reached
+            from every screen of either area. The tracker has no space in it
+            and the knowledge base no project, so this is a door and never a
+            view of the other side. */}
+        <SidebarMenu>
+          <SidebarMenuItem>
+            {area.at === "tracker" ? (
+              <SidebarMenuButton render={<NavLink to="/spaces" onClick={close} />}>
+                <LibraryIcon />
+                <span>Knowledge base</span>
+              </SidebarMenuButton>
+            ) : (
+              // Back to the landing rather than to a remembered project: it
+              // takes a reader with one project into it and everybody else to
+              // the overview, which is the same answer `/` always gives.
+              <SidebarMenuButton render={<NavLink to="/" onClick={close} />}>
+                <SquareKanbanIcon />
+                <span>Tracker</span>
+              </SidebarMenuButton>
+            )}
+          </SidebarMenuItem>
+        </SidebarMenu>
         <div className="truncate px-1 text-xs text-muted-foreground">
           {me.name} · {me.kind}
         </div>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+/** The views of the current project, in two groups. */
+function ProjectNav({ project, pathname, onWalk }: { project: Project | undefined; pathname: string; onWalk: () => void }) {
+  const attention = useAttention();
+
+  const groups = [
+    { id: "views", label: "Views" },
+    { id: "structure", label: "Structure" },
+  ] as const;
+
+  return (
+    <nav aria-label="Views of the project">
+      {groups.map((group) => (
+        <SidebarGroup key={group.id}>
+          <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {views
+                .filter((view) => view.group === group.id)
+                .map((view) => {
+                  const path = project === undefined ? "" : viewPath(project.key, view);
+                  const count = drawn(counted(view.id, attention));
+                  return <SidebarMenuItem key={view.id}>
+                    {project === undefined ? (
+                      <SidebarMenuButton disabled>
+                        <view.icon />
+                        <span>{view.label}</span>
+                      </SidebarMenuButton>
+                    ) : (
+                      <SidebarMenuButton
+                        isActive={pathname === path || pathname.startsWith(`${path}/`)}
+                        // The count belongs to the name of the link, not
+                        // beside it: a screen reader says "Needs you, 3"
+                        // rather than reading two fragments in a row.
+                        aria-label={count === null ? undefined : `${view.label}, ${count}`}
+                        render={<NavLink to={path} onClick={onWalk} />}
+                      >
+                        <view.icon />
+                        <span>{view.label}</span>
+                      </SidebarMenuButton>
+                    )}
+                    {count !== null && project !== undefined && <SidebarMenuBadge aria-hidden>{count}</SidebarMenuBadge>}
+                  </SidebarMenuItem>;
+                })}
+              {group.id === "structure" && project !== undefined && <SidebarMenuItem><SidebarMenuButton isActive={pathname === `/${project.key}/settings`} render={<NavLink to={`/${project.key}/settings`} onClick={onWalk} />}><SettingsIcon /><span>Project settings</span></SidebarMenuButton></SidebarMenuItem>}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ))}
+    </nav>
+  );
+}
+
+/**
+ * The knowledge base's navigation: the way back to the spaces, and — inside a
+ * space — its page tree, which is the navigation of the area rather than a
+ * list of links beside one (VISION 18). The counts of the tracker are not
+ * here, and neither is the connection behind them: they are about work that is
+ * waiting, and nothing here is waiting for anybody.
+ */
+function KnowledgeNav({
+  area,
+  pathname,
+  onWalk,
+}: {
+  area: Extract<Area, { at: "knowledge" }>;
+  pathname: string;
+  onWalk: () => void;
+}) {
+  return (
+    <nav aria-label="The knowledge base">
+      <SidebarGroup>
+        <SidebarGroupLabel>Knowledge base</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={pathname === "/spaces"} render={<NavLink to="/spaces" onClick={onWalk} />}>
+                <LibraryIcon />
+                <span>Spaces</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      {area.name !== undefined && (
+        <SidebarGroup>
+          <SidebarGroupLabel>{area.space?.title ?? area.name}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SpaceNav space={area.name} tree={area.tree} path={area.path} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+      )}
+    </nav>
   );
 }
 

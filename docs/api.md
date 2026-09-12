@@ -1091,9 +1091,9 @@ same guarantee and for the same reason.
 | `GET` | `/spaces/{name}/pages/{path}` | any | `SpacePage` |
 | `POST` | `/spaces/{name}/pages` | any | `{ slug, title, body?, parent? }` → 201 `SpacePage`; the slug is given, never derived from the title, and `parent` is an address in the same space or absent for a page directly under it |
 | `PATCH` | `/spaces/{name}/pages/{path}` | any | `{ slug?, title?, body? }`, `If-Match` honoured; `slug` renames, `body` set to `null` empties the document. The parent is not here — moving is the act below |
-| `POST` | `/spaces/{name}/pages/{path}/move` | any | `{ space?, parent? }`: under another parent, in this space or another one, with everything below it. `space` absent stays here, `parent` absent means directly under the space |
+| `POST` | `/spaces/{name}/pages/move` | any | `{ path, space?, parent? }`: the page under another parent, in this space or another one, with everything below it. `space` absent stays here, `parent` absent means directly under the space |
 | `DELETE` | `/spaces/{name}/pages/{path}` | any | soft delete, the subtree with it; `{ deleted }` says how many pages went |
-| `POST` | `/spaces/{name}/pages/{path}/restore` | any | back, with exactly what went along |
+| `POST` | `/spaces/{name}/pages/restore` | any | `{ path }`: back, with exactly what went along |
 
 **The address carries the tree** ([ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)):
 `{path}` is the slugs from the space down, separated by slashes, at most three
@@ -1102,6 +1102,12 @@ path parameter in this document that contains slashes, and a client that
 percent-encodes them names nothing. A path with a fourth segment, an empty one,
 or a segment that could not be a slug is `not-found`: nothing is named there,
 and a path is not a field.
+
+**That is also why moving and restoring are `POST` on the collection with the
+address in the body.** A catch-all cannot be followed by a literal segment, so
+`.../{path}/move` is not a route that can exist beside the page's own; the
+alternative was a second spelling of the address for two routes, which is worse
+than one body carrying it.
 
 **A page is written by whoever may read the space, agents included.** That is
 the opposite of the space itself and it is deliberate: the bracket is a human's
