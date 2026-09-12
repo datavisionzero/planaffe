@@ -17,6 +17,10 @@ public sealed record ChangeSpaceBody(string? Name, string? Title, bool? ClosedTo
 /// itself, which is the same guarantee by the other of the two routes
 /// <c>docs/codebase.md</c> describes — and it is the only one that can answer
 /// for an agent, because the switch that hides a closed space is read there.
+/// The pages of a space (<see cref="SpacePageEndpoints"/>) stand behind the
+/// same guarantee: every one of those acts begins by looking the space up
+/// through the scope, so the whole of <c>/spaces</c> is covered by the acts
+/// rather than by a door.
 /// </remarks>
 public static class SpaceEndpoints
 {

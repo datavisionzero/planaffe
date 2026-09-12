@@ -271,6 +271,7 @@ app.MapConversation();
 app.MapEpics();
 app.MapPages();
 app.MapSpaces();
+app.MapSpacePages();
 app.MapReleases();
 app.MapSmtp();
 

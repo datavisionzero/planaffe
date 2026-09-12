@@ -1080,4 +1080,65 @@ one is `not-found` when it arrives in the path, as with a page's slug.
 
 There is no space-scope door in front of these routes. Every act asks the space
 scope itself, which is where it has to happen: the switch that hides a space
-from an agent is read there and not off a route.
+from an agent is read there and not off a route. The pages below are behind the
+same guarantee and for the same reason.
+
+### Space pages
+
+| method | path | who | does |
+|---|---|---|---|
+| `GET` | `/spaces/{name}/pages` | any | the whole tree as `SpacePageSummary`, without the bodies: a page, then everything under it, siblings by title. Not paginated |
+| `GET` | `/spaces/{name}/pages/{path}` | any | `SpacePage` |
+| `POST` | `/spaces/{name}/pages` | any | `{ slug, title, body?, parent? }` → 201 `SpacePage`; the slug is given, never derived from the title, and `parent` is an address in the same space or absent for a page directly under it |
+| `PATCH` | `/spaces/{name}/pages/{path}` | any | `{ slug?, title?, body? }`, `If-Match` honoured; `slug` renames, `body` set to `null` empties the document. The parent is not here — moving is the act below |
+| `POST` | `/spaces/{name}/pages/{path}/move` | any | `{ space?, parent? }`: under another parent, in this space or another one, with everything below it. `space` absent stays here, `parent` absent means directly under the space |
+| `DELETE` | `/spaces/{name}/pages/{path}` | any | soft delete, the subtree with it; `{ deleted }` says how many pages went |
+| `POST` | `/spaces/{name}/pages/{path}/restore` | any | back, with exactly what went along |
+
+**The address carries the tree** ([ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)):
+`{path}` is the slugs from the space down, separated by slashes, at most three
+of them — `/spaces/handbook/pages/company/handbook/onboarding`. It is the one
+path parameter in this document that contains slashes, and a client that
+percent-encodes them names nothing. A path with a fourth segment, an empty one,
+or a segment that could not be a slug is `not-found`: nothing is named there,
+and a path is not a field.
+
+**A page is written by whoever may read the space, agents included.** That is
+the opposite of the space itself and it is deliberate: the bracket is a human's
+to draw, the work inside it is not (VISION 18). A space closed to agents
+answers an agent `not-found` on every route above, exactly as it answers a
+stranger — including the writes, which never get far enough to say anything
+else.
+
+**The list is the navigation and is not paginated.** Three levels are small,
+and what would make a tree expensive is the bodies, which are not in it
+(ADR 0012). Each row carries its own address and its parent's, so a client
+draws the tree without walking anything.
+
+**Moving is a step of its own rather than a field of the `PATCH`.** It rewrites
+the depth of everything below the page and has refusals no other change has, so
+it does not travel beside a title: `cycle` where the target is the page itself
+or a page below it, `too-deep` where the subtree would pass the third level —
+with `depth`, how tall the subtree is — `validation` where the slug is taken
+where it would land, and `not-found` where the target space is one the caller
+cannot see. It is the line [ADR 0016](./adr/0016-status-transitions-are-acts-not-a-field-you-write.md)
+draws for the status, applied to the tree.
+
+**Deleting takes the subtree and says so.** The answer is `{ "deleted": 3 }`
+rather than 204, because a caller who asked about one page has to learn that
+three went. Restoring brings back exactly the pages that went along: one
+deleted on its own beforehand stays deleted, and a page whose parent is away is
+`transition` with the address to restore first — a live page under a deleted
+one is the state the rule exists to prevent.
+
+**A taken slug is `validation` on `slug`**, as on a project's page, and a slug
+belonging to a deleted page says so: it stays spent until the purge, so a
+restore can never land on a name somebody else took. Under its own address a
+deleted page answers `deleted` with `restorable_until`.
+
+**A page carries no labels.** A label is defined per project and a space has
+none; this is the bracket's consequence rather than a field left for later.
+
+There is no comment endpoint and no history endpoint here either, for the
+reasons the project's pages give.
+
