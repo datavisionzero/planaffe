@@ -126,6 +126,18 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
             """,
             [Batch], cancellationToken);
 
+        // A deleted space is swept the same way, and for a reason of its own:
+        // it hangs in no project, so no project's write would ever come round
+        // to it (ADR 0027). Its name comes free with the row.
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            delete from space where id in (
+                select id from space
+                 where deleted_at is not null and deleted_at <= now() - {0}::interval
+                 limit {1})
+            """,
+            [grace, Batch], cancellationToken);
+
         // A deleted project goes with everything in it, on the next write
         // anywhere: the administrator who typed the key decided that.
         await context.Database.ExecuteSqlRawAsync(

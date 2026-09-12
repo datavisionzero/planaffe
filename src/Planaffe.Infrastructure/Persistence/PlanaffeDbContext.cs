@@ -7,6 +7,7 @@ using Planaffe.Domain.Issues;
 using Planaffe.Domain.Pages;
 using Planaffe.Domain.Projects;
 using Planaffe.Domain.Releases;
+using Planaffe.Domain.Spaces;
 
 namespace Planaffe.Infrastructure.Persistence;
 
@@ -82,6 +83,11 @@ public sealed class PlanaffeDbContext(DbContextOptions<PlanaffeDbContext> option
     public DbSet<Page> Pages => Set<Page>();
 
     public DbSet<PageLabel> PageLabels => Set<PageLabel>();
+
+    /// <summary>The bracket of the knowledge base (VISION 18, ADR 0027).</summary>
+    public DbSet<Space> Spaces => Set<Space>();
+
+    public DbSet<SpaceAccess> SpaceAccesses => Set<SpaceAccess>();
 
     public DbSet<Release> Releases => Set<Release>();
 

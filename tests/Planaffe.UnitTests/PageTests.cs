@@ -3,9 +3,9 @@ using Planaffe.Domain.Pages;
 namespace Planaffe.UnitTests;
 
 /// <summary>
-/// The rules the page holds by itself: what a slug may look like, that a title
-/// is one line, and that every edit moves the version and names who made it
-/// (<c>CONTEXT.md</c>, Page; ADR 0021).
+/// The rules the page holds by itself: that a title is one line, and that every
+/// edit moves the version and names who made it (<c>CONTEXT.md</c>, Page;
+/// ADR 0021). The address it is reached by has its own tests.
 /// </summary>
 public sealed class PageTests
 {
@@ -14,41 +14,6 @@ public sealed class PageTests
     private static readonly Guid Project = Guid.CreateVersion7();
 
     private static readonly Guid Author = Guid.CreateVersion7();
-
-    [Theory]
-    [InlineData("architecture")]
-    [InlineData("betriebshandbuch")]
-    [InlineData("adr-0021")]
-    [InlineData("a")]
-    [InlineData("7")]
-    [InlineData("one-two-three")]
-    public void A_slug_is_lower_case_words_joined_by_single_hyphens(string slug) =>
-        Assert.Equal(slug, Slug.Normalize(slug));
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("-architecture")]
-    [InlineData("architecture-")]
-    [InlineData("two--hyphens")]
-    [InlineData("Architecture")]
-    [InlineData("with space")]
-    [InlineData("with_underscore")]
-    [InlineData("with/slash")]
-    [InlineData("with.dot")]
-    [InlineData("umlaut-ä")]
-    public void Everything_else_is_not_a_slug(string slug) =>
-        Assert.Throws<ArgumentException>(() => Slug.Normalize(slug));
-
-    [Fact]
-    public void A_slug_has_a_ceiling()
-    {
-        Assert.Equal(Slug.MaxLength, Slug.Normalize(new string('a', Slug.MaxLength)).Length);
-        Assert.Throws<ArgumentException>(() => Slug.Normalize(new string('a', Slug.MaxLength + 1)));
-    }
-
-    [Fact]
-    public void Surrounding_space_is_not_part_of_the_address() =>
-        Assert.Equal("architecture", Slug.Normalize("  architecture  "));
 
     [Fact]
     public void A_new_page_is_its_author_in_both_places()

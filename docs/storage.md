@@ -894,6 +894,63 @@ column and the index the section above describes. That is not a nicety: the
 wiki is flat because the search is what a hierarchy would have been for, so a
 page nothing finds is a page nothing leads to.
 
+## Spaces
+
+```sql
+create table space (
+    id               uuid        not null primary key,
+    name             text        not null,
+    title            text        not null,
+    closed_to_agents boolean     not null default false,
+    created_by       uuid        not null references identity (id),
+    created_at       timestamptz not null,
+    updated_at       timestamptz not null,
+    deleted_at       timestamptz,
+    deleted_by       uuid        references identity (id)
+);
+
+create unique index space_name on space (name);
+
+create table space_access (
+    space_id   uuid        not null references space (id) on delete cascade,
+    user_id    uuid        not null references identity (id),
+    granted_by uuid        not null references identity (id),
+    granted_at timestamptz not null,
+    primary key (space_id, user_id)
+);
+create index space_access_user on space_access (user_id);
+```
+
+The bracket of the knowledge base (VISION 18,
+[ADR 0027](./adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)).
+There is no `project_id` here and there never will be: a space is the second
+bracket beside the project, not something inside one, and nothing of the
+tracker points into it.
+
+**The name is unique across the instance**, not within anything, because
+nothing brackets a space. Like the page's slug it is an address and not a key
+([ADR 0021](./adr/0021-a-pages-address-is-its-slug-not-a-key.md)), renaming is
+an ordinary update, and the unique index covers deleted rows on purpose: a name
+stays spent until the purge, so restoring a space never lands on a name
+somebody else has taken.
+
+**`closed_to_agents` is the one switch.** It is read on every route an agent
+can take, which is why the store answers "of these ids, the ones an agent may
+reach" in one query rather than leaving the filter to each caller. A closed
+space is absent for an agent, not refused: the answer is the one a space that
+never existed would get, because the existence is half of what the switch
+protects.
+
+**`space_access` is `project_access` again**, column for column, and
+deliberately nothing more. Both referenced identities are users; agents have no
+rows and resolve to their owner first. Creating a space adds its creator in the
+same transaction, exactly as creating a project does. There is no migration
+that fills this table: no space exists before the feature does.
+
+The pages of the knowledge base hang in a space, and the `page` table above
+still hangs on a project. Moving it is its own piece of work; nothing here
+anticipates it.
+
 ## Device logins
 
 One `pa login` in progress (ADR 0025). It is the only row in this schema that

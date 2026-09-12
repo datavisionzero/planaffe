@@ -106,7 +106,9 @@ _Avoid_: membership, project role, ACL, permission, grant
 The bracket every piece of content belongs to, carrying the **project key** that
 prefixes everything in it. It is not a repository: normally one project is one
 repository, it may span several, and planaffe models no repository either way.
-_Avoid_: workspace, team, space, repository
+It is not a **space** either — the knowledge base's bracket holds no issues, no
+keys and no workflow, and the two never stand in for one another (ADR 0027).
+_Avoid_: workspace, team, repository
 
 **Project file**:
 The `.planaffe` file in the root of a repository, checked in, pointing from that
@@ -187,6 +189,31 @@ The record of every change to an issue — who, when, which field, from what to
 what — written by the instance, never edited and never deleted.
 _Avoid_: audit log, activity, timeline, changelog
 
+## The knowledge base
+
+**Knowledge base**:
+What an instance knows that is no assignment at all, and belongs to no project:
+a handbook, how a company handles a subject, what was agreed with a customer.
+It stands beside the work above, in its own area of the interface, and it is
+made of **spaces** and the pages in them (VISION 18).
+_Avoid_: wiki, docs, documentation, Confluence, knowledge management
+
+**Space**:
+The bracket of the knowledge base and the only thing in it that carries access:
+a company, a domain, a customer, a handbook. It is addressed by a **slug**, like
+a page and unlike everything with a key, and the name is unique across the
+instance because nothing brackets a space. A human creates it and names who sees
+it; an agent never does either. Its one switch says whether agents may reach it
+at all — closed, a space is not one an agent may see and not read: it is not
+there (ADR 0027).
+_Avoid_: workspace, area, folder, book, shelf, collection
+
+**Closed to agents**:
+The switch on a space. It names the agent and not the interface, so it holds on
+every route an agent is ever given — the CLI, the HTTP API, and the MCP server
+when it comes. An agent inherits its owner's spaces minus every closed one.
+_Avoid_: private, secret, hidden, human-only, no-CLI
+
 ## Keys
 
 **Project key**:
@@ -206,10 +233,11 @@ of its own.
 _Avoid_: id, number, reference
 
 **Slug**:
-The name that identifies a **Page** within its project and is its address,
-`/PLAN/pages/architecture`. The one thing in the product not reached through a
-key, because a page is named in running text rather than numbered. It is
-renameable, and the old slug leads nowhere afterwards (ADR 0021).
+The name that is an address rather than a key: a **Page** within its project,
+`/PLAN/pages/architecture`, and a **Space** across the instance,
+`/spaces/handbuch`. Those two are what the product does not reach through a
+key, because both are named in running text rather than numbered. A slug is
+renameable, and the old one leads nowhere afterwards (ADR 0021, ADR 0027).
 _Avoid_: key, name, path, permalink, handle
 
 **Number**:

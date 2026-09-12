@@ -1,17 +1,21 @@
 using System.Text.RegularExpressions;
 
-namespace Planaffe.Domain.Pages;
+namespace Planaffe.Domain;
 
 /// <summary>
-/// The shape of a page's address: lower case letters, digits and single
-/// hyphens between them (<c>CONTEXT.md</c>, Slug; ADR 0021).
+/// The shape of an address that is a name rather than a key: lower case
+/// letters, digits and single hyphens between them (<c>CONTEXT.md</c>, Slug;
+/// ADR 0021). A page carries one, and so does the space a page hangs in
+/// (ADR 0027).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Lower case for the reason a label name is lower case — so that
-/// <c>architecture</c> and <c>Architecture</c> cannot both exist in one
-/// project — and hyphen-separated because the slug is read aloud in running
+/// <c>architecture</c> and <c>Architecture</c> cannot both exist beside each
+/// other — and hyphen-separated because the slug is read aloud in running
 /// text, where an underscore or a slash reads as punctuation nobody meant.
+/// It lives here rather than under <c>Pages</c> because two things are
+/// addressed this way, and neither of them owns the form.
 /// </para>
 /// <para>
 /// It is validated, never derived from the title: a title is a sentence and an

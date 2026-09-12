@@ -79,7 +79,7 @@ public sealed class Page
         new(
             Guid.CreateVersion7(),
             projectId,
-            Domain.Pages.Slug.Normalize(slug),
+            Domain.Slug.Normalize(slug),
             NormalizeTitle(title),
             body ?? string.Empty,
             createdBy,
@@ -88,7 +88,7 @@ public sealed class Page
     /// <summary>The address changes and the old one leads nowhere; nothing forwards (ADR 0021).</summary>
     public void Rename(string slug, Guid by, DateTimeOffset at)
     {
-        Slug = Domain.Pages.Slug.Normalize(slug);
+        Slug = Domain.Slug.Normalize(slug);
         Touch(by, at);
     }
 
