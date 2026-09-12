@@ -260,6 +260,211 @@ public sealed class SpacePageActsTests
         Assert.Equal("Firma", changed.Title);
     }
 
+    [Fact]
+    public async Task Moving_a_page_takes_everything_under_it()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, null, "product", "Product");
+        await world.Create(world.Owner, "product", "handbook", "Handbook");
+        await world.Create(world.Owner, "product/handbook", "day-one", "Day one");
+
+        var moved = await world.Move(world.Owner, "product/handbook", null, "company");
+
+        Assert.Equal("company/handbook", moved.Path);
+        Assert.Equal(1, moved.Depth);
+        Assert.Equal(2, world.Row("company/handbook/day-one").Depth);
+    }
+
+    [Fact]
+    public async Task Moving_to_the_root_lifts_the_subtree_with_it()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, "company", "handbook", "Handbook");
+        await world.Create(world.Owner, "company/handbook", "day-one", "Day one");
+
+        var moved = await world.Move(world.Owner, "company/handbook", null, null);
+
+        Assert.Equal("handbook", moved.Path);
+        Assert.Null(moved.Parent);
+        Assert.Equal(0, moved.Depth);
+        Assert.Equal(1, world.Row("handbook/day-one").Depth);
+    }
+
+    [Fact]
+    public async Task Moving_into_another_space_carries_the_subtree_into_it()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, "company", "handbook", "Handbook");
+
+        var moved = await world.Move(world.Owner, "company", "personal", null);
+
+        Assert.Equal("personal", moved.Space);
+        Assert.Equal(world.Other.Id, world.Row("company", world.Other).SpaceId);
+        Assert.Equal(world.Other.Id, world.Row("company/handbook", world.Other).SpaceId);
+    }
+
+    [Fact]
+    public async Task A_space_the_caller_cannot_see_is_no_destination()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+
+        var refusal = await Assert.ThrowsAsync<Refusal>(() => world.Move(world.Owner, "company", "fremd", null));
+
+        Assert.Equal(RefusalCode.NotFound, refusal.Code);
+        Assert.Equal(world.Space.Id, world.Row("company").SpaceId);
+    }
+
+    [Fact]
+    public async Task A_page_cannot_hang_under_itself_or_under_its_own_child()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, "company", "handbook", "Handbook");
+
+        Assert.Equal(
+            RefusalCode.Cycle,
+            (await Assert.ThrowsAsync<Refusal>(() => world.Move(world.Owner, "company", null, "company"))).Code);
+
+        Assert.Equal(
+            RefusalCode.Cycle,
+            (await Assert.ThrowsAsync<Refusal>(() => world.Move(world.Owner, "company", null, "company/handbook"))).Code);
+    }
+
+    [Fact]
+    public async Task A_subtree_that_would_not_fit_is_refused_with_its_height()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, "company", "handbook", "Handbook");
+        await world.Create(world.Owner, null, "product", "Product");
+        await world.Create(world.Owner, "product", "notes", "Notes");
+
+        var refusal = await Assert.ThrowsAsync<Refusal>(() => world.Move(world.Owner, "company", null, "product/notes"));
+
+        Assert.Equal(RefusalCode.TooDeep, refusal.Code);
+        Assert.Equal(1, refusal.Extensions["depth"]);
+        Assert.Equal(0, world.Row("company").Depth);
+    }
+
+    [Fact]
+    public async Task Landing_on_a_taken_slug_is_refused()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, null, "product", "Product");
+        await world.Create(world.Owner, "product", "company", "Company again");
+
+        var refusal = await Assert.ThrowsAsync<Refusal>(() => world.Move(world.Owner, "company", null, "product"));
+
+        Assert.Equal(RefusalCode.Validation, refusal.Code);
+    }
+
+    [Fact]
+    public async Task Moving_a_page_where_it_already_is_changes_nothing()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        var before = await world.Create(world.Owner, "company", "handbook", "Handbook");
+
+        var moved = await world.Move(world.Owner, "company/handbook", null, "company");
+
+        Assert.Equal(before.UpdatedAt, moved.UpdatedAt);
+        Assert.DoesNotContain(world.History, h => h.Field == HistoryField.Parent);
+    }
+
+    [Fact]
+    public async Task A_move_stands_in_the_history_with_both_addresses()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, null, "product", "Product");
+
+        await world.Move(world.Owner, "product", "personal", null);
+
+        var moved = world.History.Single(h => h.Field == HistoryField.Parent);
+        Assert.Equal("handbuch/product", moved.OldValue);
+        Assert.Equal("personal/product", moved.NewValue);
+    }
+
+    [Fact]
+    public async Task Deleting_takes_the_subtree_and_says_how_many_went()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, "company", "handbook", "Handbook");
+        await world.Create(world.Owner, "company/handbook", "day-one", "Day one");
+        await world.Create(world.Owner, null, "product", "Product");
+
+        var gone = await world.Delete(world.Owner, "company");
+
+        Assert.Equal(3, gone);
+
+        var tree = await new ListSpacePages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
+            .ExecuteAsync("handbuch", CancellationToken.None);
+        Assert.Equal(["product"], tree.Select(p => p.Path));
+
+        Assert.Equal(3, world.History.Count(h => h.Field == HistoryField.Deleted));
+    }
+
+    [Fact]
+    public async Task Restoring_brings_back_what_went_along_and_nothing_else()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, "company", "handbook", "Handbook");
+        await world.Create(world.Owner, "company", "notes", "Notes");
+
+        await world.Delete(world.Owner, "company/notes");
+        await world.Delete(world.Owner, "company");
+
+        var back = await world.Restore(world.Owner, "company");
+
+        Assert.Equal("company", back.Path);
+        var tree = await new ListSpacePages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
+            .ExecuteAsync("handbuch", CancellationToken.None);
+        Assert.Equal(["company", "company/handbook"], tree.Select(p => p.Path));
+    }
+
+    [Fact]
+    public async Task A_page_under_a_deleted_one_is_not_restored_on_its_own()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+        await world.Create(world.Owner, "company", "handbook", "Handbook");
+        await world.Delete(world.Owner, "company");
+
+        var refusal = await Assert.ThrowsAsync<Refusal>(() => world.Restore(world.Owner, "company/handbook"));
+
+        Assert.Equal(RefusalCode.Transition, refusal.Code);
+        Assert.Contains("company", refusal.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Restoring_a_page_that_is_not_deleted_is_refused()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+
+        Assert.Equal(
+            RefusalCode.Transition,
+            (await Assert.ThrowsAsync<Refusal>(() => world.Restore(world.Owner, "company"))).Code);
+    }
+
+    /// <summary>Deleting is no more an administrator's act than writing is (ADR 0013).</summary>
+    [Fact]
+    public async Task An_agent_deletes_and_restores_in_a_space_that_is_open_to_it()
+    {
+        var world = new World();
+        await world.Create(world.Owner, null, "company", "Company");
+
+        Assert.Equal(1, await world.Delete(world.Worker, "company"));
+        Assert.Equal("company", (await world.Restore(world.Worker, "company")).Path);
+    }
+
     /// <summary>One space, four identities, the pages in memory and the history beside them.</summary>
     private sealed class World : ISpaces, ISpaceAccess, ISpacePages, IIdentities, IHistory, ITransactions
     {
@@ -275,6 +480,8 @@ public sealed class SpacePageActsTests
             Colleague = User.Create("colleague", administrator: false, Now);
             Worker = Agent.Create("quiet-otter-42", Owner.Id, Now);
             Space = Space.Create("handbuch", "Handbuch", Owner.Id, Now);
+            Other = Space.Create("personal", "Personal", Owner.Id, Now);
+            Foreign = Space.Create("fremd", "Fremd", Colleague.Id, Now);
             _identities = [Owner, Colleague, Worker];
         }
 
@@ -285,6 +492,12 @@ public sealed class SpacePageActsTests
         public Agent Worker { get; }
 
         public Space Space { get; }
+
+        /// <summary>A second space the owner sees, for a move out of the first.</summary>
+        public Space Other { get; }
+
+        /// <summary>A space nobody here is named on: the far end of a move that fails.</summary>
+        public Space Foreign { get; }
 
         public List<HistoryEntry> History { get; } = [];
 
@@ -299,6 +512,18 @@ public sealed class SpacePageActsTests
             new CreateSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
                 .ExecuteAsync("handbuch", new CreateSpacePageRequest(parent, slug, title, body), CancellationToken.None);
 
+        public Task<SpacePageShape> Move(Identity caller, string path, string? space, string? parent) =>
+            new MoveSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
+                .ExecuteAsync("handbuch", path, new SpacePageMove(space, parent), CancellationToken.None);
+
+        public Task<int> Delete(Identity caller, string path) =>
+            new DeleteSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Settings, Clock)
+                .ExecuteAsync("handbuch", path, CancellationToken.None);
+
+        public Task<SpacePageShape> Restore(Identity caller, string path) =>
+            new RestoreSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
+                .ExecuteAsync("handbuch", path, CancellationToken.None);
+
         public Task<SpacePageShape> Read(Identity caller, string path) =>
             new ReadSpacePage(this, Scope(caller), this, Assembler, Settings).ExecuteAsync("handbuch", path, CancellationToken.None);
 
@@ -307,25 +532,28 @@ public sealed class SpacePageActsTests
                 .ExecuteAsync("handbuch", path, changes, ifMatch, CancellationToken.None);
 
         /// <summary>The row behind an address, for a test that wants to reach past the acts.</summary>
-        public SpacePage Row(string path)
+        public SpacePage Row(string path, Space? space = null)
         {
             SpacePage? page = null;
             foreach (var slug in path.Split('/'))
             {
-                page = _pages.Single(p => p.ParentId == page?.Id && p.Slug == slug);
+                page = _pages.Single(p =>
+                    p.ParentId == page?.Id && p.Slug == slug && (page is not null || p.SpaceId == (space ?? Space).Id));
             }
 
             return page!;
         }
 
         public Task<Space?> FindAnyAsync(string name, CancellationToken cancellationToken) =>
-            Task.FromResult(name == Space.Name ? Space : null);
+            Task.FromResult(new[] { Space, Other, Foreign }.FirstOrDefault(s => s.Name == name));
 
         public Task<IReadOnlySet<Guid>> SpaceIdsAsync(Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<Guid>>(userId == Owner.Id ? new HashSet<Guid> { Space.Id } : []);
+            Task.FromResult<IReadOnlySet<Guid>>(
+                userId == Owner.Id ? new HashSet<Guid> { Space.Id, Other.Id } : []);
 
         public Task<IReadOnlySet<Guid>> OpenToAgentsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<Guid>>(Space.ClosedToAgents ? new HashSet<Guid>() : [.. ids]);
+            Task.FromResult<IReadOnlySet<Guid>>(
+                ids.Where(id => !new[] { Space, Other, Foreign }.Single(s => s.Id == id).ClosedToAgents).ToHashSet());
 
         public Task<SpacePage?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
             Task.FromResult(_pages.SingleOrDefault(p =>
@@ -344,8 +572,65 @@ public sealed class SpacePageActsTests
                     .ThenBy(p => p.Title, StringComparer.Ordinal)
                     .ThenBy(p => p.Slug, StringComparer.Ordinal)]);
 
+        public Task<IReadOnlyList<SpacePage>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<SpacePage>>([.. Below(pageId).Where(p => !p.Deleted)]);
+
+        public Task<IReadOnlyList<SpacePage>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<SpacePage>>([.. _pages.Where(p => p.DeletedWith == pageId)]);
+
+        public Task DeleteDescendantsAsync(Guid pageId, Guid by, DateTimeOffset at, CancellationToken cancellationToken)
+        {
+            foreach (var page in Below(pageId).Where(p => !p.Deleted))
+            {
+                page.Delete(by, at, pageId);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task RestoreCompanionsAsync(Guid pageId, CancellationToken cancellationToken)
+        {
+            foreach (var page in _pages.Where(p => p.DeletedWith == pageId).ToList())
+            {
+                page.Restore();
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// The statement the store writes, done a row at a time: shallowest
+        /// first, so that every page is carried by a parent that has arrived
+        /// already. It moves the version where the statement does not, which
+        /// is the one thing a double cannot help here.
+        /// </summary>
+        public Task ShiftDescendantsAsync(Guid pageId, Guid spaceId, int levels, CancellationToken cancellationToken)
+        {
+            foreach (var page in Below(pageId))
+            {
+                page.MoveUnder(spaceId, _pages.Single(p => p.Id == page.ParentId), page.UpdatedBy, page.UpdatedAt);
+            }
+
+            return Task.CompletedTask;
+        }
+
         public Task<SpacePage?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(_pages.SingleOrDefault(p => p.Id == id));
+
+        /// <summary>The subtree under a page, shallowest first, deleted rows included.</summary>
+        private IEnumerable<SpacePage> Below(Guid pageId)
+        {
+            var level = _pages.Where(p => p.ParentId == pageId).ToList();
+            while (level.Count > 0)
+            {
+                foreach (var page in level)
+                {
+                    yield return page;
+                }
+
+                level = [.. _pages.Where(p => level.Any(parent => parent.Id == p.ParentId))];
+            }
+        }
 
         public void Add(SpacePage page) => _pages.Add(page);
 

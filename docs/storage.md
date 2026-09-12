@@ -498,8 +498,10 @@ newest of them is `space_page_id`, the knowledge base's page (VISION 18).
 `field` is the name of the column or edge that changed, spelled as the API
 spells it: `title`, `description`, `result`, `status`, `ready`, `priority`,
 `assignee`, `claim`, `epic`, `label`, `blocked_by`, `deleted` — plus `created`
-for the row's birth, with no values, `body` and `slug` on a page, and `comment`
-on an issue. For
+for the row's birth, with no values, `body` and `slug` on a page, `parent` on a
+page of the knowledge base — where the two values are the whole address,
+`handbook/company/onboarding`, because a move can change the space as well —
+and `comment` on an issue. For
 `description`, `result` and `body` the values are null: the entry records *that* the text changed, not how. For an edge
 (`label`, `blocked_by`) an addition has the new value and a removal the old.
 A `comment` entry follows that shape: a correction carries the comment's id as

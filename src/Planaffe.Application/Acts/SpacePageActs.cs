@@ -438,3 +438,221 @@ public sealed class ChangeSpacePage(
         return await assembler.CompleteAsync(space, page, cancellationToken);
     }
 }
+
+/// <param name="Space">The space it lands in, or nothing to stay in this one.</param>
+/// <param name="Parent">The page it lands under, or nothing for the root of that space.</param>
+public sealed record SpacePageMove(string? Space, string? Parent);
+
+/// <summary>
+/// A page under another parent, in this space or another one, with everything
+/// below it. Moving is an act and not a field of the change, because it
+/// rewrites a subtree and has outcomes of its own — the line ADR 0016 draws
+/// for the status.
+/// </summary>
+/// <remarks>
+/// Four things are asked before anything is written: that the target space is
+/// one the caller may see, that the target is not the page itself or a page
+/// below it, that the slug is free under the new parent, and that the subtree
+/// still fits under the third level. The refusals say which of the four it
+/// was.
+/// </remarks>
+public sealed class MoveSpacePage(
+    ICallerIdentity callerIdentity,
+    ISpaces spaces,
+    SpaceScope scope,
+    ISpacePages pages,
+    IHistory history,
+    ITransactions transactions,
+    SpacePageAssembler assembler,
+    InstanceSettings settings,
+    TimeProvider clock)
+{
+    public async Task<SpacePageShape> ExecuteAsync(
+        string name, string path, SpacePageMove move, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(move);
+        var caller = callerIdentity.Caller;
+
+        var space = await spaces.LiveAsync(scope, name, settings, cancellationToken);
+        var page = await pages.LiveAsync(space, path, settings, cancellationToken);
+
+        // A space the caller may not see refuses here, as any other space
+        // would: the move is out of one bracket and into another, and both
+        // ends are asked.
+        var target = string.IsNullOrWhiteSpace(move.Space)
+            ? space
+            : await spaces.LiveAsync(scope, move.Space, settings, cancellationToken);
+        var parent = await pages.ParentAsync(target, move.Parent, settings, cancellationToken);
+
+        if (target.Id == page.SpaceId && parent?.Id == page.ParentId)
+        {
+            return await assembler.CompleteAsync(space, page, cancellationToken);
+        }
+
+        var subtree = await pages.DescendantsAsync(page.Id, cancellationToken);
+
+        if (parent is not null && (parent.Id == page.Id || subtree.Any(p => p.Id == parent.Id)))
+        {
+            throw new Refusal(
+                RefusalCode.Cycle,
+                $"{space.Name}/{path} cannot hang under itself or under a page below it.");
+        }
+
+        var depth = parent is null ? 0 : parent.Depth + 1;
+        var height = subtree.Count == 0 ? 0 : subtree.Max(p => p.Depth) - page.Depth;
+        if (height > SpacePage.Room(depth))
+        {
+            throw new Refusal(
+                RefusalCode.TooDeep,
+                $"{space.Name}/{path} is {height + 1} levels tall and there is room for {SpacePage.Room(depth) + 1} where it would land.",
+                new Dictionary<string, object?> { ["depth"] = height });
+        }
+
+        await pages.TakenAsync(target, parent, page.Slug, settings, cancellationToken);
+
+        var parentPath = parent is null ? null : string.Join(SpacePagePath.Separator, SpacePagePath.Segments(move.Parent)!);
+        var from = $"{space.Name}/{string.Join(SpacePagePath.Separator, SpacePagePath.Segments(path)!)}";
+        var to = $"{target.Name}/{SpacePagePath.Of(parentPath, page.Slug)}";
+
+        var moved = await transactions.RunAsync(async () =>
+        {
+            var row = await pages.LoadForWriteAsync(page.Id, cancellationToken)
+                ?? throw new Refusal(RefusalCode.NotFound, $"No page {space.Name}/{path}.");
+
+            var now = clock.GetUtcNow();
+            var levels = depth - row.Depth;
+            row.MoveUnder(target.Id, parent, caller.Id, now);
+
+            // The descendants are carried in one statement. They are not
+            // moved — the page was — so the history stands at the page and
+            // names the two addresses; nothing else keeps the old one.
+            await pages.ShiftDescendantsAsync(row.Id, target.Id, levels, cancellationToken);
+            history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Parent, from, to));
+
+            await pages.SaveAsync(cancellationToken);
+            return row;
+        }, cancellationToken);
+
+        return await assembler.CompleteAsync(target, moved, cancellationToken);
+    }
+}
+
+/// <summary>
+/// Soft, with the grace period of everything else (ADR 0013), and with the
+/// subtree: the page and every live page under it go in one act, so that a
+/// tree never has a live page hanging under a deleted one.
+/// </summary>
+/// <remarks>
+/// Whoever may write in the space may delete, agents included — the grace
+/// period is the net, not a permission. That is the difference from the space
+/// itself, which an administrator deletes: a bracket is a decision about more
+/// than one person's text.
+/// </remarks>
+public sealed class DeleteSpacePage(
+    ICallerIdentity callerIdentity,
+    ISpaces spaces,
+    SpaceScope scope,
+    ISpacePages pages,
+    IHistory history,
+    ITransactions transactions,
+    InstanceSettings settings,
+    TimeProvider clock)
+{
+    /// <returns>How many pages went, the page itself included.</returns>
+    public async Task<int> ExecuteAsync(string name, string path, CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller;
+        var space = await spaces.LiveAsync(scope, name, settings, cancellationToken);
+        var page = await pages.LiveAsync(space, path, settings, cancellationToken);
+        var subtree = await pages.DescendantsAsync(page.Id, cancellationToken);
+
+        await transactions.RunAsync(async () =>
+        {
+            var row = await pages.LoadForWriteAsync(page.Id, cancellationToken)
+                ?? throw new Refusal(RefusalCode.NotFound, $"No page {space.Name}/{path}.");
+
+            var now = clock.GetUtcNow();
+            row.Delete(caller.Id, now);
+            await pages.DeleteDescendantsAsync(row.Id, caller.Id, now, cancellationToken);
+
+            // One entry per page. The grace period is read at each row, so the
+            // reason it is away is written at each row too.
+            history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Deleted, null, "true"));
+            foreach (var gone in subtree)
+            {
+                history.Add(HistoryEntry.OnSpacePage(gone.Id, caller.Id, now, HistoryField.Deleted, null, "true"));
+            }
+
+            await pages.SaveAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
+
+        return subtree.Count + 1;
+    }
+}
+
+/// <summary>
+/// Back with everything that went with it, and nothing else: the page and the
+/// rows carrying its id: a page somebody deleted on its own beforehand did not
+/// go along, so it does not come back.
+/// </summary>
+public sealed class RestoreSpacePage(
+    ICallerIdentity callerIdentity,
+    ISpaces spaces,
+    SpaceScope scope,
+    ISpacePages pages,
+    IHistory history,
+    ITransactions transactions,
+    SpacePageAssembler assembler,
+    InstanceSettings settings,
+    TimeProvider clock)
+{
+    public async Task<SpacePageShape> ExecuteAsync(string name, string path, CancellationToken cancellationToken)
+    {
+        var caller = callerIdentity.Caller;
+        var space = await spaces.LiveAsync(scope, name, settings, cancellationToken);
+        var page = await pages.AnyAsync(space, path, cancellationToken);
+
+        if (!page.Deleted)
+        {
+            throw new Refusal(RefusalCode.Transition, $"Page {space.Name}/{path} is not deleted.");
+        }
+
+        // A live page under a deleted one is the state this whole act exists
+        // to keep out, so the parent comes back first or nothing does.
+        if (page.ParentId is { } parentId)
+        {
+            var parent = await pages.FindByIdAsync(parentId, cancellationToken);
+            if (parent is null || parent.Deleted)
+            {
+                var segments = SpacePagePath.Segments(path)!;
+                throw new Refusal(
+                    RefusalCode.Transition,
+                    $"The page above {space.Name}/{path} is deleted; restore {space.Name}/{string.Join(SpacePagePath.Separator, segments.Take(segments.Count - 1))} first.");
+            }
+        }
+
+        var companions = await pages.CompanionsAsync(page.Id, cancellationToken);
+
+        var restored = await transactions.RunAsync(async () =>
+        {
+            var row = await pages.LoadForWriteAsync(page.Id, cancellationToken)
+                ?? throw new Refusal(RefusalCode.NotFound, $"No page {space.Name}/{path}.");
+
+            var now = clock.GetUtcNow();
+            row.Restore();
+            await pages.RestoreCompanionsAsync(row.Id, cancellationToken);
+
+            history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Deleted, "true", null));
+            foreach (var back in companions)
+            {
+                history.Add(HistoryEntry.OnSpacePage(back.Id, caller.Id, now, HistoryField.Deleted, "true", null));
+            }
+
+            await pages.SaveAsync(cancellationToken);
+            return row;
+        }, cancellationToken);
+
+        return await assembler.CompleteAsync(space, restored, cancellationToken);
+    }
+}

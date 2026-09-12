@@ -34,6 +34,36 @@ public interface ISpacePages
     /// </summary>
     Task<IReadOnlyList<SpacePage>> TreeAsync(Guid spaceId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The live pages under this one, at every level, shallowest first. A
+    /// subtree is asked for in one statement rather than one per level,
+    /// because everything that happens to a page happens to it whole.
+    /// </summary>
+    Task<IReadOnlyList<SpacePage>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The pages that went with this one when it was deleted — the rows
+    /// carrying its id in <c>deleted_with</c>, deleted or not being a question
+    /// that does not arise: nothing else clears the column.
+    /// </summary>
+    Task<IReadOnlyList<SpacePage>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Soft-delete every live page under this one in one statement, stamping
+    /// each with the same moment, the same hand and this page's id.
+    /// </summary>
+    Task DeleteDescendantsAsync(Guid pageId, Guid by, DateTimeOffset at, CancellationToken cancellationToken);
+
+    /// <summary>Bring back every page that went with this one, in one statement.</summary>
+    Task RestoreCompanionsAsync(Guid pageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Carry the descendants with the page that moved: the space it landed in
+    /// and the levels it travelled, in one statement rather than a row at a
+    /// time out of memory.
+    /// </summary>
+    Task ShiftDescendantsAsync(Guid pageId, Guid spaceId, int levels, CancellationToken cancellationToken);
+
     /// <summary>The row, tracked and locked for the rest of the transaction.</summary>
     Task<SpacePage?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken);
 
