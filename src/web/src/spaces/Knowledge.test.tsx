@@ -130,15 +130,18 @@ describe("the knowledge base in the frame (VISION 18)", () => {
     expect(await screen.findByText("There is no space under this address.")).toBeInTheDocument();
   });
 
-  it("reaches a space and a page of the open one from the command palette", async () => {
+  // The pages in the palette are hits of the search now and are tested with
+  // it (`Search.test.tsx`); what stays here is the other half of the knowledge
+  // base in it, which needs no instance to answer.
+  it("reaches another space from the command palette", async () => {
     knowledge("/spaces/handbook");
 
     await screen.findByRole("navigation", { name: "The knowledge base" });
     await userEvent.keyboard("{Meta>}k{/Meta}");
 
     const dialog = await screen.findByRole("dialog");
-    await userEvent.type(within(dialog).getByRole("combobox"), "onboarding");
+    await userEvent.type(within(dialog).getByRole("combobox"), "board");
 
-    expect(await within(dialog).findByText("Onboarding")).toBeInTheDocument();
+    expect(await within(dialog).findByText("The board")).toBeInTheDocument();
   });
 });

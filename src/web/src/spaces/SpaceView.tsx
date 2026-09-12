@@ -1,10 +1,11 @@
 import { BotOffIcon } from "lucide-react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/shared/PageHeader";
 import { spacePagePath, spacePath } from "@/shell/views";
+import { SearchResults } from "./SearchResults";
 import { childrenOf } from "./tree";
 import { usePageTree, useSpaceList } from "./useSpaces";
 
@@ -18,11 +19,31 @@ export function SpaceView() {
   const { name } = useParams();
   const { spaces } = useSpaceList();
   const { tree } = usePageTree();
+  const [params] = useSearchParams();
+  const query = params.get("q") ?? "";
   const space = spaces.at === "known" ? spaces.spaces.find((one) => one.name === name) : undefined;
 
 
   if (spaces.at === "known" && space === undefined) {
     return <Missing name={name!} />;
+  }
+
+  // Standing in a space, one searches that space. The list says so about
+  // itself and offers the way out of it, because the frame says which space
+  // this is and not what the hits were narrowed to.
+  if (query !== "") {
+    return (
+      <>
+        <PageHeader title={space?.title ?? name!} meta="Search" />
+        <p className="flex flex-wrap items-center gap-2 px-4 pt-3 text-sm text-muted-foreground md:px-6">
+          <span>Hits in this space.</span>
+          <Link className="underline underline-offset-4" to={`/spaces?q=${encodeURIComponent(query)}`}>
+            Search the whole knowledge base
+          </Link>
+        </p>
+        <SearchResults query={query} space={name} />
+      </>
+    );
   }
 
   return (

@@ -256,7 +256,7 @@ export function Shell() {
         current={current}
         spaces={spaces.at === "known" ? spaces.spaces : []}
         space={space}
-        pages={pageTree.tree.at === "known" ? pageTree.tree.pages : []}
+        knowledge={knowledge}
         onShortcuts={() => setShortcutsOpen(true)}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />

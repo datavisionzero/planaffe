@@ -19,6 +19,7 @@ export type ShortcutId =
   | "global:sidebar"
   | "global:projects"
   | "global:spaces"
+  | "global:search"
   | "global:shortcuts"
   | "global:create"
   | "list:next"
@@ -60,6 +61,10 @@ export const shortcuts: Shortcut[] = [
   // what each of them does, and "switch the bracket you are in" is not a
   // sentence anybody would read as an answer.
   { id: "global:spaces", key: "s", what: "Switch space, in the knowledge base", group: "Global" },
+  // The same key an issue list jumps into its search with. It is one key for
+  // one job — find something in what is around you — and the two never stand
+  // on the same screen, because the areas do not (VISION 18).
+  { id: "global:search", key: "/", what: "Search the knowledge base", group: "Global" },
   { id: "global:sidebar", key: "b", mod: true, what: "Fold the navigation", group: "Global" },
   { id: "global:shortcuts", key: "?", what: "Show this list", group: "Global" },
   // Creating belongs to the project, not to a list of it: the key answered on

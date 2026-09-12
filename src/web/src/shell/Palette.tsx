@@ -8,7 +8,8 @@ import { useSession } from "@/session/useSession";
 import { cn } from "@/lib/utils";
 import { Keys } from "./ShortcutsDialog";
 import { is } from "./shortcuts";
-import type { Space, SpacePageSummary } from "@/spaces/context";
+import type { Space } from "@/spaces/context";
+import type { SpacePageHit } from "@/spaces/search";
 import { keyPath, keyPattern, pagePath, spacePagePath, spacePath, viewPath, views } from "./views";
 
 type PageSummary = Schemas["PageSummary"];
@@ -41,10 +42,11 @@ const settle = 150;
  * search is what a hierarchy would have been, so this is how one is found at
  * all.
  *
- * The knowledge base is in it as well, and honestly: the spaces, and the pages
- * of the space the frame is standing in out of the tree it already holds. That
- * is a way to a page whose title is known and it does not pretend to be more —
- * one full-text search across the spaces is its own piece of work (VISION 18).
+ * In the knowledge base it asks the same route the screen asks — `GET /pages`,
+ * across every space the caller may see — and shows a few hits with the row
+ * that opens all of them. It used to filter the tree of the open space, which
+ * was a way to a page whose title was known and nothing more; the search it
+ * was standing in for is here now (VISION 18).
  *
  * Owned rather than imported (ADR 0017): a filtered list with a roving index
  * inside a Base UI dialog, which is what a palette is before it does more.
@@ -54,15 +56,16 @@ type PaletteProps = {
   onOpenChange: (open: boolean) => void;
   projects: Project[];
   current: Project | undefined;
-  /** The knowledge base as the frame holds it: the spaces, the open one, its tree. */
+  /** The knowledge base as the frame holds it: the spaces, and the open one. */
   spaces: Space[];
   space: Space | undefined;
-  pages: SpacePageSummary[];
+  /** Whether the frame is standing in the knowledge base, which is what the search follows. */
+  knowledge: boolean;
   /** The overview of the keys, which the palette is one of the ways to. */
   onShortcuts: () => void;
 };
 
-export function Palette({ open, onOpenChange, projects, current, spaces, space, pages, onShortcuts }: PaletteProps) {
+export function Palette({ open, onOpenChange, projects, current, spaces, space, knowledge, onShortcuts }: PaletteProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg" showCloseButton={false}>
@@ -77,7 +80,7 @@ export function Palette({ open, onOpenChange, projects, current, spaces, space, 
             current={current}
             spaces={spaces}
             space={space}
-            pages={pages}
+            knowledge={knowledge}
             onShortcuts={onShortcuts}
           />
         )}
@@ -87,23 +90,30 @@ export function Palette({ open, onOpenChange, projects, current, spaces, space, 
 }
 
 /** Mounted while the palette is open, so that its query starts empty every time. */
-function PaletteBody({ onOpenChange, projects, current, spaces, space, pages, onShortcuts }: Omit<PaletteProps, "open">) {
+function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge, onShortcuts }: Omit<PaletteProps, "open">) {
   const navigate = useNavigate();
   const { setTheme } = useTheme();
   const { signOut } = useSession();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
-  const [found, setFound] = useState<{ of: string; issues: IssueSummary[]; pages: PageSummary[] }>({ of: "", issues: [], pages: [] });
+  const [found, setFound] = useState<{ of: string; issues: IssueSummary[]; pages: PageSummary[]; hits: SpacePageHit[] }>(
+    { of: "", issues: [], pages: [], hits: [] },
+  );
   const searchId = useId();
 
   const needle = query.trim();
   const projectKey = current?.key;
+  const words = needle.length >= shortest && !keyPattern.test(needle);
   // Words, not a key, and a project to search in. `q` on the issue list is the
   // same full-text search the list itself uses.
-  const searching = projectKey !== undefined && needle.length >= shortest && !keyPattern.test(needle);
+  const searching = projectKey !== undefined && words;
+  // The other area asks the other search, and the two never mix: a hit from
+  // the knowledge base and one from the tracker answer different questions
+  // (VISION 18).
+  const searchingKnowledge = knowledge && words;
 
   useEffect(() => {
-    if (!searching) {
+    if (!searching && !searchingKnowledge) {
       return;
     }
 
@@ -114,23 +124,32 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, pages, on
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          // Two lists, one question. Neither waits for the other to fail: a
-          // wiki that answers while the issue list is slow still shows up.
-          const [issues, pages] = await Promise.all([
-            api.GET("/issues", {
-              params: { query: { project: projectKey, q: needle, limit: matches } },
-              signal: controller.signal,
-            }),
-            api.GET("/projects/{key}/pages", {
-              params: { path: { key: projectKey }, query: { q: needle } },
-              signal: controller.signal,
-            }),
+          // The lists of the area the frame is in, asked together. Neither
+          // waits for the other to fail: a wiki that answers while the issue
+          // list is slow still shows up.
+          const [issues, pages, hits] = await Promise.all([
+            searching
+              ? api.GET("/issues", {
+                  params: { query: { project: projectKey!, q: needle, limit: matches } },
+                  signal: controller.signal,
+                })
+              : undefined,
+            searching
+              ? api.GET("/projects/{key}/pages", {
+                  params: { path: { key: projectKey! }, query: { q: needle } },
+                  signal: controller.signal,
+                })
+              : undefined,
+            searchingKnowledge
+              ? api.GET("/pages", { params: { query: { q: needle, limit: matches } }, signal: controller.signal })
+              : undefined,
           ]);
 
           setFound({
             of: needle,
-            issues: issues.data?.items ?? [],
-            pages: (pages.data ?? []).slice(0, matches),
+            issues: issues?.data?.items ?? [],
+            pages: (pages?.data ?? []).slice(0, matches),
+            hits: hits?.data ?? [],
           });
         } catch {
           // Nothing found is what the palette shows; the commands remain.
@@ -142,7 +161,7 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, pages, on
       clearTimeout(timer);
       controller.abort();
     };
-  }, [needle, projectKey, searching]);
+  }, [needle, projectKey, searching, searchingKnowledge]);
 
   const commands = useMemo<Command[]>(() => {
     const go = (to: string) => () => {
@@ -223,20 +242,28 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, pages, on
       );
     }
 
-    // The knowledge base: the pages of the space that is open, then the
-    // spaces themselves. The pages come from the tree the frame read for the
-    // navigation, so this costs no request and reaches no further than the
-    // space the reader is in.
-    if (space !== undefined) {
-      for (const page of pages) {
+    // The knowledge base: what the search found, wherever it stands. The hint
+    // is the space and the address, because a hit that does not say where it
+    // is is half a hit.
+    if (searchingKnowledge) {
+      for (const hit of found.of === needle ? found.hits : []) {
         list.push({
-          id: `space:page:${page.path}`,
-          label: page.title,
-          hint: page.path,
-          group: space.title,
-          run: go(spacePagePath(space.name, page.path)),
+          id: `space:page:${hit.space}/${hit.path}`,
+          label: hit.title,
+          hint: `${hit.space_title} / ${hit.path}`,
+          group: "Knowledge base",
+          run: go(spacePagePath(hit.space, hit.path)),
+          found: true,
         });
       }
+
+      list.push({
+        id: "found:knowledge",
+        label: `All pages matching \u201c${needle}\u201d`,
+        group: "Knowledge base",
+        run: go(`/spaces?q=${encodeURIComponent(needle)}`),
+        found: true,
+      });
     }
 
     for (const other of spaces) {
@@ -298,7 +325,7 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, pages, on
     );
 
     return list;
-  }, [current, found, navigate, needle, onOpenChange, onShortcuts, pages, projectKey, projects, searching, setTheme, signOut, space, spaces]);
+  }, [current, found, navigate, needle, onOpenChange, onShortcuts, projectKey, projects, searching, searchingKnowledge, setTheme, signOut, space, spaces]);
 
   const matching = useMemo(() => {
     const lowered = needle.toLowerCase();

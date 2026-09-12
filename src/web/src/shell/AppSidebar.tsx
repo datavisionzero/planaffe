@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useSession } from "@/session/useSession";
 import type { Space, Tree } from "@/spaces/context";
+import { SearchField } from "@/spaces/SearchField";
 import { SpaceNav } from "@/spaces/SpaceNav";
 import type { Attention } from "./attention";
 import { useAttention } from "./useAttention";
@@ -159,6 +160,16 @@ function KnowledgeNav({
 }) {
   return (
     <nav aria-label="The knowledge base">
+      {/* Over the tree, because the tree is the other way to a page and this
+          is where a reader stands when neither of them is enough (VISION 18).
+          It searches the space the frame is in, or the whole knowledge base
+          where there is none. */}
+      <SidebarGroup className="pb-0">
+        <SidebarGroupContent>
+          <SearchField space={area.name} />
+        </SidebarGroupContent>
+      </SidebarGroup>
+
       <SidebarGroup>
         <SidebarGroupLabel>Knowledge base</SidebarGroupLabel>
         <SidebarGroupContent>

@@ -64,8 +64,8 @@ Markdown and never a document model of its own
 | `/:project/settings/general` | Project settings · General | name, the two switches and project deletion | area list folds above the area |
 | `/:project/settings/instructions` | Project settings · Instructions | which page of the wiki every agent is handed with every ticket, and a link into it | area list folds above the area |
 | `/:project/settings/members` | Project settings · Members | who has access to the project | area list folds above the area |
-| `/spaces` | Spaces | every space the caller may see, and which of them is closed to agents | one column of rows |
-| `/spaces/:name` | Space | what stands directly under it, with its page tree in the navigation | the tree folds into the drawer |
+| `/spaces` | Spaces | every space the caller may see, and which of them is closed to agents; with `?q=` the hits across all of them | one column of rows |
+| `/spaces/:name` | Space | what stands directly under it, with its page tree in the navigation; with `?q=` the hits in this space | the tree folds into the drawer |
 | `/spaces/:name/new` | Create page in a space | the page it hangs under, the slug, the title and the Markdown body | one column |
 | `/spaces/:name/pages/:path` | Page in a space | the rendered Markdown, the path from the root down above it, the download, and then the four acts on the tree; editing it is guarded and a conflict is shown, not lost | one column; the path wraps rather than scrolls |
 | `/spaces/:name/settings/general` | Space settings · General | the title, renaming, the switch that closes it to agents, and deleting it | area list folds above the area |
@@ -131,6 +131,30 @@ between them stands at the foot of the navigation, "Knowledge base" on one side
 and "Tracker" on the other. The two counts below are not in the knowledge base
 either: they are about work that is waiting, and nothing in a space waits for
 anybody.
+
+**In the knowledge base the search is the navigation a second time**
+(VISION 18), so the field stands in the frame over the page tree rather than on
+a screen: that is where a reader is when the tree is not enough. What is typed
+goes into the address — `/spaces?q=…` across every space the caller may see,
+`/spaces/:name?q=…` inside one — and the screen reads it from there, so a
+pasted link says what it shows and going back gives the search back. A search
+standing in a space says so and carries the way out into the whole knowledge
+base beside it; one standing at `/spaces` carries the space of every hit
+instead, because there the frame says nothing about which space a page is in.
+
+A hit is one row and one link: the way down to the page above the title — the
+space, then the pages it hangs under — and under it the excerpt with the words
+that matched marked. The excerpt arrives as pieces with a flag each and is
+marked here, because nothing the instance writes reaches the browser's tree as
+HTML ([ADR 0007](./adr/0007-markdown-is-rendered-in-the-browser-and-never-as-html.md)).
+Nothing matched is a state of its own and says so. The key that jumps into the
+search of an issue list does it here too, and the arrow keys walk the hits.
+
+**The palette asks the same search in that area** rather than filtering the
+tree the frame happens to hold: a few hits under a heading that says what they
+are, and the row that opens all of them. It does not mix the two areas — a hit
+from the knowledge base and one from the tracker answer different questions,
+and a list holding both would have to explain itself in every row.
 
 Several of the application's addresses are also addresses of the API —
 `/projects`, `/admin/projects`, `/spaces` — because the API carries no prefix of
@@ -291,7 +315,8 @@ filter choices. An empty project and an empty filtered result are distinct
 states. The command palette shows a few full-text matches and links to the full
 filtered list. It searches pages as well as issues, under headings that say
 which is which — a hit that does not say what kind of thing it is is a poor
-hit.
+hit. In the knowledge base it asks that area's search instead, and never both
+at once.
 
 Sorting by epic groups the list. It groups by sorting rather than by cutting up
 the page it happens to hold — the epic is the first sort key on the server

@@ -106,6 +106,20 @@ export const aSpace = {
  * what the address already says (ADR 0028), so a test writes the address and
  * not the same thing four times.
  */
+/**
+ * One hit of the knowledge base's search, as `GET /pages` answers it: where
+ * the page stands, and the excerpt in pieces with a flag each.
+ */
+export function aHit(
+  path: string,
+  title: string,
+  excerpt: { text: string; hit: boolean }[],
+  space = aSpace,
+  trail: { path: string; title: string }[] = [],
+) {
+  return { path, space: space.name, space_title: space.title, title, trail, excerpt };
+}
+
 export function aSpacePage(path: string, title: string, space = aSpace.name) {
   const segments = path.split("/");
 

@@ -1,6 +1,6 @@
 import { BotOffIcon } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { api, describe } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/session/useSession";
 import { PageHeader } from "@/shared/PageHeader";
 import { spacePath } from "@/shell/views";
+import { SearchResults } from "./SearchResults";
 import { useSpaceList } from "./useSpaces";
 
 /**
@@ -30,6 +31,20 @@ import { useSpaceList } from "./useSpaces";
 export function SpacesView() {
   const { spaces } = useSpaceList();
   const { me } = useSession();
+  const [params] = useSearchParams();
+  const query = params.get("q") ?? "";
+
+  // The door doubles as the search across everything behind it. The question
+  // is in the address, so this screen reads it rather than holding one, and a
+  // pasted link shows what it showed.
+  if (query !== "") {
+    return (
+      <>
+        <PageHeader title="Search" meta="The whole knowledge base" />
+        <SearchResults query={query} space={undefined} />
+      </>
+    );
+  }
 
   return (
     <>
