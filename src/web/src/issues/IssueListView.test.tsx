@@ -166,17 +166,21 @@ it("groups by epic when the epic is the sort key, and names the group without on
 
   expect(new URL(instance.calls.find((call) => new URL(call.url).pathname === "/issues")!.url).searchParams.get("sort")).toBe("epic");
   // The head carries the key and the epic's own title, and the run that hangs
-  // under no epic says so rather than trailing off the end of the list.
-  expect(screen.getByText("PLAN-E1")).toBeInTheDocument();
-  expect(screen.getByText("The shell")).toBeInTheDocument();
+  // under no epic says so rather than trailing off the end of the list. The
+  // key is asked of the head itself, because the rows under it name it too.
+  const heads = [...document.querySelectorAll("[role=presentation]")];
+  expect(heads.some((head) => head.textContent?.includes("PLAN-E1") && head.textContent?.includes("The shell"))).toBe(true);
   expect(screen.getByText("No epic")).toBeInTheDocument();
   // Heads are not options: the listbox still holds only the three issues.
   expect(within(screen.getByRole("listbox", { name: "All issues issues" })).getAllByRole("option")).toHaveLength(3);
 });
 
-it("draws no group heads under any other sort", async () => {
+it("draws no group heads under any other sort, and every row still names its epic", async () => {
   installInstance({
-    "GET /issues": { items: [anIssue("PLAN-1", "Under the shell", { epic: "PLAN-E1" })], total: 1, has_more: false, next_cursor: null },
+    "GET /issues": {
+      items: [anIssue("PLAN-1", "Under the shell", { epic: "PLAN-E1" }), anIssue("PLAN-2", "Under nothing")],
+      total: 2, has_more: false, next_cursor: null,
+    },
     "GET /projects/PLAN/labels": [],
     "GET /epics": { items: [], total: 0, has_more: false, next_cursor: null },
   });
@@ -184,6 +188,13 @@ it("draws no group heads under any other sort", async () => {
 
   await screen.findByText("Under the shell");
 
-  expect(screen.queryByText("PLAN-E1")).not.toBeInTheDocument();
+  // No head, because nothing is grouped — but the row says what it is part
+  // of, which is the one thing a list that hides the epic makes you open a
+  // ticket for.
+  expect(document.querySelectorAll("[role=presentation]")).toHaveLength(0);
   expect(screen.queryByText("No epic")).not.toBeInTheDocument();
+
+  const rows = within(screen.getByRole("listbox", { name: "All issues issues" })).getAllByRole("option");
+  expect(within(rows[0]).getAllByText("PLAN-E1").length).toBeGreaterThan(0);
+  expect(within(rows[1]).queryByText("PLAN-E1")).not.toBeInTheDocument();
 });

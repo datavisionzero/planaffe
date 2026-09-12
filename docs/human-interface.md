@@ -251,6 +251,14 @@ and within a group the order is what is up next: priority first. The heads are
 rows of the same virtual window and are `presentation` inside the listbox, which
 takes only options; every row still says which issue it is.
 
+**A row names the epic it hangs under**, as its key and not its title. A list
+that hides it makes the reader open a ticket to learn what it is part of, and
+the key is what the row has width for. It stands in front of the labels, in the
+column that goes first as the window narrows, and on the phone it leads the
+second line — where a row already says what will not fit beside the title. It
+stays there when the list is grouped: a head that has scrolled away is no
+answer.
+
 A row marks the two things that are scales rather than words twice over, so
 that neither rests on colour alone. The status is a dot whose fill says the
 stage — nothing decided is an empty ring, work in flight is half full, what has

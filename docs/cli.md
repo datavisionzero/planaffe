@@ -117,7 +117,7 @@ pa standing --json
 
 pa issue create "Title" --description-file - --priority 3 --ready --label feature --epic PLAN-E2 --blocked-by PLAN-40
 pa issue create --file batch.json          # several wired-up issues in one transaction (below)
-pa issue list --status todo --label bug --assignee me --sort priority
+pa issue list --status todo --label bug --assignee me --sort priority   # a row is key, priority, status, the epic where the page has any, title
 pa issue list --sort epic                  # by epic: one unbroken run per group, no epic last
 pa issue list -q '"for update" -flaky' # full text: issue fields, comments and questions
 pa issue list --deleted                    # the grace period, the one read that sees deleted rows

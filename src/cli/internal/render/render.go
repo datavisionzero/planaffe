@@ -20,10 +20,32 @@ func JSON(w io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
-// Summaries prints the slim issues as a table: key, priority, status, title.
+// Summaries prints the slim issues as a table: key, priority, status, the epic
+// where there is one, title.
+//
+// The epic column is there only when something in the page hangs in one. A
+// column of blanks costs width a terminal does not have, and the epic is the
+// key rather than the title for the same reason — whoever wants the title
+// reads `pa epic view`.
 func Summaries(w io.Writer, items []api.IssueSummary) {
+	epics := 0
 	for _, item := range items {
-		fmt.Fprintf(w, "%-10s P%d  %-11s  %s\n", item.Key, item.Priority, item.Status, item.Title)
+		if item.Epic != nil && len(*item.Epic) > epics {
+			epics = len(*item.Epic)
+		}
+	}
+
+	for _, item := range items {
+		if epics == 0 {
+			fmt.Fprintf(w, "%-10s P%d  %-11s  %s\n", item.Key, item.Priority, item.Status, item.Title)
+			continue
+		}
+
+		epic := ""
+		if item.Epic != nil {
+			epic = *item.Epic
+		}
+		fmt.Fprintf(w, "%-10s P%d  %-11s  %-*s  %s\n", item.Key, item.Priority, item.Status, epics, epic, item.Title)
 	}
 }
 
