@@ -947,9 +947,72 @@ rows and resolve to their owner first. Creating a space adds its creator in the
 same transaction, exactly as creating a project does. There is no migration
 that fills this table: no space exists before the feature does.
 
-The pages of the knowledge base hang in a space, and the `page` table above
-still hangs on a project. Moving it is its own piece of work; nothing here
-anticipates it.
+## Space pages
+
+```sql
+create table space_page (
+    id           uuid        not null primary key,
+    space_id     uuid        not null references space (id) on delete cascade,
+    parent_id    uuid        references space_page (id) on delete cascade,
+    depth        int         not null check (depth >= 0 and depth <= 2),
+    slug         text        not null,
+    title        text        not null,
+    body         text        not null default '',
+    created_by   uuid        not null references identity (id),
+    created_at   timestamptz not null,
+    updated_by   uuid        not null references identity (id),
+    updated_at   timestamptz not null,
+    deleted_at   timestamptz,
+    deleted_by   uuid        references identity (id),
+    deleted_with uuid
+);
+
+create unique index space_page_slug on space_page (space_id, parent_id, slug)
+    nulls not distinct;
+```
+
+The knowledge base's page (VISION 18,
+[ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)):
+the `page` table above with a place in a tree. The two stand side by side until
+the project's wiki is withdrawn, which is why this is a second table rather
+than a nullable column on the first — nothing about the older one has to change
+for a transition it is not going to survive.
+
+**It carries no `project_id` and no labels.** The first for the reason the
+space carries none; the second because a label is defined per project and a
+space has none. Neither is an omission to be filled in later.
+
+**`depth` is stored, and the check constraint is deliberate duplication.** The
+domain type cannot be constructed above the limit either, and a limit only one
+of the two holds is a limit that one forgotten act removes. `0` is a page
+directly under the space, so three levels in all.
+
+**The slug is unique under its parent, not in the space** (ADR 0028) — which is
+what `nulls not distinct` is for: the pages directly under a space have no
+parent, and without it Postgres would count every one of those rows as distinct
+and let them all take the same slug. The index covers deleted rows for the
+reason the project page's does: a slug stays spent until the purge, so a
+restore never lands on a name somebody else has taken.
+
+**`deleted_with` is what makes a subtree one thing.** Deleting a page soft-deletes
+every live descendant in the same act; each of them carries the id of the page
+the deletion was asked for, and the page itself carries nothing. Restoring it
+brings back exactly the rows carrying its id, so a page that was deleted on its
+own beforehand stays deleted. Comparing `deleted_at` instead would be almost
+right and wrong wherever two deletions share a moment.
+
+**Order is not stored.** Siblings sort by title with the slug deciding a tie,
+and nothing maintains a position — the tree is three levels deep and sorts
+itself (VISION 18).
+
+**The purge sweeps this table unconditionally**, as it does the space, because
+a page of the knowledge base hangs in no project and no project's write would
+ever come round to it. Roots go first and the `parent_id` cascade takes their
+descendants along, which is also what makes a purged subtree leave in one
+piece.
+
+Full-text search over these pages is not here yet; it arrives with the search
+over the knowledge base, and with the column and index that search needs.
 
 ## Device logins
 

@@ -49,6 +49,7 @@ public static class InfrastructureServices
         services.AddScoped<IPages, Pages>();
         services.AddScoped<ISpaces, Spaces>();
         services.AddScoped<ISpaceAccess, SpaceAccesses>();
+        services.AddScoped<ISpacePages, SpacePages>();
         services.AddScoped<IIssues, Issues>();
         services.AddScoped<IReleases, Releases>();
         services.AddScoped<IHistory, History>();

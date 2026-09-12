@@ -138,6 +138,21 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
             """,
             [grace, Batch], cancellationToken);
 
+        // And the pages in it, for the same reason: a page of the knowledge
+        // base hangs in no project either. The roots go first and their
+        // descendants cascade with them, so a subtree deleted in one act also
+        // leaves in one — which is why the batch counts what was asked for
+        // rather than what falls.
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            delete from space_page where id in (
+                select id from space_page
+                 where deleted_at is not null and deleted_at <= now() - {0}::interval
+                 order by depth
+                 limit {1})
+            """,
+            [grace, Batch], cancellationToken);
+
         // A deleted project goes with everything in it, on the next write
         // anywhere: the administrator who typed the key decided that.
         await context.Database.ExecuteSqlRawAsync(
