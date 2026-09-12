@@ -17,9 +17,9 @@ available in the browser. Enter in that field is a line break where it is
 read, so nothing has to be known about Markdown to write one
 ([ADR 0020](./adr/0020-a-newline-is-a-line-break-and-stored-text-is-not-hard-wrapped.md)).
 
-That field is one component, so what is said of it holds in all eight places it
+That field is one component, so what is said of it holds in all nine places it
 is used — an issue's description, a comment, a question, an answer, a result, an
-epic's description, a page's body, a release's notes. It shows the structure of
+epic's description, a page's body, a space page's body, a release's notes. It shows the structure of
 the text while it is typed, continues a list on Enter and ends it on an empty
 item, and carries a toolbar and the keys for the marks nobody wants to spell
 out; ⌘/Ctrl+Enter saves from inside it, so a comment is written and sent without
@@ -66,6 +66,7 @@ Markdown and never a document model of its own
 | `/:project/settings/members` | Project settings · Members | who has access to the project | area list folds above the area |
 | `/spaces` | Spaces | every space the caller may see, and which of them is closed to agents | one column of rows |
 | `/spaces/:name` | Space | what stands directly under it, with its page tree in the navigation | the tree folds into the drawer |
+| `/spaces/:name/pages/:path` | Page in a space | the rendered Markdown, the path from the root down above it, and the download; editing it is guarded and a conflict is shown, not lost | one column; the path wraps rather than scrolls |
 | `/admin/users` | Administration · Users | invite, role and lifecycle, searchable and filtered by state; each row's acts in its menu | area list folds above the area |
 | `/admin/projects` | Administration · Projects | the instance's live projects, searchable and sortable; deleted ones on request, restored or deleted from the row | area list folds above the area |
 | `/admin/projects/:key` | Administration · One project | who has access to it, and granting or removing it | area list folds above the area |
@@ -78,7 +79,18 @@ address it sits on, so a blocker in another project leads to that project.
 `:slug` is the exception the product has exactly one of
 ([ADR 0021](./adr/0021-a-pages-address-is-its-slug-not-a-key.md)): a page is
 addressed by its name, so `/PLAN/pages/architecture` is the whole address and
-there is no number to look up.
+there is no number to look up. `:path` in the knowledge base is that same name
+several times over: the slugs from the root down, at most three of them, with
+the slashes between them part of the address
+([ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)).
+`new` and `settings` under a space are the space's own screens and can never be
+a page, because a page's address always begins with `pages/`.
+
+**A page leaves as the Markdown it is.** One button downloads the body as a
+`.md` file named after the slug — the text verbatim, with nothing of ours put
+around it on the way out: no front matter, and no title heading added. The text
+was never ours to hold on to, `pg_dump` and `pa export` are the instance's way
+out, and this is the reader's (VISION 18).
 
 The application shell persists around every project route. Its project switcher
 contains only projects the caller can access. The shell binds six shortcuts:

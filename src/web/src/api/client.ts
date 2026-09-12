@@ -22,6 +22,26 @@ export const api = createClient<paths>({
   fetch: (request) => globalThis.fetch(request),
 });
 
+/**
+ * What a call needs whose path parameter is an address rather than a name.
+ *
+ * A page in a space is reached by the slugs from the root down, and the
+ * slashes between them are the address itself (ADR 0028) — `docs/api.md` says
+ * as much: a client that percent-encodes them names nothing. The generated
+ * client escapes every path parameter whole, which is right for every other
+ * route in the contract and wrong for this one, so the three calls that carry
+ * an address say so rather than the client changing its mind for all of them:
+ * a release named with a slash would still want the escape.
+ */
+export const byAddress = {
+  pathSerializer: (pathname: string, params: Record<string, unknown>) =>
+    pathname.replace(/\{([^}]+)\}/g, (whole, name: string) => {
+      const value = params[name];
+
+      return typeof value === "string" ? value.split("/").map(encodeURIComponent).join("/") : whole;
+    }),
+};
+
 export type Schemas = components["schemas"];
 export type Me = Schemas["Me"];
 export type Project = Schemas["Project"];

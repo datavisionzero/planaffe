@@ -48,6 +48,7 @@ const EpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ defau
 const NewEpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.NewEpicView })));
 const ReleaseView = lazy(() => import("@/releases/ReleaseView").then((module) => ({ default: module.ReleaseView })));
 const PageView = lazy(() => import("@/pages/PageView").then((module) => ({ default: module.PageView })));
+const SpacePageView = lazy(() => import("@/spaces/SpacePageView").then((module) => ({ default: module.SpacePageView })));
 const NewPageView = lazy(() => import("@/pages/PageView").then((module) => ({ default: module.NewPageView })));
 
 /**
@@ -218,6 +219,7 @@ export function Shell() {
           <Route path="/projects" element={<OverviewView />} />
           <Route path="/spaces" element={<SpacesView />} />
           <Route path="/spaces/:name" element={<SpaceView />} />
+          <Route path="/spaces/:name/pages/*" element={<Suspense fallback={<Busy title="Loading the screen…" />}><SpacePageView /></Suspense>} />
           <Route path="/projects/new" element={<NewProjectView />} />
           <Route path="/:project">
             <Route index element={<Navigate to="ready" replace />} />
