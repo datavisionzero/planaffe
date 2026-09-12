@@ -116,13 +116,14 @@ public static class SpaceLookup
             ? await spaces.FindAnyAsync(normalized, cancellationToken)
             : null;
 
-        if (space is null)
-        {
-            throw new Refusal(RefusalCode.NotFound, $"No space {normalized}.");
-        }
-
-        await scope.RequireAsync(space.Id, cancellationToken);
-        return space;
+        // One sentence for both outcomes, and it is why the set is asked here
+        // rather than `RequireAsync` being called: a space that is not there
+        // and a space the caller may not have must answer identically, down to
+        // the words. A closed space that refused differently would tell an
+        // agent it exists, which is the whole of what the switch keeps.
+        return space is not null && (await scope.SpaceIdsAsync(cancellationToken)).Contains(space.Id)
+            ? space
+            : throw new Refusal(RefusalCode.NotFound, $"No space {normalized}.");
     }
 
     /// <exception cref="Refusal"><c>not-found</c>, or <c>deleted</c> with <c>restorable_until</c>.</exception>

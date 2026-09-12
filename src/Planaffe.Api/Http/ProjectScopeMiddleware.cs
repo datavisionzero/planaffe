@@ -12,6 +12,13 @@ namespace Planaffe.Api.Http;
 /// unknown key before its handler loads content.
 /// </summary>
 /// <remarks>
+/// It says nothing about spaces, and nothing about them is missing here. The
+/// knowledge base's routes carry a name rather than a key, and every act on
+/// one asks <c>SpaceScope</c> itself — which is where it has to happen anyway,
+/// because the switch that hides a space from an agent is read there and not
+/// from a route (ADR 0027).
+/// </remarks>
+/// <remarks>
 /// The route the endpoint was registered under is what is read here, never the
 /// path the caller typed. Routing matches literal segments without regard to
 /// case, so <c>/Issues/PLAN-1</c> reaches the same handler as

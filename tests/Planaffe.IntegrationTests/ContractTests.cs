@@ -40,7 +40,7 @@ public sealed class ContractTests(PostgresFixture postgres)
         var paths = document["paths"]!.AsObject().Select(path => path.Key).Order(StringComparer.Ordinal);
         Assert.Equal(
             [
-                "/admin/projects", "/admin/smtp", "/admin/smtp/test",
+                "/admin/projects", "/admin/smtp", "/admin/smtp/test", "/admin/spaces",
                 "/agents", "/agents/{id}", "/agents/{id}/token",
                 "/comments/{id}",
                 "/device-logins", "/device-logins/redeem", "/device-logins/{code}", "/device-logins/{code}/decide",
@@ -59,7 +59,9 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/projects/{key}/releases/{name}/issues/{issue}", "/projects/{key}/releases/{name}/retract", "/projects/{key}/restore",
                 "/projects/{key}/users", "/projects/{key}/users/{id}",
                 "/questions", "/questions/{id}", "/questions/{id}/answer",
-                "/session", "/session/bootstrap", "/sessions", "/sessions/{id}", "/standing",
+                "/session", "/session/bootstrap", "/sessions", "/sessions/{id}",
+                "/spaces", "/spaces/{name}", "/spaces/{name}/restore", "/spaces/{name}/users", "/spaces/{name}/users/{id}",
+                "/standing",
                 "/tokens", "/tokens/{id}", "/users", "/users/{id}", "/users/{id}/deactivate",
                 "/users/{id}/invitation", "/users/{id}/invitation-link", "/users/{id}/reactivate",
                 "/users/{id}/recovery-link", "/version",

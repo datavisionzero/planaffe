@@ -371,6 +371,11 @@ one role and project access:
   `{ "key": null, "status": null, "open": true }`: it still affects
   workability without revealing project data. Every list, search, direct key,
   export, `next` and `needs-you` read uses the same project scope.
+- **Space access belongs to a user as project access does.** A space is seen by
+  the users named on it, an agent inherits its owner's spaces minus every space
+  closed to agents, and an administrator grants and revokes without thereby
+  seeing what is in one. Creating a space is a user's act and never an agent's
+  ([ADR 0027](./adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)).
 - **A deactivated user cannot authenticate**, through a browser session, user
   token or owned agent. Reactivation restores credentials that were not
   separately revoked. At least one active administrator must remain.
@@ -1028,3 +1033,51 @@ The default issue order for the Ready preset is the business order used by
 `next`; other issue lists default to most recently updated. Alternative sorts
 are updated, created, priority and epic. A cursor binds every filter and
 ordering choice, so changing URL state starts a new page sequence.
+
+## What the knowledge base adds
+
+Designed in PLAN-E1 (12 September 2026), on the schema `docs/storage.md`
+describes under "Spaces". Nothing above changes shape: the knowledge base is a
+second bracket beside the project, and nothing of the tracker reaches into it
+([ADR 0027](./adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)).
+
+### Spaces
+
+| method | path | who | does |
+|---|---|---|---|
+| `GET` | `/spaces` | any | every space the caller sees as `Space`, by name; an agent's list has every space closed to agents subtracted. Not paginated |
+| `POST` | `/spaces` | user | `{ name, title, closed_to_agents? }` → 201 `Space`; the name is given, never derived from the title, and the creator is named on it |
+| `GET` | `/spaces/{name}` | any | `Space` |
+| `PATCH` | `/spaces/{name}` | user | `{ name?, title?, closed_to_agents? }`; `name` renames and leaves nothing behind |
+| `DELETE` | `/spaces/{name}` | administrator | soft delete; 204 |
+| `POST` | `/spaces/{name}/restore` | administrator | back, under the name it kept |
+| `GET` | `/spaces/{name}/users` | named user or administrator | who sees the space, as `User` |
+| `PUT` | `/spaces/{name}/users/{id}` | administrator | name a user on the space; 204 and idempotent |
+| `DELETE` | `/spaces/{name}/users/{id}` | administrator | take a user off it; 204 and idempotent |
+| `GET` | `/admin/spaces` | administrator | every space, deleted ones included, without content — the list a deleted space is found in |
+
+**A space is at the root and not under a project**, because it is the second
+bracket rather than something inside the first. It carries a name and not a key,
+addressed the way a page is (ADR 0021), and the name is unique across the
+instance: nothing brackets a space, so there is no scope it could be unique in
+instead.
+
+**An agent may read the knowledge base and may not shape it.** Creating,
+renaming, retitling and the switch are a user's acts; deleting and restoring are
+an administrator's, as with a project. An agent that could open a bracket would
+decide what it may read next (ADR 0015, ADR 0027).
+
+**`closed_to_agents` is absence, not refusal.** For an agent's token every route
+above answers `not-found` on a closed space — the list omits it, the direct read
+denies it exists, and a write attempt is refused the same way a stranger's would
+be. The switch names the agent rather than the interface, so it holds for the
+CLI, for a direct API caller and for the MCP server when it arrives.
+
+**A taken name is `validation` on `name`**, and a name belonging to a deleted
+space says so with `restorable_until`: it stays spent until the purge, so a
+restore can never land on a name somebody else took. A name that could not be
+one is `not-found` when it arrives in the path, as with a page's slug.
+
+There is no space-scope door in front of these routes. Every act asks the space
+scope itself, which is where it has to happen: the switch that hides a space
+from an agent is read there and not off a route.

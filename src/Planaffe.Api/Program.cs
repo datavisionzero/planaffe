@@ -163,6 +163,20 @@ builder.Services.AddScoped<CreatePage>();
 builder.Services.AddScoped<ChangePage>();
 builder.Services.AddScoped<MovePage>();
 
+// The knowledge base's bracket (VISION 18, ADR 0027): spaces, who sees them,
+// and the switch that closes one to agents.
+builder.Services.AddScoped<SpaceAssembler>();
+builder.Services.AddScoped<SpaceScope>();
+builder.Services.AddScoped<ListSpaces>();
+builder.Services.AddScoped<ListAdminSpaces>();
+builder.Services.AddScoped<ReadSpace>();
+builder.Services.AddScoped<CreateSpace>();
+builder.Services.AddScoped<ChangeSpace>();
+builder.Services.AddScoped<MoveSpace>();
+builder.Services.AddScoped<ListSpaceUsers>();
+builder.Services.AddScoped<GrantSpaceAccess>();
+builder.Services.AddScoped<RevokeSpaceAccess>();
+
 builder.Services.AddScoped<ReleaseAssembler>();
 builder.Services.AddScoped<ListReleases>();
 builder.Services.AddScoped<ReadRelease>();
@@ -247,6 +261,7 @@ app.MapIssues();
 app.MapConversation();
 app.MapEpics();
 app.MapPages();
+app.MapSpaces();
 app.MapReleases();
 app.MapSmtp();
 
