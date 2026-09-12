@@ -465,32 +465,35 @@ channel without a join.
 
 ```sql
 create table history (
-    id         bigint      not null generated always as identity primary key,
-    issue_id   uuid        references issue (id) on delete cascade,
-    epic_id    uuid        references epic (id)  on delete cascade,
-    page_id    uuid        references page (id)  on delete cascade,
-    actor_id   uuid        not null references identity (id),
-    at         timestamptz not null,
-    field      text        not null,
-    old_value  text,
-    new_value  text,
-    note       text,
+    id            bigint      not null generated always as identity primary key,
+    issue_id      uuid        references issue      (id) on delete cascade,
+    epic_id       uuid        references epic       (id) on delete cascade,
+    page_id       uuid        references page       (id) on delete cascade,
+    space_page_id uuid        references space_page (id) on delete cascade,
+    actor_id      uuid        not null references identity (id),
+    at            timestamptz not null,
+    field         text        not null,
+    old_value     text,
+    new_value     text,
+    note          text,
 
-    check (num_nonnulls(issue_id, epic_id, page_id) = 1)
+    check (num_nonnulls(issue_id, epic_id, page_id, space_page_id) = 1)
 );
 
-create index history_issue on history (issue_id, id);
-create index history_epic  on history (epic_id, id);
-create index history_page  on history (page_id, id);
+create index history_issue      on history (issue_id, id);
+create index history_epic       on history (epic_id, id);
+create index history_page       on history (page_id, id);
+create index history_space_page on history (space_page_id, id);
 ```
 
 One row per change: who, when, which field, from what to what (VISION 7). An
-issue's history, an epic's and a page's live in one table because they are one
-concept and the two smaller ones are tiny; the check keeps every row pointing
-at exactly one subject.
+issue's history, an epic's, a project page's and a space page's live in one
+table because they are one concept and the three smaller ones are tiny; the
+check keeps every row pointing at exactly one subject.
 
-`page_id` arrives with the pages below, and the check grows with it rather than
-gaining a fourth column of its own.
+Each subject arrived with the thing it records, and the check grew with it
+rather than the table gaining a column that says which kind a row is. The
+newest of them is `space_page_id`, the knowledge base's page (VISION 18).
 
 `field` is the name of the column or edge that changed, spelled as the API
 spells it: `title`, `description`, `result`, `status`, `ready`, `priority`,

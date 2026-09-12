@@ -39,7 +39,7 @@ public static class Problems
         RefusalCode.Stale => StatusCodes.Status412PreconditionFailed,
         RefusalCode.Transition or RefusalCode.Cycle or RefusalCode.HasIssues or RefusalCode.OneLevel
             or RefusalCode.OtherProject or RefusalCode.EpicInherited or RefusalCode.HasSubIssues or RefusalCode.UnknownLabel
-            or RefusalCode.InPublishedRelease =>
+            or RefusalCode.InPublishedRelease or RefusalCode.TooDeep =>
             StatusCodes.Status422UnprocessableEntity,
         RefusalCode.WaitTooLong or RefusalCode.TooMany => StatusCodes.Status422UnprocessableEntity,
         RefusalCode.SmtpNotConfigured => StatusCodes.Status422UnprocessableEntity,
@@ -68,6 +68,7 @@ public static class Problems
         RefusalCode.Cycle => "The blocker would close a cycle",
         RefusalCode.HasIssues => "The epic still has issues",
         RefusalCode.OneLevel => "Sub-issues are exactly one level deep",
+        RefusalCode.TooDeep => "A page sits at most three levels under its space",
         RefusalCode.OtherProject => "The parent belongs to another project",
         RefusalCode.EpicInherited => "A sub-issue inherits its epic",
         RefusalCode.HasSubIssues => "The issue still has sub-issues",

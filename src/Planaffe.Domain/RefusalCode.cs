@@ -76,6 +76,13 @@ public enum RefusalCode
     /// <summary>The requested parent belongs to another project.</summary>
     OtherProject,
 
+    /// <summary>
+    /// The requested parent would put a page below the third level of its
+    /// space, or a subtree past it; <c>depth</c> says how deep the offending
+    /// side already is (ADR 0028).
+    /// </summary>
+    TooDeep,
+
     /// <summary>A sub-issue's epic is inherited from its parent and cannot be written directly.</summary>
     EpicInherited,
 

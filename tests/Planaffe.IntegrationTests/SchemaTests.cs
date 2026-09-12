@@ -115,7 +115,7 @@ public sealed class SchemaTests(PostgresFixture postgres)
             [
                 "PK___EFMigrationsHistory",
                 "blocker_blocked", "browser_session_hash", "browser_session_user", "comment_issue", "comment_search", "device_login_code", "device_login_expiry",
-                "epic_number", "history_epic", "history_issue", "history_page",
+                "epic_number", "history_epic", "history_issue", "history_page", "history_space_page",
                 "identity_email", "identity_metadata_identity", "identity_name", "issue_assignee", "issue_claim", "issue_epic", "issue_next",
                 "issue_number", "issue_parent", "issue_search", "issue_updated", "label_name",
                 "one_live_login_per_code", "one_live_secret_per_purpose", "one_time_secret_hash", "page_search", "page_slug",

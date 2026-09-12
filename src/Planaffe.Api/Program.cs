@@ -177,6 +177,12 @@ builder.Services.AddScoped<ListSpaceUsers>();
 builder.Services.AddScoped<GrantSpaceAccess>();
 builder.Services.AddScoped<RevokeSpaceAccess>();
 
+builder.Services.AddScoped<SpacePageAssembler>();
+builder.Services.AddScoped<ListSpacePages>();
+builder.Services.AddScoped<ReadSpacePage>();
+builder.Services.AddScoped<CreateSpacePage>();
+builder.Services.AddScoped<ChangeSpacePage>();
+
 builder.Services.AddScoped<ReleaseAssembler>();
 builder.Services.AddScoped<ListReleases>();
 builder.Services.AddScoped<ReadRelease>();

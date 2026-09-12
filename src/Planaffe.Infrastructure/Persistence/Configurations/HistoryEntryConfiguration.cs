@@ -5,19 +5,21 @@ using Planaffe.Domain.History;
 using Planaffe.Domain.Identities;
 using Planaffe.Domain.Issues;
 using Planaffe.Domain.Pages;
+using Planaffe.Domain.Spaces;
 
 namespace Planaffe.Infrastructure.Persistence.Configurations;
 
 /// <summary>
-/// An issue's history, an epic's and a page's in one table, every row pointing
-/// at exactly one of the three, and dying with it (ADR 0013).
+/// An issue's history, an epic's, a project page's and a space page's in one
+/// table, every row pointing at exactly one of the four, and dying with it
+/// (ADR 0013).
 /// </summary>
 public sealed class HistoryEntryConfiguration : IEntityTypeConfiguration<HistoryEntry>
 {
     public void Configure(EntityTypeBuilder<HistoryEntry> builder)
     {
         builder.ToTable("history", table =>
-            table.HasCheckConstraint("ck_history_subject", "num_nonnulls(issue_id, epic_id, page_id) = 1"));
+            table.HasCheckConstraint("ck_history_subject", "num_nonnulls(issue_id, epic_id, page_id, space_page_id) = 1"));
 
         // Always generated, so that the order of the ids is the order the rows
         // were written and nothing can insert one out of sequence.
@@ -45,6 +47,13 @@ public sealed class HistoryEntryConfiguration : IEntityTypeConfiguration<History
             .HasConstraintName("fk_history_page")
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.Property(h => h.SpacePageId).HasColumnName("space_page_id");
+        builder.HasOne<SpacePage>()
+            .WithMany()
+            .HasForeignKey(h => h.SpacePageId)
+            .HasConstraintName("fk_history_space_page")
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Property(h => h.ActorId).HasColumnName("actor_id").IsRequired();
         builder.HasOne<Identity>()
             .WithMany()
@@ -61,5 +70,6 @@ public sealed class HistoryEntryConfiguration : IEntityTypeConfiguration<History
         builder.HasIndex(h => new { h.IssueId, h.Id }).HasDatabaseName("history_issue");
         builder.HasIndex(h => new { h.EpicId, h.Id }).HasDatabaseName("history_epic");
         builder.HasIndex(h => new { h.PageId, h.Id }).HasDatabaseName("history_page");
+        builder.HasIndex(h => new { h.SpacePageId, h.Id }).HasDatabaseName("history_space_page");
     }
 }
