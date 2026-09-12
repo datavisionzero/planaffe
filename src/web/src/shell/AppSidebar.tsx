@@ -20,7 +20,7 @@ import type { Space, Tree } from "@/spaces/context";
 import { SpaceNav } from "@/spaces/SpaceNav";
 import type { Attention } from "./attention";
 import { useAttention } from "./useAttention";
-import { viewPath, views } from "./views";
+import { spacePath, viewPath, views } from "./views";
 
 /**
  * Which of the two areas the frame is standing in (VISION 18). One application
@@ -178,6 +178,17 @@ function KnowledgeNav({
           <SidebarGroupLabel>{area.space?.title ?? area.name}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SpaceNav space={area.name} tree={area.tree} path={area.path} />
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={pathname.startsWith(`${spacePath(area.name)}/settings`)}
+                  render={<NavLink to={`${spacePath(area.name)}/settings`} onClick={onWalk} />}
+                >
+                  <SettingsIcon />
+                  <span>Space settings</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       )}

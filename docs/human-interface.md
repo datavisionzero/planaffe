@@ -68,9 +68,12 @@ Markdown and never a document model of its own
 | `/spaces/:name` | Space | what stands directly under it, with its page tree in the navigation | the tree folds into the drawer |
 | `/spaces/:name/new` | Create page in a space | the page it hangs under, the slug, the title and the Markdown body | one column |
 | `/spaces/:name/pages/:path` | Page in a space | the rendered Markdown, the path from the root down above it, the download, and then the four acts on the tree; editing it is guarded and a conflict is shown, not lost | one column; the path wraps rather than scrolls |
+| `/spaces/:name/settings/general` | Space settings · General | the title, renaming, the switch that closes it to agents, and deleting it | area list folds above the area |
+| `/spaces/:name/settings/members` | Space settings · Members | who sees the space, and naming somebody on it or taking them off | area list folds above the area |
 | `/admin/users` | Administration · Users | invite, role and lifecycle, searchable and filtered by state; each row's acts in its menu | area list folds above the area |
 | `/admin/projects` | Administration · Projects | the instance's live projects, searchable and sortable; deleted ones on request, restored or deleted from the row | area list folds above the area |
 | `/admin/projects/:key` | Administration · One project | who has access to it, and granting or removing it | area list folds above the area |
+| `/admin/spaces` | Administration · Spaces | every space of the instance, deleted ones on request, deleted or restored from the row | area list folds above the area |
 | `/admin/email` | Administration · Transactional email | the SMTP status and a test message | area list folds above the area |
 
 `:number` is the part of a key after its project prefix ([`CONTEXT.md`](../CONTEXT.md)):
@@ -428,6 +431,26 @@ who lacks authority for a visible administrative action receives `403`.
 | Invite or deactivate users; change administrator role | no | no | yes |
 | Hand over an invitation or password link | no | no | yes |
 | Inspect SMTP status and send a test email | no | no | yes |
+
+**Space access is the same model a second time** (VISION 18,
+[ADR 0027](./adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)):
+a space is seen by the users named on it, an agent inherits its owner's spaces
+minus every one closed to agents, and there are no rights per page. A space a
+caller cannot see is `404` on every route, and a closed space is `404` for an
+agent — absent, not refused, because the existence is half of what is being
+protected. Managing a space happens in the knowledge base and nowhere else; the
+one exception is the deleted space, which is in no list there and comes back
+from Administration · Spaces.
+
+| capability | named user | their agent | administrator without being named |
+|---|---:|---:|---:|
+| Read the space and the pages in it | yes | yes, unless it is closed to agents | no |
+| Create, edit, move and delete pages in it | yes | yes, unless it is closed to agents | no |
+| Create a space | yes; is named on it | no | yes; is named on it |
+| Change the title, the name and the agent switch | yes | no | no |
+| See who is named on the space | yes | no | yes |
+| Name somebody on it or take them off | no | no | yes |
+| Delete or restore a space | no | no | yes |
 
 An administrator role grants instance administration, not implicit access to
 project content. There must always be at least one active administrator; the

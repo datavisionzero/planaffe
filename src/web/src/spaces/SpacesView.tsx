@@ -1,7 +1,22 @@
 import { BotOffIcon } from "lucide-react";
-import { Link } from "react-router";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { api, describe } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSession } from "@/session/useSession";
 import { PageHeader } from "@/shared/PageHeader";
 import { spacePath } from "@/shell/views";
 import { useSpaceList } from "./useSpaces";
@@ -14,10 +29,16 @@ import { useSpaceList } from "./useSpaces";
  */
 export function SpacesView() {
   const { spaces } = useSpaceList();
+  const { me } = useSession();
 
   return (
     <>
-      <PageHeader title="Spaces" meta={spaces.at === "known" ? `${spaces.spaces.length}` : undefined} />
+      <PageHeader title="Spaces" meta={spaces.at === "known" ? `${spaces.spaces.length}` : undefined}>
+        {/* A bracket is a human's to draw (ADR 0015, ADR 0027). An agent never
+            reaches this screen, and the button is not what stops it — the
+            instance is. */}
+        {me.kind === "user" && <CreateSpace />}
+      </PageHeader>
 
       {spaces.at === "asking" && (
         <div className="space-y-3 p-4" aria-busy>
@@ -58,5 +79,99 @@ export function SpacesView() {
         </ul>
       )}
     </>
+  );
+}
+
+/**
+ * A new space: a name, a title and the switch, in a dialog rather than on a
+ * screen of its own. Three fields are not a screen, and `/spaces/new` would be
+ * a name somebody can take — a space is called what a person calls it, and
+ * `/projects/new` only works because a project key is upper case.
+ */
+function CreateSpace() {
+  const navigate = useNavigate();
+  const { reload } = useSpaceList();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
+  const [closed, setClosed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [why, setWhy] = useState<string>();
+
+  async function create(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setWhy(undefined);
+
+    try {
+      const { data, error, response } = await api.POST("/spaces", {
+        body: { name, title, closed_to_agents: closed },
+      });
+
+      if (data === undefined) {
+        setWhy(describe(error, response.status));
+        return;
+      }
+
+      await reload();
+      setOpen(false);
+      void navigate(spacePath(data.name));
+    } catch {
+      setWhy("The instance did not answer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (busy) return;
+        if (next) {
+          setName("");
+          setTitle("");
+          setClosed(false);
+        }
+        setWhy(undefined);
+        setOpen(next);
+      }}
+    >
+      <DialogTrigger render={<Button size="sm" />}>New space</DialogTrigger>
+      <DialogContent>
+        <form onSubmit={(event) => void create(event)}>
+          <DialogHeader>
+            <DialogTitle>Create a space</DialogTitle>
+            <DialogDescription>
+              A space is the bracket of the knowledge base and the only thing in it that carries access. Who sees it is
+              named on it afterwards, in its settings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-3">
+            <label className="grid gap-1 text-sm font-medium">
+              Name
+              <Input name="name" required autoFocus value={name} onChange={(event) => setName(event.target.value)} />
+              <span className="text-xs font-normal text-muted-foreground">
+                The address of the space: lower case letters and digits, hyphens between the words. It is not derived
+                from the title.
+              </span>
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Title
+              <Input name="title" required value={title} onChange={(event) => setTitle(event.target.value)} />
+            </label>
+            <label className="flex gap-2 text-sm">
+              <input name="closed" type="checkbox" checked={closed} onChange={(event) => setClosed(event.target.checked)} />
+              Closed to agents
+            </label>
+          </div>
+          {why !== undefined && <p role="alert" className="text-sm text-destructive">{why}</p>}
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" disabled={busy} />}>Cancel</DialogClose>
+            <Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create space"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

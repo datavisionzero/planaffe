@@ -18,6 +18,7 @@ import { ReleasesView } from "@/releases/ReleasesView";
 import { SettingsView } from "@/settings/SettingsView";
 import { SpacesContext, TreeContext } from "@/spaces/context";
 import { SpaceSwitcher } from "@/spaces/SpaceSwitcher";
+import { SpaceSettingsView } from "@/spaces/SpaceSettingsView";
 import { SpacesView } from "@/spaces/SpacesView";
 import { SpaceView } from "@/spaces/SpaceView";
 import { useSpaceState, useTreeState } from "@/spaces/useSpaces";
@@ -220,6 +221,7 @@ export function Shell() {
           <Route path="/projects" element={<OverviewView />} />
           <Route path="/spaces" element={<SpacesView />} />
           <Route path="/spaces/:name" element={<SpaceView />} />
+          <Route path="/spaces/:name/settings/*" element={<SpaceSettingsView />} />
           <Route path="/spaces/:name/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewSpacePageView /></Suspense>} />
           <Route path="/spaces/:name/pages/*" element={<Suspense fallback={<Busy title="Loading the screen…" />}><SpacePageView /></Suspense>} />
           <Route path="/projects/new" element={<NewProjectView />} />

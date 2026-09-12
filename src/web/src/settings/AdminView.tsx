@@ -15,6 +15,7 @@ import { ListHead, Row, RowMenu, Rows, Said, Section, SettingsShell } from "./Se
 type User = Schemas["UserSummary"];
 type AccessLink = Schemas["AccessLink"];
 type AdminProject = Schemas["AdminProject"];
+type Space = Schemas["Space"];
 type Smtp = Schemas["SmtpStatus"];
 
 /** The instance's own administration, one area per address. */
@@ -29,6 +30,7 @@ export function AdminView() {
       areas={[
         { to: "users", label: "Users", element: <Users /> },
         { to: "projects", path: "projects/*", label: "Projects", element: <Projects /> },
+        { to: "spaces", label: "Spaces", element: <Spaces /> },
         { to: "email", label: "Transactional email", element: <Email /> },
       ]}
     />
@@ -461,6 +463,102 @@ function ProjectAccess() {
           </Rows>
         </>
       )}
+      <Said notice={notice} />
+    </Section>
+  );
+}
+
+const spaceSorts = {
+  name: { label: "Name", by: (a: Space, b: Space) => a.name.localeCompare(b.name) },
+  title: { label: "Title", by: (a: Space, b: Space) => a.title.localeCompare(b.title) || a.name.localeCompare(b.name) },
+  created: { label: "Newest first", by: (a: Space, b: Space) => b.created_at.localeCompare(a.created_at) },
+} as const;
+
+/**
+ * The instance's spaces, deleted ones included — the list a deleted space is
+ * found in, because a deleted space is in no other list anywhere (ADR 0027).
+ * Everything else about a space is managed in the knowledge base itself, where
+ * managing one belongs (VISION 18); what is here is the one act that has
+ * nowhere else to be.
+ *
+ * `GET /admin/spaces` takes no parameter and answers every space, so unlike
+ * the projects above the switch narrows what was fetched rather than what is
+ * asked for. Spaces are few by design — a bracket that is free to create
+ * breeds, which is why an agent cannot open one.
+ */
+function Spaces() {
+  const { me } = useSession();
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [deleted, setDeleted] = useState<"false" | "all">("false");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<keyof typeof spaceSorts>("name");
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    setSpaces((await api.GET("/admin/spaces")).data ?? []);
+  }, []);
+
+  useEffect(() => { void (async () => { await load(); })(); }, [load]);
+  const report = reporting(setNotice, load);
+
+  const looked = search.trim().toLowerCase();
+  const shown = spaces
+    .filter((space) => deleted === "all" || space.deleted_at === null)
+    .filter((space) => looked === "" || space.name.toLowerCase().includes(looked) || space.title.toLowerCase().includes(looked))
+    .sort(spaceSorts[sort].by);
+
+  return (
+    <Section title="Spaces" description="Every space of the instance. A deleted one is in no other list, so this is where it comes back from.">
+      <ListHead
+        label="Search"
+        placeholder="Name or title"
+        search={search}
+        onSearch={setSearch}
+        said={looked === "" ? undefined : `${shown.length} of ${spaces.length} spaces`}
+      >
+        <Choose label="Deleted" value={deleted} onChange={(next) => setDeleted(next as "false" | "all")}>
+          <option value="false">Hidden</option>
+          <option value="all">Shown</option>
+        </Choose>
+        <Choose label="Sort" value={sort} onChange={(next) => setSort(next as keyof typeof spaceSorts)}>
+          {Object.entries(spaceSorts).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
+        </Choose>
+      </ListHead>
+      <Rows empty={emptily(spaces.length, looked, "spaces")}>
+        {shown.map((space) => (
+          <Row
+            key={space.name}
+            title={
+              space.deleted_at === null
+                ? <Link className="hover:underline" to={`/spaces/${encodeURIComponent(space.name)}`}>{space.title}</Link>
+                : space.title
+            }
+            detail={
+              space.deleted_at === null
+                ? `${space.name}${space.closed_to_agents ? " · closed to agents" : ""} · created ${day(space.created_at)}`
+                : `${space.name} · deleted ${date(space.deleted_at)} · restorable until at least ${restorableUntil(space.deleted_at, me.deletion_grace_days)}`
+            }
+            action={
+              <RowMenu label={`Actions for ${space.name}`}>
+                {space.deleted_at === null ? (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => void report(api.DELETE("/spaces/{name}", { params: { path: { name: space.name } } }), `${space.name} deleted.`)}
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={() => void report(api.POST("/spaces/{name}/restore", { params: { path: { name: space.name } } }), `${space.name} restored.`)}
+                  >
+                    Restore
+                  </DropdownMenuItem>
+                )}
+              </RowMenu>
+            }
+          />
+        ))}
+      </Rows>
       <Said notice={notice} />
     </Section>
   );
