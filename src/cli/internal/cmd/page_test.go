@@ -10,243 +10,463 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/exit"
 )
 
-const page = `{"slug":"architecture","project":"PLAN","title":"Architecture","body":"# The four layers\n\nDependencies point inward.",
-"labels":[{"name":"reference","group":null,"description":null}],
+const spacePage = `{"path":"company/onboarding","space":"handbuch","slug":"onboarding","parent":"company","depth":1,
+"title":"Onboarding","body":"Am ersten Tag bekommt jede neue Person eine Karte.",
 "author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},
 "updated_by":{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"quiet-otter-42"},
-"created_at":"2026-09-05T10:00:00.000000Z","updated_at":"2026-09-05T12:00:00.000000Z"}`
+"created_at":"2026-09-12T09:00:00.000000Z","updated_at":"2026-09-13T11:00:00.000000Z"}`
 
-func TestPageVerbsReachTheRightAddresses(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
-		if r.Method == http.MethodGet && r.URL.Path == "/projects/PLAN/pages" {
-			return 200, `[{"slug":"architecture","project":"PLAN","title":"Architecture","labels":["reference"],
-			"updated_by":{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"quiet-otter-42"},
-			"created_at":"2026-09-05T10:00:00Z","updated_at":"2026-09-05T12:00:00Z"}]`
-		}
-		if r.Method == http.MethodPost && r.URL.Path == "/projects/PLAN/pages" {
-			return 201, page
-		}
-		if r.Method == http.MethodDelete {
-			return 204, ""
-		}
-		return 200, page
-	}}
+// serving answers everything with one body, so that a test about what was
+// asked is only about that.
+func serving(body string) func(*http.Request) (int, string) {
+	return func(_ *http.Request) (int, string) { return 200, body }
+}
+
+// The slashes in an address are the address, and they reach the instance as
+// slashes: a client that percent-encodes them names nothing (docs/api.md,
+// ADR 0028). The request target is where that is visible — the server decodes
+// the path either way.
+func TestPageViewAsksTheAddressUnencoded(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
-	dir := repository(t, "project = PLAN\n")
 
-	for _, tc := range []struct {
-		args                   []string
-		method, path, contains string
-	}{
-		{[]string{"page", "list"}, "GET", "/projects/PLAN/pages", "architecture"},
-		{[]string{"page", "view", "architecture"}, "GET", "/projects/PLAN/pages/architecture", "# The four layers"},
-		{[]string{"page", "create", "architecture", "--title", "Architecture"}, "POST", "/projects/PLAN/pages", "PLAN/architecture"},
-		{[]string{"page", "edit", "architecture", "--title", "The four layers"}, "PATCH", "/projects/PLAN/pages/architecture", "PLAN/architecture"},
-		{[]string{"page", "rename", "architecture", "betriebshandbuch"}, "PATCH", "/projects/PLAN/pages/architecture", "PLAN/architecture"},
-		{[]string{"page", "delete", "architecture"}, "DELETE", "/projects/PLAN/pages/architecture", "pa page restore architecture"},
-		{[]string{"page", "restore", "architecture"}, "POST", "/projects/PLAN/pages/architecture/restore", "PLAN/architecture"},
-	} {
-		code, out, stderr := run(t, server, dir, tc.args...)
-		if code != exit.OK || stderr != "" {
-			t.Fatalf("%v: code %d, stderr %q", tc.args, code, stderr)
-		}
-		last := f.requests[len(f.requests)-1]
-		if last.Method != tc.method || last.URL.Path != tc.path {
-			t.Errorf("%v: %s %s", tc.args, last.Method, last.URL.Path)
-		}
-		if !strings.Contains(out, tc.contains) {
-			t.Errorf("%v: stdout %q lacks %q", tc.args, out, tc.contains)
-		}
+	code, out, stderr := run(t, server, t.TempDir(), "page", "view", "handbuch/company/onboarding")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodGet || asked.RequestURI != "/spaces/handbuch/pages/company/onboarding" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	// The head opens with the address, and then the body stands as it is
+	// stored, so that the output pipes back into --body-file -.
+	if !strings.Contains(out, "handbuch/company/onboarding  Onboarding") {
+		t.Errorf("stdout %q is not the head", out)
+	}
+	if !strings.Contains(out, "\nAm ersten Tag bekommt jede neue Person eine Karte.\n") {
+		t.Errorf("stdout %q is not the body", out)
 	}
 }
 
-// The view prints the head and then the Markdown as it is stored, so that the
-// output can be piped straight back into `--body-file -`.
-func TestPageViewPrintsTheStoredMarkdown(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) { return 200, page }}
+func TestPageViewJSONIsTheAnswer(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
-	code, out, stderr := run(t, server, repository(t, "project = PLAN\n"), "page", "view", "architecture")
+	code, out, _ := run(t, server, t.TempDir(), "page", "view", "handbuch/company/onboarding", "--json")
 
-	if code != exit.OK || stderr != "" {
-		t.Fatalf("code %d, stderr %q", code, stderr)
-	}
-	if !strings.HasPrefix(out, "PLAN/architecture  Architecture\n") {
-		t.Fatalf("the head names the address and the title:\n%s", out)
-	}
-	if !strings.Contains(out, "updated: 2026-09-05T12:00:00Z by quiet-otter-42") || !strings.Contains(out, "labels: reference") {
-		t.Fatalf("the head says when and by whom:\n%s", out)
-	}
-	if !strings.HasSuffix(out, "# The four layers\n\nDependencies point inward.\n") {
-		t.Fatalf("the body is printed as it is stored:\n%q", out)
-	}
-}
-
-func TestPageWritesSendWhatTheFlagsSay(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
-		switch {
-		case r.Method == http.MethodPost:
-			return 201, page
-		case r.Method == http.MethodGet && r.URL.Path == "/projects/PLAN/pages":
-			return 200, `[]`
-		default:
-			return 200, page
-		}
-	}}
-	server := httptest.NewServer(f.handler())
-	defer server.Close()
-	dir := repository(t, "project = PLAN\n")
-
-	// The Markdown arrives over stdin, because an agent has it as Markdown already.
-	code, _, stderr := run(t, server, dir, "page", "create", "architecture", "--title", "Architecture", "--body-file", "-", "--label", "reference")
-	if code != exit.OK || stderr != "" {
-		t.Fatalf("code %d, stderr %q", code, stderr)
-	}
-	var created map[string]any
-	_ = json.Unmarshal([]byte(f.bodies[0]), &created)
-	if created["slug"] != "architecture" || created["title"] != "Architecture" || created["body"] != "" {
-		t.Errorf("create body = %v", created)
-	}
-	if labels, ok := created["labels"].([]any); !ok || len(labels) != 1 || labels[0] != "reference" {
-		t.Errorf("create labels = %v", created["labels"])
-	}
-
-	// The guard is sent only when it is given, and quoted as the header wants it.
-	code, _, stderr = run(t, server, dir, "page", "edit", "architecture", "--title", "New", "--if-match", "2026-09-05T12:00:00.000000Z")
-	if code != exit.OK || stderr != "" {
-		t.Fatalf("code %d, stderr %q", code, stderr)
-	}
-	if got := f.requests[len(f.requests)-1].Header.Get("If-Match"); got != `"2026-09-05T12:00:00.000000Z"` {
-		t.Errorf("If-Match = %q", got)
-	}
-
-	// A rename sends the slug and nothing else: it is one act, not an edit.
-	code, _, stderr = run(t, server, dir, "page", "rename", "architecture", "betriebshandbuch")
-	if code != exit.OK || stderr != "" {
-		t.Fatalf("code %d, stderr %q", code, stderr)
-	}
-	var renamed map[string]any
-	_ = json.Unmarshal([]byte(f.bodies[len(f.bodies)-1]), &renamed)
-	if len(renamed) != 1 || renamed["slug"] != "betriebshandbuch" {
-		t.Errorf("rename body = %v", renamed)
-	}
-	if f.requests[len(f.requests)-1].Header.Get("If-Match") != "" {
-		t.Error("no --if-match, no header")
-	}
-
-	// The label filter is repeated on the list, as everywhere, and `-q` is the
-	// same full-text filter the issue list has.
-	if code, _, _ = run(t, server, dir, "page", "list", "--label", "reference", "--label", "cut-1", "-q", `"four layers"`); code != exit.OK {
+	if code != exit.OK {
 		t.Fatalf("code %d", code)
 	}
-	query := f.requests[len(f.requests)-1].URL.Query()
-	if got := query["label"]; len(got) != 2 || got[0] != "reference" {
-		t.Errorf("label = %v", got)
-	}
-	if got := query.Get("q"); got != `"four layers"` {
-		t.Errorf("q = %q", got)
-	}
-
-	// Nothing typed, nothing sent: an empty filter is not a filter.
-	if code, _, _ = run(t, server, dir, "page", "list"); code != exit.OK {
-		t.Fatalf("code %d", code)
-	}
-	if f.requests[len(f.requests)-1].URL.Query().Has("q") {
-		t.Error("an empty -q is not sent")
-	}
-}
-
-func TestPageUsageMistakesAreExitTwo(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) { return 200, page }}
-	server := httptest.NewServer(f.handler())
-	defer server.Close()
-	dir := repository(t, "project = PLAN\n")
-
-	for _, args := range [][]string{
-		{"page", "create", "architecture"},
-		{"page", "edit", "architecture"},
-	} {
-		if code, _, stderr := run(t, server, dir, args...); code != exit.Usage || stderr == "" {
-			t.Errorf("%v: code %d, stderr %q", args, code, stderr)
+	for _, want := range []string{`"path": "company/onboarding"`, `"parent": "company"`, `"depth": 1`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout %q lacks %s", out, want)
 		}
 	}
 }
 
-// The stale refusal is exit 6, as docs/cli.md lays it down.
-func TestPageEditIsExitSixWhenSomebodyCameBetween(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) {
-		return 412, `{"type":"/problems/stale","title":"stale","status":412,"detail":"PLAN/architecture changed."}`
-	}}
+// A word without a slash names a space and not a page. The command line
+// already said so, so the instance is never troubled with it.
+func TestPageAddressWithoutASlashIsAUsageMistake(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
-	code, _, stderr := run(t, server, repository(t, "project = PLAN\n"),
-		"page", "edit", "architecture", "--title", "New", "--if-match", "2026-09-05T12:00:00.000000Z")
+	code, out, stderr := run(t, server, t.TempDir(), "page", "view", "handbuch")
 
-	if code != exit.Stale {
+	if code != exit.Usage {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if out != "" || !strings.Contains(stderr, "handbuch/company/onboarding") {
+		t.Errorf("stdout %q, stderr %q", out, stderr)
+	}
+	if len(f.requests) != 0 {
+		t.Errorf("%d requests", len(f.requests))
+	}
+}
+
+func TestPageListIsTheTree(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: answering(map[string]string{"/spaces/handbuch/pages": tree})}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "page", "list", "handbuch")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if !strings.HasPrefix(out, "company  ") || !strings.Contains(out, "\n  company/onboarding ") {
+		t.Errorf("stdout %q is not the tree", out)
+	}
+	// No head above it: the tree is the answer here, and the space is
+	// `pa space view`.
+	if strings.Contains(out, "closed to agents") {
+		t.Errorf("stdout %q carries the space's head", out)
+	}
+}
+
+// --json is the slim tree as the route answered it, bodies and all absent
+// (ADR 0012) — the difference from `pa space view --json`, which is the space.
+func TestPageListJSONIsTheSummaries(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: answering(map[string]string{"/spaces/handbuch/pages": tree})}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, _ := run(t, server, t.TempDir(), "page", "list", "handbuch", "--json")
+
+	if code != exit.OK {
 		t.Fatalf("code %d", code)
 	}
-	if !strings.Contains(stderr, "changed") {
+	if !strings.Contains(out, `"path": "company/onboarding"`) || strings.Contains(out, `"body"`) {
+		t.Errorf("stdout %q", out)
+	}
+}
+
+// The address says where the page lands: the last slug is its own, everything
+// in front of it is its parent.
+func TestPageCreateReadsTheParentOutOfTheAddress(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, spacePage }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := runWith(t, server, t.TempDir(), "Am ersten Tag bekommt jede neue Person eine Karte.\n",
+		"page", "create", "handbuch/company/onboarding", "--title", "Onboarding", "--body-file", "-")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodPost || asked.RequestURI != "/spaces/handbuch/pages" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["slug"] != "onboarding" || sent["parent"] != "company" || sent["title"] != "Onboarding" {
+		t.Errorf("sent %v", sent)
+	}
+	if sent["body"] != "Am ersten Tag bekommt jede neue Person eine Karte." {
+		t.Errorf("body %q", sent["body"])
+	}
+	if !strings.Contains(out, "handbuch/company/onboarding") {
+		t.Errorf("stdout %q is not the page it created", out)
+	}
+}
+
+// A page at the top of a space has no parent, and an address of two segments
+// is how that is written.
+func TestPageCreateAtTheTopOfASpaceHasNoParent(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, spacePage }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "page", "create", "handbuch/company", "--title", "Die Firma")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["slug"] != "company" || sent["parent"] != nil {
+		t.Errorf("sent %v", sent)
+	}
+}
+
+func TestPageCreateWithoutATitleIsAUsageMistake(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, spacePage }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "page", "create", "handbuch/company/onboarding")
+
+	if code != exit.Usage || !strings.Contains(stderr, "--title") {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if len(f.requests) != 0 {
+		t.Errorf("%d requests", len(f.requests))
+	}
+}
+
+func TestPageEditCarriesTheGuardAndTheAddress(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := runWith(t, server, t.TempDir(), "Ein neuer Text.\n",
+		"page", "edit", "handbuch/company/onboarding", "--body-file", "-", "--if-match", "2026-09-13T11:00:00.000000Z")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodPatch || asked.RequestURI != "/spaces/handbuch/pages/company/onboarding" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	if got := asked.Header.Get("If-Match"); got != `"2026-09-13T11:00:00.000000Z"` {
+		t.Errorf("If-Match %q", got)
+	}
+	if f.bodies[0] != `{"body":"Ein neuer Text."}` {
+		t.Errorf("sent %q", f.bodies[0])
+	}
+}
+
+func TestPageEditWithNothingToChangeIsAUsageMistake(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "page", "edit", "handbuch/company/onboarding")
+
+	if code != exit.Usage {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	// And it says where the two things it will not do live.
+	if !strings.Contains(stderr, "pa page rename") || !strings.Contains(stderr, "pa page move") {
 		t.Errorf("stderr %q", stderr)
 	}
 }
 
-// The instance serves the web application from the same port and falls back to
-// `index.html` for every path no endpoint took, so an endpoint this build of pa
-// knows and the instance does not answers 200 with a page of HTML. That is a
-// success to every check there was, and every verb then dereferenced JSON the
-// generated client had not filled in. Reported against `pa page list`; it was
-// never about the list being empty.
-func TestAnEndpointTheInstanceDoesNotHaveIsNotACrash(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) {
-		return 200, "<!doctype html><html><body>planaffe</body></html>"
-	}, contentType: "text/html; charset=utf-8"}
+func TestPageRenameSendsTheSlugAlone(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
-	code, out, stderr := run(t, server, repository(t, "project = PLAN\n"), "page", "list")
-
-	if code != exit.Unexpected {
-		t.Fatalf("code %d, stderr %q", code, stderr)
-	}
-	if out != "" {
-		t.Errorf("nothing goes to stdout: %q", out)
-	}
-	for _, want := range []string{"text/html", "/projects/PLAN/pages", "pa version"} {
-		if !strings.Contains(stderr, want) {
-			t.Errorf("stderr %q lacks %q", stderr, want)
-		}
-	}
-}
-
-// An empty list is an ordinary answer and stays one — this is what the report
-// guessed the crash was, and it is worth holding still.
-func TestAnEmptyWikiIsNotAnError(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) { return 200, `[]` }}
-	server := httptest.NewServer(f.handler())
-	defer server.Close()
-
-	code, out, stderr := run(t, server, repository(t, "project = PLAN\n"), "page", "list", "--project", "PLAN")
-
-	if code != exit.OK || out != "" || stderr != "" {
-		t.Fatalf("code %d, stdout %q, stderr %q", code, out, stderr)
-	}
-}
-
-// A 204 carries no body and is not an unparsable answer.
-func TestADeleteWithNoBodyIsStillASuccess(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) { return 204, "" }}
-	server := httptest.NewServer(f.handler())
-	defer server.Close()
-
-	code, out, stderr := run(t, server, repository(t, "project = PLAN\n"), "page", "delete", "architecture")
+	code, _, stderr := run(t, server, t.TempDir(), "page", "rename", "handbuch/company/onboarding", "einarbeitung")
 
 	if code != exit.OK || stderr != "" {
 		t.Fatalf("code %d, stderr %q", code, stderr)
 	}
-	if !strings.Contains(out, "deleted") {
+	if f.bodies[0] != `{"slug":"einarbeitung"}` {
+		t.Errorf("sent %q", f.bodies[0])
+	}
+}
+
+// Renaming is what the page is called where it stands; where it stands is
+// `move`. An address in the second argument is the confusion of the two.
+func TestPageRenameRefusesAnAddress(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "page", "rename", "handbuch/company/onboarding", "product/einarbeitung")
+
+	if code != exit.Usage || !strings.Contains(stderr, "pa page move") {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if len(f.requests) != 0 {
+		t.Errorf("%d requests", len(f.requests))
+	}
+}
+
+// A page this caller cannot reach — deleted, never there, or in a space that
+// is not there for it — answers with the instance's own sentence.
+func TestPageViewOfAPageThatIsNotThere(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) {
+		return 404, `{"type":"/problems/not-found","title":"Nothing by that key or id","status":404,"detail":"No page company/onboarding in handbuch."}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "page", "view", "handbuch/company/onboarding")
+
+	if code != exit.NotFound {
+		t.Fatalf("code %d", code)
+	}
+	if out != "" || !strings.Contains(stderr, "No page company/onboarding in handbuch.") {
+		t.Errorf("stdout %q, stderr %q", out, stderr)
+	}
+}
+
+// --under takes an address: the space in front, the parent behind it. The
+// move itself is asked at the space the page is in now.
+func TestPageMoveUnderAPageByItsAddress(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "page", "move", "handbuch/company/onboarding", "--under", "handbuch/product")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodPost || asked.RequestURI != "/spaces/handbuch/pages/move" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["path"] != "company/onboarding" || sent["space"] != "handbuch" || sent["parent"] != "product" {
+		t.Errorf("sent %v", sent)
+	}
+}
+
+// A word without a slash is a space, and the page lands directly under it.
+func TestPageMoveIntoAnotherSpaceByItsName(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "page", "move", "handbuch/company/onboarding", "--under", "archive")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["space"] != "archive" || sent["parent"] != nil {
+		t.Errorf("sent %v", sent)
+	}
+}
+
+// No --under is the way up: the page lands directly under the space it is
+// already in, and neither field is sent.
+func TestPageMoveWithoutUnderGoesToTheTopOfItsSpace(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "page", "move", "handbuch/company/onboarding")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["path"] != "company/onboarding" || sent["space"] != nil || sent["parent"] != nil {
+		t.Errorf("sent %v", sent)
+	}
+}
+
+// A subtree that would pass the third level is refused with the height in it,
+// and pa hands the instance's sentence over as it came.
+func TestPageMoveThatWouldGoTooDeep(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) {
+		return 422, `{"type":"/problems/too-deep","title":"Too deep","status":422,"detail":"handbuch/company/onboarding is 2 levels tall and there is room for 1 where it would land.","depth":1}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "page", "move", "handbuch/company/onboarding", "--under", "handbuch/product/detail")
+
+	if code == exit.OK {
+		t.Fatalf("code %d", code)
+	}
+	if out != "" || !strings.Contains(stderr, "there is room for 1 where it would land") {
+		t.Errorf("stdout %q, stderr %q", out, stderr)
+	}
+}
+
+func TestPageMoveUnderNothingIsAUsageMistake(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "page", "move", "handbuch/company/onboarding", "--under", "archive/")
+
+	if code != exit.Usage || !strings.Contains(stderr, "--under") {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if len(f.requests) != 0 {
+		t.Errorf("%d requests", len(f.requests))
+	}
+}
+
+// Whoever asked about one page has to learn that three are gone.
+func TestPageDeleteSaysHowManyWent(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 200, `{"deleted":3}` }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "page", "delete", "handbuch/company")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodDelete || asked.RequestURI != "/spaces/handbuch/pages/company" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	if !strings.Contains(out, "with the 2 pages under it") || !strings.Contains(out, "pa page restore handbuch/company") {
 		t.Errorf("stdout %q", out)
+	}
+}
+
+// One page on its own says so without a count nobody asked for.
+func TestPageDeleteOfALeafSaysItPlainly(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 200, `{"deleted":1}` }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "page", "delete", "handbuch/company/onboarding")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if !strings.Contains(out, "handbuch/company/onboarding deleted; ") || strings.Contains(out, "under it") {
+		t.Errorf("stdout %q", out)
+	}
+}
+
+func TestPageDeleteJSONIsTheCount(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 200, `{"deleted":3}` }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, _ := run(t, server, t.TempDir(), "page", "delete", "handbuch/company", "--json")
+
+	if code != exit.OK || !strings.Contains(out, `"deleted": 3`) {
+		t.Fatalf("code %d, stdout %q", code, out)
+	}
+}
+
+func TestPageRestoreCarriesTheAddressInTheBody(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "page", "restore", "handbuch/company/onboarding")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodPost || asked.RequestURI != "/spaces/handbuch/pages/restore" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	if f.bodies[0] != `{"path":"company/onboarding"}` {
+		t.Errorf("sent %q", f.bodies[0])
+	}
+	if !strings.Contains(out, "handbuch/company/onboarding  Onboarding") {
+		t.Errorf("stdout %q is not the page it brought back", out)
+	}
+}
+
+// A live page under a deleted one is the state the rule exists to prevent, so
+// the refusal names the page to restore first.
+func TestPageRestoreUnderADeletedParent(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) {
+		return 422, `{"type":"/problems/transition","title":"Not from here","status":422,"detail":"handbuch/company is deleted; restore it first."}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "page", "restore", "handbuch/company/onboarding")
+
+	if code == exit.OK {
+		t.Fatalf("code %d", code)
+	}
+	if out != "" || !strings.Contains(stderr, "restore it first") {
+		t.Errorf("stdout %q, stderr %q", out, stderr)
 	}
 }

@@ -159,7 +159,7 @@ pa question list [--answered | --all] [--issue PLAN-42] [-q "serializable"]
 pa question answer <id> "…" | --file -
 ```
 
-Projects, labels, epics, pages and releases:
+Projects, labels, epics and releases:
 
 ```
 pa project create PLAN "planaffe" [--triage-required] [--review-required]
@@ -178,24 +178,17 @@ pa epic edit PLAN-E2 --description-file - --if-match "<updated_at>"
 pa epic close PLAN-E2 [--cancel-open | --park-open]   # lists what is still open; cancels or parks it on a flag, never interactively
 pa epic reopen PLAN-E2 · pa epic delete PLAN-E2 · pa epic restore PLAN-E2
 
-pa page list [-q "four layers"] [--label reference]  # the flat wiki: slug, when it last moved, title
-pa page view architecture                  # the head, then the Markdown exactly as it is stored
-pa page create architecture --title "Architecture" --body-file - --label reference
-pa page edit architecture --body-file - --if-match "<updated_at>"
-pa page rename architecture betriebshandbuch   # the old slug leads nowhere afterwards (ADR 0021)
-pa page delete architecture · pa page restore architecture
-
 pa space list                               # the knowledge base: every space you may see, the closed ones marked
 pa space view handbuch                      # one space: the head, and the tree of the pages in it
-pa space page list handbuch                 # the tree alone: the address, when it last moved, the title
-pa space page view handbuch/company/onboarding          # the head, then the Markdown as it is stored
-pa space page create handbuch/company/onboarding --title "Onboarding" --body-file -
-pa space page edit handbuch/company/onboarding --body-file - --if-match "<updated_at>"
-pa space page rename handbuch/company/onboarding einarbeitung   # the old address leads nowhere (ADR 0028)
-pa space page move handbuch/company/onboarding --under handbuch/product   # under another parent, subtree and all
-pa space page move handbuch/company/onboarding --under archive            # into another space, at the top of it
-pa space page move handbuch/company/onboarding                            # to the top of the space it is in
-pa space page delete handbuch/company · pa space page restore handbuch/company
+pa page list handbuch                       # the tree alone: the address, when it last moved, the title
+pa page view handbuch/company/onboarding                # the head, then the Markdown as it is stored
+pa page create handbuch/company/onboarding --title "Onboarding" --body-file -
+pa page edit handbuch/company/onboarding --body-file - --if-match "<updated_at>"
+pa page rename handbuch/company/onboarding einarbeitung   # the old address leads nowhere (ADR 0028)
+pa page move handbuch/company/onboarding --under handbuch/product   # under another parent, subtree and all
+pa page move handbuch/company/onboarding --under archive            # into another space, at the top of it
+pa page move handbuch/company/onboarding                            # to the top of the space it is in
+pa page delete handbuch/company · pa page restore handbuch/company
 pa space search "onboarding pate"           # the space, the address, the title, the excerpt under it
 pa space search "vertrag" --space personal  # one space by name
 pa space search "claim-held" --limit 5 --json
@@ -267,12 +260,12 @@ the answer a space that does not exist gives (ADR 0027). Nothing found prints
 one sentence and is exit 0 — under `--json` it is the empty list and nothing
 else.
 
-The word is `space` rather than `page` on purpose. `pa page` is the project's
-wiki and points somewhere else entirely, and a `pa page search` answering about
-the knowledge base while `pa page list` answered about a project would be the
-one ambiguity this product must not have. Everything a person does with a space
-and its pages hangs under `pa space`, and when the project's wiki is withdrawn
-(`VISION.md` 18.) the word comes free and this moves to `pa page`.
+**The pages are `pa page` and the bracket is `pa space`.** They stood together
+under `pa space page` while `pa page` was the project's wiki, because a
+`pa page view` that answered about one of two wikis would have been the one
+ambiguity this product must not have. The wiki is withdrawn (`VISION.md` 18.),
+the word is free, and a page is simply a page again — the address, the verbs
+and the flags are the ones that group already had.
 
 `pa space list` is one line per space — the name, the title, and `closed to
 agents` where the switch is set. `pa space view` is one space whole: the head,
@@ -340,7 +333,7 @@ border is the bracket, not the work inside it.
 A page is addressed by its slug, which is given and never derived from the
 title. Renaming is its own verb rather than a flag on `edit`, because moving an
 address is not the same kind of act as editing a text: nothing forwards, and
-every reference written to the old slug stops working. `pa page view` prints
+every reference written to the old address stops working. `pa page view` prints
 the head and then the body unchanged, so that the output pipes straight back
 into `--body-file -`.
 

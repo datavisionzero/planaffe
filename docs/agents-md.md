@@ -135,8 +135,8 @@ to work out again.
 ```sh
 pa space search "onboarding"                   # across every space you may see, best first
 pa space view handbuch                         # one space: the head, and its tree
-pa space page view handbuch/company/onboarding # the page, as the Markdown it is
-pa space page create handbuch/company/onboarding --title "…" --body-file -
+pa page view handbuch/company/onboarding       # the page, as the Markdown it is
+pa page create handbuch/company/onboarding --title "…" --body-file -
 ```
 
 A page is addressed by its space and the slugs under it, and that whole address

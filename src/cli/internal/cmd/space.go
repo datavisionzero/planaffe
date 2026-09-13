@@ -12,15 +12,10 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/render"
 )
 
-// newSpace is the knowledge base on the console.
-//
-// The word is `space` and not `page` on purpose. `pa page` is the project's
-// wiki and points somewhere else entirely; a `pa page search` that answered
-// about the knowledge base while `pa page list` answered about a project would
-// be the one ambiguity this product must not have. A page of the knowledge
-// base hangs on a space, so it is reached through one. When the project's wiki
-// is withdrawn (VISION 18) the word comes free and this moves to `pa page`;
-// that is the epic that takes the wiki away, not this one.
+// newSpace is the bracket of the knowledge base on the console: what brackets
+// there are, one of them whole, and the search across them. The pages
+// themselves are `pa page` and hang at the top level beside it, now that the
+// project's wiki no longer holds that word (VISION 18).
 //
 // What is not here is what an agent may not do: creating a space, renaming it,
 // the switch, deleting it and granting access to it. Those are a human's acts
@@ -30,9 +25,9 @@ import (
 func newSpace(g *globals) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "space",
-		Short: "Spaces: the knowledge base's bracket, the pages in it, and the search across them.",
+		Short: "Spaces: the knowledge base's bracket and the search across it.",
 	}
-	cmd.AddCommand(newSpaceList(g), newSpaceView(g), newSpacePage(g), newSpaceSearch(g))
+	cmd.AddCommand(newSpaceList(g), newSpaceView(g), newSpaceSearch(g))
 	return cmd
 }
 
@@ -77,7 +72,7 @@ func newSpaceList(g *globals) *cobra.Command {
 //
 // Under --json it is the space as the route answered it and the tree is not
 // fetched at all: two objects under one flag would be a shape of pa's own
-// invention, and the tree has its own verb in `pa space page list`.
+// invention, and the tree has its own verb in `pa page list`.
 func newSpaceView(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use: "view NAME", Short: "One space: the head, and the tree of the pages in it.", Args: cobra.ExactArgs(1),
@@ -110,7 +105,7 @@ func newSpaceView(g *globals) *cobra.Command {
 			// A space with nothing in it says so rather than ending on its
 			// head, the way `pa needs-you` answers an empty list.
 			if len(*tree.JSON200) == 0 {
-				fmt.Fprintf(out, "\nNo pages in %s yet; `pa space page create %s/<slug> --title …` writes the first.\n", args[0], args[0])
+				fmt.Fprintf(out, "\nNo pages in %s yet; `pa page create %s/<slug> --title …` writes the first.\n", args[0], args[0])
 				return nil
 			}
 			fmt.Fprintln(out)
