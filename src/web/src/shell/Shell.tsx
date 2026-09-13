@@ -7,7 +7,6 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { EpicsView } from "@/epics/EpicsView";
 import { IssueListView } from "@/issues/IssueListView";
 import { NeedsYouView } from "@/issues/NeedsYouView";
-import { PagesView } from "@/pages/PagesView";
 import { LabelsView } from "@/projects/LabelsView";
 import { ProjectSwitcher } from "@/projects/ProjectSwitcher";
 import { NewProjectView } from "@/projects/NewProjectView";
@@ -23,7 +22,6 @@ import { SpacesView } from "@/spaces/SpacesView";
 import { SpaceView } from "@/spaces/SpaceView";
 import { useSpaceState, useTreeState } from "@/spaces/useSpaces";
 import { AdminView } from "@/settings/AdminView";
-import { ProjectSettingsView } from "@/settings/ProjectSettingsView";
 import { AccountMenu } from "./AccountMenu";
 import { AppSidebar, type Area } from "./AppSidebar";
 import { AttentionContext } from "./attention";
@@ -48,10 +46,11 @@ const NewIssueView = lazy(() => import("@/issues/IssueEditor").then((module) => 
 const EpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.EpicView })));
 const NewEpicView = lazy(() => import("@/epics/EpicView").then((module) => ({ default: module.NewEpicView })));
 const ReleaseView = lazy(() => import("@/releases/ReleaseView").then((module) => ({ default: module.ReleaseView })));
-const PageView = lazy(() => import("@/pages/PageView").then((module) => ({ default: module.PageView })));
+// The project's settings reach `MarkdownField` too, since the instructions
+// became a text written there rather than a page pointed at (VISION 18).
+const ProjectSettingsView = lazy(() => import("@/settings/ProjectSettingsView").then((module) => ({ default: module.ProjectSettingsView })));
 const SpacePageView = lazy(() => import("@/spaces/SpacePageView").then((module) => ({ default: module.SpacePageView })));
 const NewSpacePageView = lazy(() => import("@/spaces/NewSpacePageView").then((module) => ({ default: module.NewSpacePageView })));
-const NewPageView = lazy(() => import("@/pages/PageView").then((module) => ({ default: module.NewPageView })));
 
 /**
  * The application shell of ADR 0006: the frame every screen sits in, rendered
@@ -238,13 +237,10 @@ export function Shell() {
             <Route path="epics" element={<EpicsView />} />
             <Route path="epics/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewEpicView /></Suspense>} />
             <Route path="epics/:number" element={<Suspense fallback={<Busy title="Loading the screen…" />}><EpicView /></Suspense>} />
-            <Route path="pages" element={<PagesView />} />
-            <Route path="pages/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewPageView /></Suspense>} />
-            <Route path="pages/:slug" element={<Suspense fallback={<Busy title="Loading the screen…" />}><PageView /></Suspense>} />
             <Route path="releases" element={<ReleasesView />} />
             <Route path="releases/:name" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ReleaseView /></Suspense>} />
             <Route path="labels" element={<LabelsView />} />
-            <Route path="settings/*" element={<ProjectSettingsView />} />
+            <Route path="settings/*" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ProjectSettingsView /></Suspense>} />
           </Route>
         </Routes>
       </SidebarInset>

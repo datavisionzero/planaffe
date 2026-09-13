@@ -1,7 +1,7 @@
 import { ArrowRightIcon, SearchIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
-import { api, type IssueSummary, type Project, type Schemas } from "@/api/client";
+import { api, type IssueSummary, type Project } from "@/api/client";
 import { useTheme } from "@/components/theme-provider";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSession } from "@/session/useSession";
@@ -10,9 +10,7 @@ import { Keys } from "./ShortcutsDialog";
 import { is } from "./shortcuts";
 import type { Space } from "@/spaces/context";
 import type { SpacePageHit } from "@/spaces/search";
-import { keyPath, keyPattern, pagePath, spacePagePath, spacePath, viewPath, views } from "./views";
-
-type PageSummary = Schemas["PageSummary"];
+import { keyPath, keyPattern, spacePagePath, spacePath, viewPath, views } from "./views";
 
 type Command = {
   id: string;
@@ -36,11 +34,9 @@ const settle = 150;
  * the instance: a few full-text matches, and the row that opens all of them as
  * a filtered list.
  *
- * It asks about issues and about pages, under headings that say which is
- * which. A hit that does not say what kind of thing it is is a poor hit, and
- * for the wiki this is more than a nicety: the pages are flat because the
- * search is what a hierarchy would have been, so this is how one is found at
- * all.
+ * It asks about issues in a project and about pages in the knowledge base,
+ * under headings that say which is which: a hit that does not say what kind of
+ * thing it is is a poor hit.
  *
  * In the knowledge base it asks the same route the screen asks — `GET /pages`,
  * across every space the caller may see — and shows a few hits with the row
@@ -96,8 +92,8 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
   const { signOut } = useSession();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
-  const [found, setFound] = useState<{ of: string; issues: IssueSummary[]; pages: PageSummary[]; hits: SpacePageHit[] }>(
-    { of: "", issues: [], pages: [], hits: [] },
+  const [found, setFound] = useState<{ of: string; issues: IssueSummary[]; hits: SpacePageHit[] }>(
+    { of: "", issues: [], hits: [] },
   );
   const searchId = useId();
 
@@ -124,19 +120,13 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          // The lists of the area the frame is in, asked together. Neither
-          // waits for the other to fail: a wiki that answers while the issue
-          // list is slow still shows up.
-          const [issues, pages, hits] = await Promise.all([
+          // The list of the area the frame is in. Neither waits for the other
+          // to fail: the knowledge base answering while the issue list is slow
+          // still shows up.
+          const [issues, hits] = await Promise.all([
             searching
               ? api.GET("/issues", {
                   params: { query: { project: projectKey!, q: needle, limit: matches } },
-                  signal: controller.signal,
-                })
-              : undefined,
-            searching
-              ? api.GET("/projects/{key}/pages", {
-                  params: { path: { key: projectKey! }, query: { q: needle } },
                   signal: controller.signal,
                 })
               : undefined,
@@ -148,7 +138,6 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
           setFound({
             of: needle,
             issues: issues?.data?.items ?? [],
-            pages: (pages?.data ?? []).slice(0, matches),
             hits: hits?.data ?? [],
           });
         } catch {
@@ -187,7 +176,7 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
     }
 
     if (searching && projectKey !== undefined) {
-      const hits = found.of === needle ? found : { issues: [], pages: [] };
+      const hits = found.of === needle ? found : { issues: [] };
 
       for (const issue of hits.issues) {
         list.push({
@@ -207,17 +196,6 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
         run: go(`/${projectKey}/issues?q=${encodeURIComponent(needle)}`),
         found: true,
       });
-
-      for (const page of hits.pages) {
-        list.push({
-          id: `found:page:${page.slug}`,
-          label: page.title,
-          hint: page.slug,
-          group: "Pages",
-          run: go(pagePath(projectKey, page.slug)),
-          found: true,
-        });
-      }
     }
 
     if (current !== undefined) {
@@ -232,13 +210,12 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
       }
     }
 
-    // The palette is the other way to everything the screens offer, so the
-    // four things that can be created are reachable from it too.
+    // The palette is the other way to everything the screens offer, so what
+    // can be created is reachable from it too.
     if (current !== undefined) {
       list.push(
         { id: "create:issue", label: "Create issue", hint: current.key, group: "Create", run: go(`/${current.key}/issues/new`) },
         { id: "create:epic", label: "Create epic", hint: current.key, group: "Create", run: go(`/${current.key}/epics/new`) },
-        { id: "create:page", label: "Create page", hint: current.key, group: "Create", run: go(`/${current.key}/pages/new`) },
       );
     }
 

@@ -51,9 +51,6 @@ Markdown and never a document model of its own
 | `/:project/epics` | Epics | open epics, progress and recent activity | stacked summaries |
 | `/:project/epics/new` | Create epic | title, Markdown description and the label choice | one column; the same form the epic screen edits in place |
 | `/:project/epics/:number` | Epic | Markdown description, progress and issue list; editing it is guarded and a conflict is shown, not lost | one column |
-| `/:project/pages` | Pages | the project's flat wiki, by slug, with who touched what last | the slug and the title stay, the rest folds away |
-| `/:project/pages/new` | Create page | the slug, the title, the Markdown body and the label choice | one column; the same form the page screen edits in place |
-| `/:project/pages/:slug` | Page | the rendered Markdown, then renaming and deleting; editing it is guarded and a conflict is shown, not lost | one column |
 | `/:project/releases` | Releases | `unreleased`, then published releases newest first | stacked summaries |
 | `/:project/releases/:name` | Release | notes, exact issue membership and publish/copy actions; on the open release each row can be taken out, on the newest publication rename and take back | one column |
 | `/:project/labels` | Labels | the project's set, grouped where its labels exclude one another, with the create line above it | the row stacks: the name and what it means above the two acts |
@@ -80,13 +77,12 @@ Markdown and never a document model of its own
 `PLAN-42` is at `/PLAN/issues/42`, `PLAN-E3` at `/PLAN/epics/E3`. A link to an
 issue or an epic takes its project from the key it names and not from the
 address it sits on, so a blocker in another project leads to that project.
-`:slug` is the exception the product has exactly one of
+`:path` in the knowledge base is the exception the product has exactly one of
 ([ADR 0021](./adr/0021-a-pages-address-is-its-slug-not-a-key.md)): a page is
-addressed by its name, so `/PLAN/pages/architecture` is the whole address and
-there is no number to look up. `:path` in the knowledge base is that same name
-several times over: the slugs from the root down, at most three of them, with
-the slashes between them part of the address
+addressed by its name rather than by a key, and here by the names from the root
+down — at most three of them, with the slashes between them part of the address
 ([ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)).
+There is no number to look up anywhere in it.
 `new` and `settings` under a space are the space's own screens and can never be
 a page, because a page's address always begins with `pages/`.
 
@@ -217,8 +213,8 @@ dead end: the typed text stays in the field, the version the instance handed
 back is adopted for the next attempt, and the other version's description is
 shown so it can be merged by hand. Saving again is then a decision to overwrite
 it rather than a request that can only fail. The page editor is the same
-mechanism on the same reasoning, and for the same reason: a wiki is the text two
-people are most likely to be in at once.
+mechanism on the same reasoning, and for the same reason: a page of the
+knowledge base is the text two people are most likely to be in at once.
 
 **Everywhere `If-Match` is sent, what comes back is taken.** That is the whole
 of what the refusal is for (`docs/api.md`, "Concurrency on text fields"), and a
@@ -285,27 +281,6 @@ than on finishing. A reader who asked for reduced motion gets the sentence and
 no motion. The celebration carries nothing that has to be read, so it is
 `aria-hidden` and takes no pointer.
 
-## Pages
-
-The wiki is flat and stays flat: a list ordered by slug, no tree and no table of
-contents, because the full-text search is what a hierarchy would have been for.
-The screen is therefore a list and a document, and the body is written in the
-same Markdown field as everything else here — no WYSIWYG, and a page gets no
-editor of its own.
-
-The search stands above the list rather than behind a filter sheet, and it and
-the label filter both live in the URL, so a pasted link says what it shows. An
-empty wiki and a filter that matched nothing are different states: the first
-says what a page is for, the second says nothing matched.
-
-Two acts are not fields in that form. **Renaming** moves the address, and
-nothing forwards: it is a dialog that says so, because a link written to the old
-slug stops working and whoever renames should be told once. **Deleting** says
-that the slug stays taken while the page can still come back, which is what
-keeps a restore from landing on a name somebody else took. Both stand under the
-document rather than in the header, where the thing one usually wants is
-"Edit".
-
 ## Issue list and detail
 
 Ready, In progress and All issues are presets over one cursor-paginated,
@@ -313,10 +288,9 @@ virtualized component. Search, status, priority, label, epic, assignee, claim,
 author, blocked, `ready`, sort and order live in the URL. The server supplies
 filter choices. An empty project and an empty filtered result are distinct
 states. The command palette shows a few full-text matches and links to the full
-filtered list. It searches pages as well as issues, under headings that say
-which is which — a hit that does not say what kind of thing it is is a poor
-hit. In the knowledge base it asks that area's search instead, and never both
-at once.
+filtered list. In the knowledge base it asks that area's search instead, under
+a heading of its own — a hit that does not say what kind of thing it is is a
+poor hit — and never both at once.
 
 Sorting by epic groups the list. It groups by sorting rather than by cutting up
 the page it happens to hold — the epic is the first sort key on the server
@@ -505,8 +479,8 @@ the state filter, and "Deleted: shown".
 Searching is done in the client, because neither list is paginated: projects by
 key and name, users by name and email. Projects sort by key, by name or newest
 first; users by name or by state. An empty instance and a search that matched
-nothing are different sentences, the same distinction the wiki and the issue
-list make.
+nothing are different sentences, the same distinction the knowledge base and
+the issue list make.
 
 A project's row carries its own lifecycle: **restore** where it is deleted,
 **delete** where it is not. Restoring asks nothing — it takes nothing away and
