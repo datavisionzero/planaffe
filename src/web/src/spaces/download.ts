@@ -1,4 +1,4 @@
-import type { SpacePage } from "./context";
+import type { Page } from "./context";
 
 /**
  * A page as the file it already is. The body is written out exactly as it is
@@ -7,7 +7,7 @@ import type { SpacePage } from "./context";
  * `pa export` are the instance's way out while this is the reader's
  * (VISION 18). The name is the slug, because that is the page's name.
  */
-export function asFile(page: Pick<SpacePage, "slug" | "body">): { name: string; text: string } {
+export function asFile(page: Pick<Page, "slug" | "body">): { name: string; text: string } {
   return { name: `${page.slug}.md`, text: page.body };
 }
 

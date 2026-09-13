@@ -10,7 +10,7 @@ namespace Planaffe.Application.Acts;
 /// (ADR 0012). <c>Path</c> is the address, <c>Parent</c> the address of the
 /// page above it, and both carry the tree (ADR 0028).
 /// </summary>
-public sealed record SpacePageSummaryShape(
+public sealed record PageSummaryShape(
     string Path,
     string Space,
     string Slug,
@@ -22,7 +22,7 @@ public sealed record SpacePageSummaryShape(
     DateTimeOffset UpdatedAt);
 
 /// <summary>The complete page: the summary plus the Markdown and the author.</summary>
-public sealed record SpacePageShape(
+public sealed record PageShape(
     string Path,
     string Space,
     string Slug,
@@ -36,10 +36,10 @@ public sealed record SpacePageShape(
     DateTimeOffset UpdatedAt);
 
 /// <param name="Parent">The address of the page it hangs under, or nothing for one directly under the space.</param>
-public sealed record CreateSpacePageRequest(string? Parent, string? Slug, string? Title, string? Body);
+public sealed record CreatePageRequest(string? Parent, string? Slug, string? Title, string? Body);
 
 /// <param name="BodyGiven">Present, even as <c>null</c>, which empties the document.</param>
-public sealed record SpacePageChanges(string? Slug, string? Title, bool BodyGiven, string? Body);
+public sealed record PageChanges(string? Slug, string? Title, bool BodyGiven, string? Body);
 
 /// <summary>
 /// The address of a page inside its space: the slugs from the root down,
@@ -52,7 +52,7 @@ public sealed record SpacePageChanges(string? Slug, string? Title, bool BodyGive
 /// no slug — is <c>not-found</c> rather than <c>validation</c>: it arrived in
 /// the address, not in a body.
 /// </remarks>
-public static class SpacePagePath
+public static class PagePath
 {
     public const char Separator = '/';
 
@@ -64,7 +64,7 @@ public static class SpacePagePath
             .Trim(Separator)
             .Split(Separator, StringSplitOptions.TrimEntries);
 
-        return segments.Length is 0 or > SpacePage.MaxDepth + 1 || !segments.All(Slug.IsValid)
+        return segments.Length is 0 or > Page.MaxDepth + 1 || !segments.All(Slug.IsValid)
             ? null
             : segments;
     }
@@ -74,7 +74,7 @@ public static class SpacePagePath
 }
 
 /// <summary>The lookups every act on a page of the knowledge base starts with.</summary>
-public static class SpacePageLookup
+public static class PageLookup
 {
     /// <summary>
     /// Down the tree, segment by segment, deleted or not. It answers with one
@@ -83,20 +83,20 @@ public static class SpacePageLookup
     /// says only that.
     /// </summary>
     /// <exception cref="Refusal"><c>not-found</c>.</exception>
-    public static async Task<SpacePage> AnyAsync(
-        this ISpacePages pages, Space space, string? path, CancellationToken cancellationToken)
+    public static async Task<Page> AnyAsync(
+        this IPages pages, Space space, string? path, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(space);
 
-        var segments = SpacePagePath.Segments(path);
+        var segments = PagePath.Segments(path);
         var missing = new Refusal(RefusalCode.NotFound, $"No page {space.Name}/{(path ?? string.Empty).Trim()}.");
         if (segments is null)
         {
             throw missing;
         }
 
-        SpacePage? page = null;
+        Page? page = null;
         foreach (var slug in segments)
         {
             page = await pages.FindAnyAsync(space.Id, page?.Id, slug, cancellationToken) ?? throw missing;
@@ -106,8 +106,8 @@ public static class SpacePageLookup
     }
 
     /// <exception cref="Refusal"><c>not-found</c>, or <c>deleted</c> with <c>restorable_until</c>.</exception>
-    public static async Task<SpacePage> LiveAsync(
-        this ISpacePages pages, Space space, string? path, InstanceSettings settings, CancellationToken cancellationToken)
+    public static async Task<Page> LiveAsync(
+        this IPages pages, Space space, string? path, InstanceSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(space);
@@ -126,8 +126,8 @@ public static class SpacePageLookup
     /// is empty, and a refusal where it has no room left below it.
     /// </summary>
     /// <exception cref="Refusal"><c>not-found</c>, <c>deleted</c>, or <c>too-deep</c>.</exception>
-    public static async Task<SpacePage?> ParentAsync(
-        this ISpacePages pages, Space space, string? path, InstanceSettings settings, CancellationToken cancellationToken)
+    public static async Task<Page?> ParentAsync(
+        this IPages pages, Space space, string? path, InstanceSettings settings, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -136,24 +136,24 @@ public static class SpacePageLookup
 
         var parent = await pages.LiveAsync(space, path, settings, cancellationToken);
 
-        return parent.Depth < SpacePage.MaxDepth
+        return parent.Depth < Page.MaxDepth
             ? parent
             : throw new Refusal(
                 RefusalCode.TooDeep,
-                $"A page sits at most {SpacePage.MaxDepth + 1} levels under its space, and {path.Trim()} is already at the bottom. Whoever needs a fourth level has found a second space.",
+                $"A page sits at most {Page.MaxDepth + 1} levels under its space, and {path.Trim()} is already at the bottom. Whoever needs a fourth level has found a second space.",
                 new Dictionary<string, object?> { ["depth"] = parent.Depth });
     }
 
     /// <summary>
     /// A slug already taken under the same parent is refused as
     /// <c>validation</c>, and a deleted page's slug says so rather than
-    /// pretending the name is in use — the same answer the project's page
+    /// pretending the name is in use — the same answer a taken label name
     /// gives, for the same reason.
     /// </summary>
     public static async Task TakenAsync(
-        this ISpacePages pages,
+        this IPages pages,
         Space space,
-        SpacePage? parent,
+        Page? parent,
         string slug,
         InstanceSettings settings,
         CancellationToken cancellationToken)
@@ -177,15 +177,15 @@ public static class SpacePageLookup
 /// Turns page rows into the two shapes: the addresses from the tree, the
 /// identities resolved once for the whole list.
 /// </summary>
-public sealed class SpacePageAssembler(ISpacePages pages, IIdentities identities)
+public sealed class PageAssembler(IPages pages, IIdentities identities)
 {
     /// <summary>
     /// The tree in the order it is drawn: a page, then everything under it,
     /// siblings by title. The rows arrive sorted by depth, so every parent is
     /// seen before its children and the addresses can be built in one pass.
     /// </summary>
-    public async Task<IReadOnlyList<SpacePageSummaryShape>> TreeAsync(
-        Space space, IReadOnlyList<SpacePage> rows, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PageSummaryShape>> TreeAsync(
+        Space space, IReadOnlyList<Page> rows, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(space);
         ArgumentNullException.ThrowIfNull(rows);
@@ -197,7 +197,7 @@ public sealed class SpacePageAssembler(ISpacePages pages, IIdentities identities
 
         var people = await PeopleAsync(rows.Select(p => p.UpdatedBy), cancellationToken);
         var children = rows.GroupBy(p => p.ParentId).ToDictionary(g => g.Key ?? Guid.Empty, g => g.ToList());
-        var shapes = new List<SpacePageSummaryShape>(rows.Count);
+        var shapes = new List<PageSummaryShape>(rows.Count);
 
         void Walk(Guid parentId, string? parentPath)
         {
@@ -208,8 +208,8 @@ public sealed class SpacePageAssembler(ISpacePages pages, IIdentities identities
 
             foreach (var page in level)
             {
-                var path = SpacePagePath.Of(parentPath, page.Slug);
-                shapes.Add(new SpacePageSummaryShape(
+                var path = PagePath.Of(parentPath, page.Slug);
+                shapes.Add(new PageSummaryShape(
                     path,
                     space.Name,
                     page.Slug,
@@ -228,7 +228,7 @@ public sealed class SpacePageAssembler(ISpacePages pages, IIdentities identities
         return shapes;
     }
 
-    public async Task<SpacePageShape> CompleteAsync(Space space, SpacePage page, CancellationToken cancellationToken)
+    public async Task<PageShape> CompleteAsync(Space space, Page page, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(space);
         ArgumentNullException.ThrowIfNull(page);
@@ -236,8 +236,8 @@ public sealed class SpacePageAssembler(ISpacePages pages, IIdentities identities
         var parent = await ParentPathAsync(page, cancellationToken);
         var people = await PeopleAsync([page.CreatedBy, page.UpdatedBy], cancellationToken);
 
-        return new SpacePageShape(
-            SpacePagePath.Of(parent, page.Slug),
+        return new PageShape(
+            PagePath.Of(parent, page.Slug),
             space.Name,
             page.Slug,
             parent,
@@ -256,7 +256,7 @@ public sealed class SpacePageAssembler(ISpacePages pages, IIdentities identities
     /// this; one holding a single row does, and two reads are cheaper than
     /// carrying the address through every act that writes one.
     /// </summary>
-    private async Task<string?> ParentPathAsync(SpacePage page, CancellationToken cancellationToken)
+    private async Task<string?> ParentPathAsync(Page page, CancellationToken cancellationToken)
     {
         var slugs = new List<string>();
         var parentId = page.ParentId;
@@ -270,7 +270,7 @@ public sealed class SpacePageAssembler(ISpacePages pages, IIdentities identities
             parentId = parent.ParentId;
         }
 
-        return slugs.Count == 0 ? null : string.Join(SpacePagePath.Separator, slugs);
+        return slugs.Count == 0 ? null : string.Join(PagePath.Separator, slugs);
     }
 
     private async Task<Dictionary<Guid, IdentityRef>> PeopleAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken)
@@ -292,9 +292,9 @@ public sealed class SpacePageAssembler(ISpacePages pages, IIdentities identities
 /// small, and this list is the navigation rather than a page of results
 /// (VISION 18).
 /// </summary>
-public sealed class ListSpacePages(ISpaces spaces, SpaceScope scope, ISpacePages pages, SpacePageAssembler assembler, InstanceSettings settings)
+public sealed class ListPages(ISpaces spaces, SpaceScope scope, IPages pages, PageAssembler assembler, InstanceSettings settings)
 {
-    public async Task<IReadOnlyList<SpacePageSummaryShape>> ExecuteAsync(string name, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PageSummaryShape>> ExecuteAsync(string name, CancellationToken cancellationToken)
     {
         var space = await spaces.LiveAsync(scope, name, settings, cancellationToken);
 
@@ -302,9 +302,9 @@ public sealed class ListSpacePages(ISpaces spaces, SpaceScope scope, ISpacePages
     }
 }
 
-public sealed class ReadSpacePage(ISpaces spaces, SpaceScope scope, ISpacePages pages, SpacePageAssembler assembler, InstanceSettings settings)
+public sealed class ReadPage(ISpaces spaces, SpaceScope scope, IPages pages, PageAssembler assembler, InstanceSettings settings)
 {
-    public async Task<SpacePageShape> ExecuteAsync(string name, string path, CancellationToken cancellationToken)
+    public async Task<PageShape> ExecuteAsync(string name, string path, CancellationToken cancellationToken)
     {
         var space = await spaces.LiveAsync(scope, name, settings, cancellationToken);
 
@@ -318,18 +318,18 @@ public sealed class ReadSpacePage(ISpaces spaces, SpaceScope scope, ISpacePages 
 /// space may write in it, agents included: the bracket is a human's to draw
 /// and the work inside it is not (VISION 18, ADR 0027).
 /// </summary>
-public sealed class CreateSpacePage(
+public sealed class CreatePage(
     ICallerIdentity callerIdentity,
     ISpaces spaces,
     SpaceScope scope,
-    ISpacePages pages,
+    IPages pages,
     IHistory history,
     ITransactions transactions,
-    SpacePageAssembler assembler,
+    PageAssembler assembler,
     InstanceSettings settings,
     TimeProvider clock)
 {
-    public async Task<SpacePageShape> ExecuteAsync(string name, CreateSpacePageRequest request, CancellationToken cancellationToken)
+    public async Task<PageShape> ExecuteAsync(string name, CreatePageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var caller = callerIdentity.Caller;
@@ -337,17 +337,17 @@ public sealed class CreateSpacePage(
         var space = await spaces.LiveAsync(scope, name, settings, cancellationToken);
         var parent = await pages.ParentAsync(space, request.Parent, settings, cancellationToken);
         var slug = Validated.Field("slug", () => Slug.Normalize(request.Slug ?? string.Empty));
-        var title = Validated.Field("title", () => SpacePage.NormalizeTitle(request.Title!));
+        var title = Validated.Field("title", () => Page.NormalizeTitle(request.Title!));
 
         await pages.TakenAsync(space, parent, slug, settings, cancellationToken);
 
         var page = await transactions.RunAsync(async () =>
         {
             var now = clock.GetUtcNow();
-            var created = SpacePage.Create(space.Id, parent, slug, title, request.Body, caller.Id, now);
+            var created = Page.Create(space.Id, parent, slug, title, request.Body, caller.Id, now);
 
             pages.Add(created);
-            history.Add(HistoryEntry.OnSpacePage(created.Id, caller.Id, now, HistoryField.Created));
+            history.Add(HistoryEntry.OnPage(created.Id, caller.Id, now, HistoryField.Created));
 
             await pages.SaveAsync(cancellationToken);
             return created;
@@ -368,19 +368,19 @@ public sealed class CreateSpacePage(
 /// under it, which is an act with an outcome of its own rather than a field
 /// somebody sets in passing — the line ADR 0016 draws for the status.
 /// </remarks>
-public sealed class ChangeSpacePage(
+public sealed class ChangePage(
     ICallerIdentity callerIdentity,
     ISpaces spaces,
     SpaceScope scope,
-    ISpacePages pages,
+    IPages pages,
     IHistory history,
     ITransactions transactions,
-    SpacePageAssembler assembler,
+    PageAssembler assembler,
     InstanceSettings settings,
     TimeProvider clock)
 {
-    public async Task<SpacePageShape> ExecuteAsync(
-        string name, string path, SpacePageChanges changes, string? ifMatch, CancellationToken cancellationToken)
+    public async Task<PageShape> ExecuteAsync(
+        string name, string path, PageChanges changes, string? ifMatch, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(changes);
         var caller = callerIdentity.Caller;
@@ -415,20 +415,20 @@ public sealed class ChangeSpacePage(
             {
                 var old = row.Slug;
                 row.Rename(renamed, caller.Id, now);
-                history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Slug, old, row.Slug));
+                history.Add(HistoryEntry.OnPage(row.Id, caller.Id, now, HistoryField.Slug, old, row.Slug));
             }
 
             if (changes.Title is not null && changes.Title != row.Title)
             {
                 var old = row.Title;
                 Validated.Field("title", () => { row.Retitle(changes.Title, caller.Id, now); return true; });
-                history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Title, old, row.Title));
+                history.Add(HistoryEntry.OnPage(row.Id, caller.Id, now, HistoryField.Title, old, row.Title));
             }
 
             if (changes.BodyGiven && (changes.Body ?? string.Empty) != row.Body)
             {
                 row.Rewrite(changes.Body, caller.Id, now);
-                history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Body));
+                history.Add(HistoryEntry.OnPage(row.Id, caller.Id, now, HistoryField.Body));
             }
 
             await pages.SaveAsync(cancellationToken);
@@ -441,7 +441,7 @@ public sealed class ChangeSpacePage(
 
 /// <param name="Space">The space it lands in, or nothing to stay in this one.</param>
 /// <param name="Parent">The page it lands under, or nothing for the root of that space.</param>
-public sealed record SpacePageMove(string? Space, string? Parent);
+public sealed record PageMove(string? Space, string? Parent);
 
 /// <summary>
 /// A page under another parent, in this space or another one, with everything
@@ -456,19 +456,19 @@ public sealed record SpacePageMove(string? Space, string? Parent);
 /// still fits under the third level. The refusals say which of the four it
 /// was.
 /// </remarks>
-public sealed class MoveSpacePage(
+public sealed class MovePage(
     ICallerIdentity callerIdentity,
     ISpaces spaces,
     SpaceScope scope,
-    ISpacePages pages,
+    IPages pages,
     IHistory history,
     ITransactions transactions,
-    SpacePageAssembler assembler,
+    PageAssembler assembler,
     InstanceSettings settings,
     TimeProvider clock)
 {
-    public async Task<SpacePageShape> ExecuteAsync(
-        string name, string path, SpacePageMove move, CancellationToken cancellationToken)
+    public async Task<PageShape> ExecuteAsync(
+        string name, string path, PageMove move, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(move);
         var caller = callerIdentity.Caller;
@@ -500,19 +500,19 @@ public sealed class MoveSpacePage(
 
         var depth = parent is null ? 0 : parent.Depth + 1;
         var height = subtree.Count == 0 ? 0 : subtree.Max(p => p.Depth) - page.Depth;
-        if (height > SpacePage.Room(depth))
+        if (height > Page.Room(depth))
         {
             throw new Refusal(
                 RefusalCode.TooDeep,
-                $"{space.Name}/{path} is {height + 1} levels tall and there is room for {SpacePage.Room(depth) + 1} where it would land.",
+                $"{space.Name}/{path} is {height + 1} levels tall and there is room for {Page.Room(depth) + 1} where it would land.",
                 new Dictionary<string, object?> { ["depth"] = height });
         }
 
         await pages.TakenAsync(target, parent, page.Slug, settings, cancellationToken);
 
-        var parentPath = parent is null ? null : string.Join(SpacePagePath.Separator, SpacePagePath.Segments(move.Parent)!);
-        var from = $"{space.Name}/{string.Join(SpacePagePath.Separator, SpacePagePath.Segments(path)!)}";
-        var to = $"{target.Name}/{SpacePagePath.Of(parentPath, page.Slug)}";
+        var parentPath = parent is null ? null : string.Join(PagePath.Separator, PagePath.Segments(move.Parent)!);
+        var from = $"{space.Name}/{string.Join(PagePath.Separator, PagePath.Segments(path)!)}";
+        var to = $"{target.Name}/{PagePath.Of(parentPath, page.Slug)}";
 
         var moved = await transactions.RunAsync(async () =>
         {
@@ -527,7 +527,7 @@ public sealed class MoveSpacePage(
             // moved — the page was — so the history stands at the page and
             // names the two addresses; nothing else keeps the old one.
             await pages.ShiftDescendantsAsync(row.Id, target.Id, levels, cancellationToken);
-            history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Parent, from, to));
+            history.Add(HistoryEntry.OnPage(row.Id, caller.Id, now, HistoryField.Parent, from, to));
 
             await pages.SaveAsync(cancellationToken);
             return row;
@@ -548,11 +548,11 @@ public sealed class MoveSpacePage(
 /// itself, which an administrator deletes: a bracket is a decision about more
 /// than one person's text.
 /// </remarks>
-public sealed class DeleteSpacePage(
+public sealed class DeletePage(
     ICallerIdentity callerIdentity,
     ISpaces spaces,
     SpaceScope scope,
-    ISpacePages pages,
+    IPages pages,
     IHistory history,
     ITransactions transactions,
     InstanceSettings settings,
@@ -577,10 +577,10 @@ public sealed class DeleteSpacePage(
 
             // One entry per page. The grace period is read at each row, so the
             // reason it is away is written at each row too.
-            history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Deleted, null, "true"));
+            history.Add(HistoryEntry.OnPage(row.Id, caller.Id, now, HistoryField.Deleted, null, "true"));
             foreach (var gone in subtree)
             {
-                history.Add(HistoryEntry.OnSpacePage(gone.Id, caller.Id, now, HistoryField.Deleted, null, "true"));
+                history.Add(HistoryEntry.OnPage(gone.Id, caller.Id, now, HistoryField.Deleted, null, "true"));
             }
 
             await pages.SaveAsync(cancellationToken);
@@ -596,18 +596,18 @@ public sealed class DeleteSpacePage(
 /// rows carrying its id: a page somebody deleted on its own beforehand did not
 /// go along, so it does not come back.
 /// </summary>
-public sealed class RestoreSpacePage(
+public sealed class RestorePage(
     ICallerIdentity callerIdentity,
     ISpaces spaces,
     SpaceScope scope,
-    ISpacePages pages,
+    IPages pages,
     IHistory history,
     ITransactions transactions,
-    SpacePageAssembler assembler,
+    PageAssembler assembler,
     InstanceSettings settings,
     TimeProvider clock)
 {
-    public async Task<SpacePageShape> ExecuteAsync(string name, string path, CancellationToken cancellationToken)
+    public async Task<PageShape> ExecuteAsync(string name, string path, CancellationToken cancellationToken)
     {
         var caller = callerIdentity.Caller;
         var space = await spaces.LiveAsync(scope, name, settings, cancellationToken);
@@ -625,10 +625,10 @@ public sealed class RestoreSpacePage(
             var parent = await pages.FindByIdAsync(parentId, cancellationToken);
             if (parent is null || parent.Deleted)
             {
-                var segments = SpacePagePath.Segments(path)!;
+                var segments = PagePath.Segments(path)!;
                 throw new Refusal(
                     RefusalCode.Transition,
-                    $"The page above {space.Name}/{path} is deleted; restore {space.Name}/{string.Join(SpacePagePath.Separator, segments.Take(segments.Count - 1))} first.");
+                    $"The page above {space.Name}/{path} is deleted; restore {space.Name}/{string.Join(PagePath.Separator, segments.Take(segments.Count - 1))} first.");
             }
         }
 
@@ -643,10 +643,10 @@ public sealed class RestoreSpacePage(
             row.Restore();
             await pages.RestoreCompanionsAsync(row.Id, cancellationToken);
 
-            history.Add(HistoryEntry.OnSpacePage(row.Id, caller.Id, now, HistoryField.Deleted, "true", null));
+            history.Add(HistoryEntry.OnPage(row.Id, caller.Id, now, HistoryField.Deleted, "true", null));
             foreach (var back in companions)
             {
-                history.Add(HistoryEntry.OnSpacePage(back.Id, caller.Id, now, HistoryField.Deleted, "true", null));
+                history.Add(HistoryEntry.OnPage(back.Id, caller.Id, now, HistoryField.Deleted, "true", null));
             }
 
             await pages.SaveAsync(cancellationToken);

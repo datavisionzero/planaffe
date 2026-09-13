@@ -1,4 +1,4 @@
-import type { SpacePageSummary } from "./context";
+import type { PageSummary } from "./context";
 
 /**
  * Three levels and no fourth (VISION 18, ADR 0028). The number is here because
@@ -32,10 +32,10 @@ export function ancestorsOf(path: string): string[] {
 /**
  * The pages directly under a parent — `null` for the ones directly under the
  * space — in the order the instance sent them, which is siblings by title
- * (`docs/api.md`, Space pages). The order is not remade here: a client that
+ * (`docs/api.md`, Pages). The order is not remade here: a client that
  * sorts a list it was given sorted is a second opinion about it.
  */
-export function childrenOf(pages: SpacePageSummary[], parent: string | null): SpacePageSummary[] {
+export function childrenOf(pages: PageSummary[], parent: string | null): PageSummary[] {
   return pages.filter((page) => page.parent === parent);
 }
 
@@ -44,7 +44,7 @@ export function childrenOf(pages: SpacePageSummary[], parent: string | null): Sp
  * does not hold is left out rather than guessed at: the path above a page says
  * what it knows, and the address carries the rest.
  */
-export function trailOf(pages: SpacePageSummary[], path: string): SpacePageSummary[] {
+export function trailOf(pages: PageSummary[], path: string): PageSummary[] {
   const wanted = [...ancestorsOf(path), path];
   const known = new Map(pages.map((page) => [page.path, page] as const));
 
@@ -56,7 +56,7 @@ export function trailOf(pages: SpacePageSummary[], path: string): SpacePageSumma
 }
 
 /** Every page under this one, however deep. Deleting takes them, renaming moves them. */
-export function descendantsOf(pages: SpacePageSummary[], path: string): SpacePageSummary[] {
+export function descendantsOf(pages: PageSummary[], path: string): PageSummary[] {
   return pages.filter((page) => page.path.startsWith(`${path}/`));
 }
 

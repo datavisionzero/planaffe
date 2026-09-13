@@ -19,7 +19,7 @@ read, so nothing has to be known about Markdown to write one
 
 That field is one component, so what is said of it holds in all nine places it
 is used — an issue's description, a comment, a question, an answer, a result, an
-epic's description, a page's body, a space page's body, a release's notes. It shows the structure of
+epic's description, a page's body, a release's notes. It shows the structure of
 the text while it is typed, continues a list on Enter and ends it on an empty
 item, and carries a toolbar and the keys for the marks nobody wants to spell
 out; ⌘/Ctrl+Enter saves from inside it, so a comment is written and sent without

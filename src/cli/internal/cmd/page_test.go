@@ -10,7 +10,7 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/exit"
 )
 
-const spacePage = `{"path":"company/onboarding","space":"handbuch","slug":"onboarding","parent":"company","depth":1,
+const aPage = `{"path":"company/onboarding","space":"handbuch","slug":"onboarding","parent":"company","depth":1,
 "title":"Onboarding","body":"Am ersten Tag bekommt jede neue Person eine Karte.",
 "author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},
 "updated_by":{"id":"0198e0c0-0000-7000-8000-000000000001","kind":"agent","name":"quiet-otter-42"},
@@ -27,7 +27,7 @@ func serving(body string) func(*http.Request) (int, string) {
 // ADR 0028). The request target is where that is visible — the server decodes
 // the path either way.
 func TestPageViewAsksTheAddressUnencoded(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -51,7 +51,7 @@ func TestPageViewAsksTheAddressUnencoded(t *testing.T) {
 }
 
 func TestPageViewJSONIsTheAnswer(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -70,7 +70,7 @@ func TestPageViewJSONIsTheAnswer(t *testing.T) {
 // A word without a slash names a space and not a page. The command line
 // already said so, so the instance is never troubled with it.
 func TestPageAddressWithoutASlashIsAUsageMistake(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -127,7 +127,7 @@ func TestPageListJSONIsTheSummaries(t *testing.T) {
 // The address says where the page lands: the last slug is its own, everything
 // in front of it is its parent.
 func TestPageCreateReadsTheParentOutOfTheAddress(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, spacePage }}
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, aPage }}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -159,7 +159,7 @@ func TestPageCreateReadsTheParentOutOfTheAddress(t *testing.T) {
 // A page at the top of a space has no parent, and an address of two segments
 // is how that is written.
 func TestPageCreateAtTheTopOfASpaceHasNoParent(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, spacePage }}
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, aPage }}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -178,7 +178,7 @@ func TestPageCreateAtTheTopOfASpaceHasNoParent(t *testing.T) {
 }
 
 func TestPageCreateWithoutATitleIsAUsageMistake(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, spacePage }}
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 201, aPage }}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -193,7 +193,7 @@ func TestPageCreateWithoutATitleIsAUsageMistake(t *testing.T) {
 }
 
 func TestPageEditCarriesTheGuardAndTheAddress(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -216,7 +216,7 @@ func TestPageEditCarriesTheGuardAndTheAddress(t *testing.T) {
 }
 
 func TestPageEditWithNothingToChangeIsAUsageMistake(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -232,7 +232,7 @@ func TestPageEditWithNothingToChangeIsAUsageMistake(t *testing.T) {
 }
 
 func TestPageRenameSendsTheSlugAlone(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -249,7 +249,7 @@ func TestPageRenameSendsTheSlugAlone(t *testing.T) {
 // Renaming is what the page is called where it stands; where it stands is
 // `move`. An address in the second argument is the confusion of the two.
 func TestPageRenameRefusesAnAddress(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -285,7 +285,7 @@ func TestPageViewOfAPageThatIsNotThere(t *testing.T) {
 // --under takes an address: the space in front, the parent behind it. The
 // move itself is asked at the space the page is in now.
 func TestPageMoveUnderAPageByItsAddress(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -309,7 +309,7 @@ func TestPageMoveUnderAPageByItsAddress(t *testing.T) {
 
 // A word without a slash is a space, and the page lands directly under it.
 func TestPageMoveIntoAnotherSpaceByItsName(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -330,7 +330,7 @@ func TestPageMoveIntoAnotherSpaceByItsName(t *testing.T) {
 // No --under is the way up: the page lands directly under the space it is
 // already in, and neither field is sent.
 func TestPageMoveWithoutUnderGoesToTheTopOfItsSpace(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -368,7 +368,7 @@ func TestPageMoveThatWouldGoTooDeep(t *testing.T) {
 }
 
 func TestPageMoveUnderNothingIsAUsageMistake(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 
@@ -431,7 +431,7 @@ func TestPageDeleteJSONIsTheCount(t *testing.T) {
 }
 
 func TestPageRestoreCarriesTheAddressInTheBody(t *testing.T) {
-	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(aPage)}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
 

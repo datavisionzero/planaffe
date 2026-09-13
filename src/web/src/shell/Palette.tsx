@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 import { Keys } from "./ShortcutsDialog";
 import { is } from "./shortcuts";
 import type { Space } from "@/spaces/context";
-import type { SpacePageHit } from "@/spaces/search";
-import { keyPath, keyPattern, spacePagePath, spacePath, viewPath, views } from "./views";
+import type { PageHit } from "@/spaces/search";
+import { keyPath, keyPattern, pagePath, spacePath, viewPath, views } from "./views";
 
 type Command = {
   id: string;
@@ -92,7 +92,7 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
   const { signOut } = useSession();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
-  const [found, setFound] = useState<{ of: string; issues: IssueSummary[]; hits: SpacePageHit[] }>(
+  const [found, setFound] = useState<{ of: string; issues: IssueSummary[]; hits: PageHit[] }>(
     { of: "", issues: [], hits: [] },
   );
   const searchId = useId();
@@ -229,7 +229,7 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
           label: hit.title,
           hint: `${hit.space_title} / ${hit.path}`,
           group: "Knowledge base",
-          run: go(spacePagePath(hit.space, hit.path)),
+          run: go(pagePath(hit.space, hit.path)),
           found: true,
         });
       }

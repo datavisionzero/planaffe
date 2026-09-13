@@ -8,41 +8,41 @@ namespace Planaffe.Infrastructure.Persistence.Configurations;
 
 /// <summary>
 /// The knowledge base's page and its place in the tree (<c>docs/storage.md</c>,
-/// Space pages). The unique index covers deleted rows on purpose, as the
-/// project page's does: a slug stays spent until the purge, so that restoring a
-/// page never lands on a name somebody else has taken (ADR 0013).
+/// Pages). The unique index covers deleted rows on purpose: a slug stays spent
+/// until the purge, so that restoring a page never lands on a name somebody
+/// else has taken (ADR 0013).
 /// </summary>
 /// <remarks>
 /// Two rules the model states twice on purpose. The depth is a check
-/// constraint as well as a rule of <see cref="SpacePage"/>, because a limit
+/// constraint as well as a rule of <see cref="Page"/>, because a limit
 /// that only one of the two holds is a limit one forgotten act removes. And
 /// the slug is unique under the parent rather than in the space (ADR 0028),
 /// which needs <c>nulls not distinct</c>: the pages directly under a space
 /// carry no parent, and without it Postgres would let every one of them repeat
 /// the same slug.
 /// </remarks>
-public sealed class SpacePageConfiguration : IEntityTypeConfiguration<SpacePage>
+public sealed class PageConfiguration : IEntityTypeConfiguration<Page>
 {
-    public void Configure(EntityTypeBuilder<SpacePage> builder)
+    public void Configure(EntityTypeBuilder<Page> builder)
     {
-        builder.ToTable("space_page", table => table.HasCheckConstraint(
-            "ck_space_page_depth", $"depth >= 0 and depth <= {SpacePage.MaxDepth}"));
+        builder.ToTable("page", table => table.HasCheckConstraint(
+            "ck_page_depth", $"depth >= 0 and depth <= {Page.MaxDepth}"));
 
-        builder.HasKey(p => p.Id).HasName("pk_space_page");
+        builder.HasKey(p => p.Id).HasName("pk_page");
         builder.Property(p => p.Id).HasColumnName("id");
 
         builder.Property(p => p.SpaceId).HasColumnName("space_id").IsRequired();
         builder.HasOne<Space>()
             .WithMany()
             .HasForeignKey(p => p.SpaceId)
-            .HasConstraintName("fk_space_page_space")
+            .HasConstraintName("fk_page_space")
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Property(p => p.ParentId).HasColumnName("parent_id");
-        builder.HasOne<SpacePage>()
+        builder.HasOne<Page>()
             .WithMany()
             .HasForeignKey(p => p.ParentId)
-            .HasConstraintName("fk_space_page_parent")
+            .HasConstraintName("fk_page_parent")
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Property(p => p.Depth).HasColumnName("depth").IsRequired();
@@ -55,7 +55,7 @@ public sealed class SpacePageConfiguration : IEntityTypeConfiguration<SpacePage>
         builder.HasIndex(p => new { p.SpaceId, p.ParentId, p.Slug })
             .IsUnique()
             .AreNullsDistinct(false)
-            .HasDatabaseName("space_page_slug");
+            .HasDatabaseName("page_slug");
 
         builder.Property(p => p.Title).HasColumnName("title").IsRequired();
 
@@ -72,13 +72,13 @@ public sealed class SpacePageConfiguration : IEntityTypeConfiguration<SpacePage>
         builder.Property<NpgsqlTsVector>("Search")
             .HasColumnName("search")
             .HasComputedColumnSql("to_tsvector('simple', title || ' ' || body)", stored: true);
-        builder.HasIndex("Search").HasMethod("GIN").HasDatabaseName("space_page_search");
+        builder.HasIndex("Search").HasMethod("GIN").HasDatabaseName("page_search");
 
         builder.Property(p => p.CreatedBy).HasColumnName("created_by").IsRequired();
         builder.HasOne<Identity>()
             .WithMany()
             .HasForeignKey(p => p.CreatedBy)
-            .HasConstraintName("fk_space_page_created_by")
+            .HasConstraintName("fk_page_created_by")
             .OnDelete(DeleteBehavior.NoAction);
 
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").IsRequired();
@@ -87,7 +87,7 @@ public sealed class SpacePageConfiguration : IEntityTypeConfiguration<SpacePage>
         builder.HasOne<Identity>()
             .WithMany()
             .HasForeignKey(p => p.UpdatedBy)
-            .HasConstraintName("fk_space_page_updated_by")
+            .HasConstraintName("fk_page_updated_by")
             .OnDelete(DeleteBehavior.NoAction);
 
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at").IsRequired();
@@ -98,7 +98,7 @@ public sealed class SpacePageConfiguration : IEntityTypeConfiguration<SpacePage>
         builder.HasOne<Identity>()
             .WithMany()
             .HasForeignKey(p => p.DeletedBy)
-            .HasConstraintName("fk_space_page_deleted_by")
+            .HasConstraintName("fk_page_deleted_by")
             .OnDelete(DeleteBehavior.NoAction);
 
         // It points at a page, and it deliberately carries no foreign key of

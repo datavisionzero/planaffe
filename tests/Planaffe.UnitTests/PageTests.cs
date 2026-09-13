@@ -8,7 +8,7 @@ namespace Planaffe.UnitTests;
 /// deletion records about the subtree it went with (<c>CONTEXT.md</c>, Space
 /// page; VISION 18, ADR 0028).
 /// </summary>
-public sealed class SpacePageTests
+public sealed class PageTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);
 
@@ -40,7 +40,7 @@ public sealed class SpacePageTests
     {
         var parent = Root("company", "Company");
 
-        var child = SpacePage.Create(Space, parent, "onboarding", "Onboarding", null, Author, Now);
+        var child = Page.Create(Space, parent, "onboarding", "Onboarding", null, Author, Now);
 
         Assert.Equal(parent.Id, child.ParentId);
         Assert.Equal(1, child.Depth);
@@ -54,21 +54,21 @@ public sealed class SpacePageTests
     public void A_fourth_level_is_refused()
     {
         var first = Root("company", "Company");
-        var second = SpacePage.Create(Space, first, "handbook", "Handbook", null, Author, Now);
-        var third = SpacePage.Create(Space, second, "onboarding", "Onboarding", null, Author, Now);
+        var second = Page.Create(Space, first, "handbook", "Handbook", null, Author, Now);
+        var third = Page.Create(Space, second, "onboarding", "Onboarding", null, Author, Now);
 
-        Assert.Equal(SpacePage.MaxDepth, third.Depth);
+        Assert.Equal(Page.MaxDepth, third.Depth);
         Assert.Throws<ArgumentException>(() =>
-            SpacePage.Create(Space, third, "day-one", "Day one", null, Author, Now));
+            Page.Create(Space, third, "day-one", "Day one", null, Author, Now));
     }
 
     [Fact]
     public void A_parent_in_another_space_is_refused()
     {
-        var elsewhere = SpacePage.Create(Guid.CreateVersion7(), null, "company", "Company", null, Author, Now);
+        var elsewhere = Page.Create(Guid.CreateVersion7(), null, "company", "Company", null, Author, Now);
 
         Assert.Throws<ArgumentException>(() =>
-            SpacePage.Create(Space, elsewhere, "onboarding", "Onboarding", null, Author, Now));
+            Page.Create(Space, elsewhere, "onboarding", "Onboarding", null, Author, Now));
     }
 
     [Theory]
@@ -84,7 +84,7 @@ public sealed class SpacePageTests
     {
         Assert.Throws<ArgumentException>(() => Root("onboarding", "  "));
         Assert.Throws<ArgumentException>(() => Root("onboarding", "two\nlines"));
-        Assert.Throws<ArgumentException>(() => Root("onboarding", new string('a', SpacePage.TitleMaxLength + 1)));
+        Assert.Throws<ArgumentException>(() => Root("onboarding", new string('a', Page.TitleMaxLength + 1)));
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public sealed class SpacePageTests
     [Fact]
     public void Rewriting_with_nothing_empties_the_document()
     {
-        var page = SpacePage.Create(Space, null, "onboarding", "Onboarding", "Der Text.", Author, Now);
+        var page = Page.Create(Space, null, "onboarding", "Onboarding", "Der Text.", Author, Now);
 
         page.Rewrite(null, Author, Later);
 
@@ -120,7 +120,7 @@ public sealed class SpacePageTests
     public void Moving_takes_the_depth_of_the_new_parent()
     {
         var company = Root("company", "Company");
-        var handbook = SpacePage.Create(Space, company, "handbook", "Handbook", null, Author, Now);
+        var handbook = Page.Create(Space, company, "handbook", "Handbook", null, Author, Now);
         var page = Root("onboarding", "Onboarding");
 
         page.MoveUnder(Space, handbook, Author, Later);
@@ -146,7 +146,7 @@ public sealed class SpacePageTests
     [Fact]
     public void Moving_under_a_parent_of_another_space_is_refused()
     {
-        var elsewhere = SpacePage.Create(Guid.CreateVersion7(), null, "company", "Company", null, Author, Now);
+        var elsewhere = Page.Create(Guid.CreateVersion7(), null, "company", "Company", null, Author, Now);
         var page = Root("onboarding", "Onboarding");
 
         Assert.Throws<ArgumentException>(() => page.MoveUnder(Space, elsewhere, Author, Later));
@@ -159,9 +159,9 @@ public sealed class SpacePageTests
     [Fact]
     public void Room_says_how_many_levels_are_left()
     {
-        Assert.Equal(2, SpacePage.Room(0));
-        Assert.Equal(1, SpacePage.Room(1));
-        Assert.Equal(0, SpacePage.Room(SpacePage.MaxDepth));
+        Assert.Equal(2, Page.Room(0));
+        Assert.Equal(1, Page.Room(1));
+        Assert.Equal(0, Page.Room(Page.MaxDepth));
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class SpacePageTests
     public void A_page_that_went_with_a_subtree_names_the_page_it_went_with()
     {
         var parent = Root("company", "Company");
-        var child = SpacePage.Create(Space, parent, "onboarding", "Onboarding", null, Author, Now);
+        var child = Page.Create(Space, parent, "onboarding", "Onboarding", null, Author, Now);
 
         child.Delete(Author, Later, parent.Id);
 
@@ -196,7 +196,7 @@ public sealed class SpacePageTests
     public void A_second_deletion_changes_nothing()
     {
         var parent = Root("company", "Company");
-        var child = SpacePage.Create(Space, parent, "onboarding", "Onboarding", null, Author, Now);
+        var child = Page.Create(Space, parent, "onboarding", "Onboarding", null, Author, Now);
         child.Delete(Author, Now);
 
         child.Delete(Author, Later, parent.Id);
@@ -218,6 +218,6 @@ public sealed class SpacePageTests
         Assert.Null(page.DeletedWith);
     }
 
-    private static SpacePage Root(string slug, string title) =>
-        SpacePage.Create(Space, null, slug, title, null, Author, Now);
+    private static Page Root(string slug, string title) =>
+        Page.Create(Space, null, slug, title, null, Author, Now);
 }

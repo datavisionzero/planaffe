@@ -2,16 +2,16 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/session/Session";
-import { aProject, aSpace, aSpacePage, aUser, installInstance, renderAt, type Route } from "@/shared/testing";
+import { aProject, aSpace, aPage, aUser, installInstance, renderAt, type Route } from "@/shared/testing";
 import { Shell } from "@/shell/Shell";
 
 const closed = { ...aSpace, name: "board", title: "The board", closed_to_agents: true };
 
 const tree = [
-  aSpacePage("company", "The company"),
-  aSpacePage("company/onboarding", "Onboarding"),
-  aSpacePage("company/onboarding/day-one", "The first day"),
-  aSpacePage("product", "The product"),
+  aPage("company", "The company"),
+  aPage("company/onboarding", "Onboarding"),
+  aPage("company/onboarding/day-one", "The first day"),
+  aPage("product", "The product"),
 ];
 
 function knowledge(path: string, routes: Record<string, Route> = {}) {

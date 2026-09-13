@@ -2,16 +2,16 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/session/Session";
-import { aProject, aSpace, aSpacePage, aUser, installInstance, renderAt, type Route } from "@/shared/testing";
+import { aProject, aSpace, aPage, aUser, installInstance, renderAt, type Route } from "@/shared/testing";
 import { Shell } from "@/shell/Shell";
 
 const tree = [
-  aSpacePage("company", "The company"),
-  aSpacePage("company/onboarding", "Onboarding"),
+  aPage("company", "The company"),
+  aPage("company/onboarding", "Onboarding"),
 ];
 
 const page = {
-  ...aSpacePage("company/onboarding", "Onboarding"),
+  ...aPage("company/onboarding", "Onboarding"),
   body: "# The first week\n\nWho hands over what, and when.",
   updated_at: "2026-09-05T12:00:00Z",
 };

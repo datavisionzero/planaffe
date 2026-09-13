@@ -133,8 +133,8 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
         // rather than what falls.
         await context.Database.ExecuteSqlRawAsync(
             """
-            delete from space_page where id in (
-                select id from space_page
+            delete from page where id in (
+                select id from page
                  where deleted_at is not null and deleted_at <= now() - {0}::interval
                  order by depth
                  limit {1})

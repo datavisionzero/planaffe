@@ -2,12 +2,12 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/session/Session";
-import { aHit, aProject, aSpace, aSpacePage, aUser, installInstance, renderAt, type Route } from "@/shared/testing";
+import { aHit, aProject, aSpace, aPage, aUser, installInstance, renderAt, type Route } from "@/shared/testing";
 import { Shell } from "@/shell/Shell";
 
 const other = { ...aSpace, name: "personal", title: "Personal" };
 
-const tree = [aSpacePage("company", "The company"), aSpacePage("company/onboarding", "Onboarding")];
+const tree = [aPage("company", "The company"), aPage("company/onboarding", "Onboarding")];
 
 const hits = [
   aHit(

@@ -40,7 +40,7 @@ public sealed class SpaceSearchActsTests
         Assert.Equal(
             RefusalCode.Validation,
             (await Assert.ThrowsAsync<Refusal>(
-                () => world.Search(world.Owner, "onboarding", limit: SearchSpacePages.MaxLimit + 1))).Code);
+                () => world.Search(world.Owner, "onboarding", limit: SearchPages.MaxLimit + 1))).Code);
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class SpaceSearchActsTests
         await world.Search(world.Owner, "onboarding");
 
         Assert.Equal(new HashSet<Guid> { world.Handbook.Id, world.Personal.Id }, world.Asked!.ToHashSet());
-        Assert.Equal(SearchSpacePages.DefaultLimit, world.Limit);
+        Assert.Equal(SearchPages.DefaultLimit, world.Limit);
     }
 
     /// <summary>
@@ -98,7 +98,7 @@ public sealed class SpaceSearchActsTests
     public async Task A_hit_carries_the_way_down_to_it_and_its_excerpt()
     {
         var world = new World();
-        world.Answer = [new SpacePageHitRow(
+        world.Answer = [new PageHitRow(
             "handbuch",
             "Handbuch",
             "onboarding/erster-tag",
@@ -112,7 +112,7 @@ public sealed class SpaceSearchActsTests
         var hit = Assert.Single(hits);
         Assert.Equal("onboarding/erster-tag", hit.Path);
         Assert.Equal("Handbuch", hit.SpaceTitle);
-        Assert.Equal(new SpacePageStep("onboarding", "Onboarding"), Assert.Single(hit.Trail));
+        Assert.Equal(new PageStep("onboarding", "Onboarding"), Assert.Single(hit.Trail));
         Assert.Equal(
             [new ExcerptSegment("Am ", false), new ExcerptSegment("ersten Tag", true), new ExcerptSegment(" bekommt jede neue Person einen Zugang.", false)],
             hit.Excerpt);
@@ -157,7 +157,7 @@ public sealed class SpaceSearchActsTests
     }
 
     /// <summary>Three spaces, two identities, and a store that remembers what it was asked.</summary>
-    private sealed class World : ISpaces, ISpaceAccess, ISpacePages
+    private sealed class World : ISpaces, ISpaceAccess, IPages
     {
         public World()
         {
@@ -184,14 +184,14 @@ public sealed class SpaceSearchActsTests
 
         public int Limit { get; private set; }
 
-        public IReadOnlyList<SpacePageHitRow> Answer { get; set; } = [];
+        public IReadOnlyList<PageHitRow> Answer { get; set; } = [];
 
-        public Task<IReadOnlyList<SpacePageHitShape>> Search(
+        public Task<IReadOnlyList<PageHitShape>> Search(
             Identity caller, string? query, string? space = null, int? limit = null) =>
-            new SearchSpacePages(this, new SpaceScope(new Presented(caller), this, this), this, Settings)
+            new SearchPages(this, new SpaceScope(new Presented(caller), this, this), this, Settings)
                 .ExecuteAsync(query, space, limit, CancellationToken.None);
 
-        public Task<IReadOnlyList<SpacePageHitRow>> SearchAsync(
+        public Task<IReadOnlyList<PageHitRow>> SearchAsync(
             IReadOnlyCollection<Guid> spaceIds, string query, int limit, CancellationToken cancellationToken)
         {
             Asked = spaceIds;
@@ -233,17 +233,17 @@ public sealed class SpaceSearchActsTests
 
         public Task RevokeAsync(Guid spaceId, Guid userId, CancellationToken cancellationToken) => throw Unasked();
 
-        public Task<SpacePage?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) => throw Unasked();
+        public Task<Page?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) => throw Unasked();
 
-        public Task<SpacePage?> FindAnyAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) => throw Unasked();
+        public Task<Page?> FindAnyAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) => throw Unasked();
 
-        Task<SpacePage?> ISpacePages.FindByIdAsync(Guid id, CancellationToken cancellationToken) => throw Unasked();
+        Task<Page?> IPages.FindByIdAsync(Guid id, CancellationToken cancellationToken) => throw Unasked();
 
-        public Task<IReadOnlyList<SpacePage>> TreeAsync(Guid spaceId, CancellationToken cancellationToken) => throw Unasked();
+        public Task<IReadOnlyList<Page>> TreeAsync(Guid spaceId, CancellationToken cancellationToken) => throw Unasked();
 
-        public Task<IReadOnlyList<SpacePage>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken) => throw Unasked();
+        public Task<IReadOnlyList<Page>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken) => throw Unasked();
 
-        public Task<IReadOnlyList<SpacePage>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken) => throw Unasked();
+        public Task<IReadOnlyList<Page>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken) => throw Unasked();
 
         public Task DeleteDescendantsAsync(Guid pageId, Guid by, DateTimeOffset at, CancellationToken cancellationToken) => throw Unasked();
 
@@ -251,11 +251,11 @@ public sealed class SpaceSearchActsTests
 
         public Task ShiftDescendantsAsync(Guid pageId, Guid spaceId, int levels, CancellationToken cancellationToken) => throw Unasked();
 
-        public Task<SpacePage?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken) => throw Unasked();
+        public Task<Page?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken) => throw Unasked();
 
-        public void Add(SpacePage page) => throw Unasked();
+        public void Add(Page page) => throw Unasked();
 
-        Task ISpacePages.SaveAsync(CancellationToken cancellationToken) => throw Unasked();
+        Task IPages.SaveAsync(CancellationToken cancellationToken) => throw Unasked();
 
         private static NotSupportedException Unasked() => new("This act does not go there.");
     }

@@ -14,7 +14,7 @@ namespace Planaffe.UnitTests;
 /// is drawn, and that a space closed to agents answers an agent exactly as a
 /// space that never existed.
 /// </summary>
-public sealed class SpacePageActsTests
+public sealed class PageActsTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);
 
@@ -60,7 +60,7 @@ public sealed class SpacePageActsTests
             world.Create(world.Owner, "company/handbook/onboarding", "day-one", "Day one"));
 
         Assert.Equal(RefusalCode.TooDeep, refusal.Code);
-        Assert.Equal(SpacePage.MaxDepth, refusal.Extensions["depth"]);
+        Assert.Equal(Page.MaxDepth, refusal.Extensions["depth"]);
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public sealed class SpacePageActsTests
         await world.Create(world.Owner, "company", "handbook", "Handbook");
         await world.Create(world.Owner, "company/handbook", "day-one", "Day one");
 
-        var tree = await new ListSpacePages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
+        var tree = await new ListPages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
             .ExecuteAsync("handbuch", CancellationToken.None);
 
         Assert.Equal(
@@ -154,7 +154,7 @@ public sealed class SpacePageActsTests
         var gone = await world.Create(world.Owner, null, "product", "Product");
         world.Row(gone.Path).Delete(world.Owner.Id, Now);
 
-        var tree = await new ListSpacePages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
+        var tree = await new ListPages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
             .ExecuteAsync("handbuch", CancellationToken.None);
 
         Assert.Equal(["company"], tree.Select(p => p.Path));
@@ -206,13 +206,13 @@ public sealed class SpacePageActsTests
         var page = await world.Create(world.Owner, null, "company", "Company");
 
         var changed = await world.Change(
-            world.Owner, page.Path, new SpacePageChanges("firma", "Firma", true, "Neuer Text."), null);
+            world.Owner, page.Path, new PageChanges("firma", "Firma", true, "Neuer Text."), null);
 
         Assert.Equal("firma", changed.Path);
         Assert.Equal("Firma", changed.Title);
         Assert.Equal("Neuer Text.", changed.Body);
 
-        var fields = world.History.Where(h => h.SpacePageId == world.Row("firma").Id).Select(h => h.Field);
+        var fields = world.History.Where(h => h.PageId == world.Row("firma").Id).Select(h => h.Field);
         Assert.Equal([HistoryField.Created, HistoryField.Slug, HistoryField.Title, HistoryField.Body], fields);
 
         var rename = world.History.Single(h => h.Field == HistoryField.Slug);
@@ -228,7 +228,7 @@ public sealed class SpacePageActsTests
         var product = await world.Create(world.Owner, null, "product", "Product");
 
         var refusal = await Assert.ThrowsAsync<Refusal>(() =>
-            world.Change(world.Owner, product.Path, new SpacePageChanges("company", null, false, null), null));
+            world.Change(world.Owner, product.Path, new PageChanges("company", null, false, null), null));
 
         Assert.Equal(RefusalCode.Validation, refusal.Code);
     }
@@ -241,10 +241,10 @@ public sealed class SpacePageActsTests
         var stale = page.UpdatedAt.AddMinutes(-1);
 
         var refusal = await Assert.ThrowsAsync<Refusal>(() =>
-            world.Change(world.Owner, page.Path, new SpacePageChanges(null, "Firma", false, null), stale.ToString("o")));
+            world.Change(world.Owner, page.Path, new PageChanges(null, "Firma", false, null), stale.ToString("o")));
 
         Assert.Equal(RefusalCode.Stale, refusal.Code);
-        Assert.IsType<SpacePageShape>(refusal.Extensions["current"]);
+        Assert.IsType<PageShape>(refusal.Extensions["current"]);
         Assert.Equal("Company", world.Row("company").Title);
     }
 
@@ -255,7 +255,7 @@ public sealed class SpacePageActsTests
         var page = await world.Create(world.Owner, null, "company", "Company");
 
         var changed = await world.Change(
-            world.Owner, page.Path, new SpacePageChanges(null, "Firma", false, null), page.UpdatedAt.ToString("o"));
+            world.Owner, page.Path, new PageChanges(null, "Firma", false, null), page.UpdatedAt.ToString("o"));
 
         Assert.Equal("Firma", changed.Title);
     }
@@ -403,7 +403,7 @@ public sealed class SpacePageActsTests
 
         Assert.Equal(3, gone);
 
-        var tree = await new ListSpacePages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
+        var tree = await new ListPages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
             .ExecuteAsync("handbuch", CancellationToken.None);
         Assert.Equal(["product"], tree.Select(p => p.Path));
 
@@ -424,7 +424,7 @@ public sealed class SpacePageActsTests
         var back = await world.Restore(world.Owner, "company");
 
         Assert.Equal("company", back.Path);
-        var tree = await new ListSpacePages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
+        var tree = await new ListPages(world, world.Scope(world.Owner), world, world.Assembler, Settings)
             .ExecuteAsync("handbuch", CancellationToken.None);
         Assert.Equal(["company", "company/handbook"], tree.Select(p => p.Path));
     }
@@ -466,9 +466,9 @@ public sealed class SpacePageActsTests
     }
 
     /// <summary>One space, four identities, the pages in memory and the history beside them.</summary>
-    private sealed class World : ISpaces, ISpaceAccess, ISpacePages, IIdentities, IHistory, ITransactions
+    private sealed class World : ISpaces, ISpaceAccess, IPages, IIdentities, IHistory, ITransactions
     {
-        private readonly List<SpacePage> _pages = [];
+        private readonly List<Page> _pages = [];
 
         private readonly List<Identity> _identities;
 
@@ -501,40 +501,40 @@ public sealed class SpacePageActsTests
 
         public List<HistoryEntry> History { get; } = [];
 
-        public SpacePageAssembler Assembler => new(this, this);
+        public PageAssembler Assembler => new(this, this);
 
         public SpaceScope Scope(Identity identity) => new(new Presented(identity), this, this);
 
         /// <summary>Every write moves the clock, so that a version says something.</summary>
         private TimeProvider Clock => new StoppedClock(_now = _now.AddMinutes(1));
 
-        public Task<SpacePageShape> Create(Identity caller, string? parent, string slug, string title, string? body = null) =>
-            new CreateSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
-                .ExecuteAsync("handbuch", new CreateSpacePageRequest(parent, slug, title, body), CancellationToken.None);
+        public Task<PageShape> Create(Identity caller, string? parent, string slug, string title, string? body = null) =>
+            new CreatePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
+                .ExecuteAsync("handbuch", new CreatePageRequest(parent, slug, title, body), CancellationToken.None);
 
-        public Task<SpacePageShape> Move(Identity caller, string path, string? space, string? parent) =>
-            new MoveSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
-                .ExecuteAsync("handbuch", path, new SpacePageMove(space, parent), CancellationToken.None);
+        public Task<PageShape> Move(Identity caller, string path, string? space, string? parent) =>
+            new MovePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
+                .ExecuteAsync("handbuch", path, new PageMove(space, parent), CancellationToken.None);
 
         public Task<int> Delete(Identity caller, string path) =>
-            new DeleteSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Settings, Clock)
+            new DeletePage(new Presented(caller), this, Scope(caller), this, this, this, Settings, Clock)
                 .ExecuteAsync("handbuch", path, CancellationToken.None);
 
-        public Task<SpacePageShape> Restore(Identity caller, string path) =>
-            new RestoreSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
+        public Task<PageShape> Restore(Identity caller, string path) =>
+            new RestorePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
                 .ExecuteAsync("handbuch", path, CancellationToken.None);
 
-        public Task<SpacePageShape> Read(Identity caller, string path) =>
-            new ReadSpacePage(this, Scope(caller), this, Assembler, Settings).ExecuteAsync("handbuch", path, CancellationToken.None);
+        public Task<PageShape> Read(Identity caller, string path) =>
+            new ReadPage(this, Scope(caller), this, Assembler, Settings).ExecuteAsync("handbuch", path, CancellationToken.None);
 
-        public Task<SpacePageShape> Change(Identity caller, string path, SpacePageChanges changes, string? ifMatch) =>
-            new ChangeSpacePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
+        public Task<PageShape> Change(Identity caller, string path, PageChanges changes, string? ifMatch) =>
+            new ChangePage(new Presented(caller), this, Scope(caller), this, this, this, Assembler, Settings, Clock)
                 .ExecuteAsync("handbuch", path, changes, ifMatch, CancellationToken.None);
 
         /// <summary>The row behind an address, for a test that wants to reach past the acts.</summary>
-        public SpacePage Row(string path, Space? space = null)
+        public Page Row(string path, Space? space = null)
         {
-            SpacePage? page = null;
+            Page? page = null;
             foreach (var slug in path.Split('/'))
             {
                 page = _pages.Single(p =>
@@ -555,28 +555,28 @@ public sealed class SpacePageActsTests
             Task.FromResult<IReadOnlySet<Guid>>(
                 ids.Where(id => !new[] { Space, Other, Foreign }.Single(s => s.Id == id).ClosedToAgents).ToHashSet());
 
-        public Task<SpacePage?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
+        public Task<Page?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
             Task.FromResult(_pages.SingleOrDefault(p =>
                 p.SpaceId == spaceId && p.ParentId == parentId && p.Slug == slug && !p.Deleted));
 
-        public Task<SpacePage?> FindAnyAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
+        public Task<Page?> FindAnyAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
             Task.FromResult(_pages.SingleOrDefault(p => p.SpaceId == spaceId && p.ParentId == parentId && p.Slug == slug));
 
-        public Task<SpacePage?> FindByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        public Task<Page?> FindByIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(_pages.SingleOrDefault(p => p.Id == id));
 
-        public Task<IReadOnlyList<SpacePage>> TreeAsync(Guid spaceId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<SpacePage>>(
+        public Task<IReadOnlyList<Page>> TreeAsync(Guid spaceId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Page>>(
                 [.. _pages.Where(p => p.SpaceId == spaceId && !p.Deleted)
                     .OrderBy(p => p.Depth)
                     .ThenBy(p => p.Title, StringComparer.Ordinal)
                     .ThenBy(p => p.Slug, StringComparer.Ordinal)]);
 
-        public Task<IReadOnlyList<SpacePage>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<SpacePage>>([.. Below(pageId).Where(p => !p.Deleted)]);
+        public Task<IReadOnlyList<Page>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Page>>([.. Below(pageId).Where(p => !p.Deleted)]);
 
-        public Task<IReadOnlyList<SpacePage>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<SpacePage>>([.. _pages.Where(p => p.DeletedWith == pageId)]);
+        public Task<IReadOnlyList<Page>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Page>>([.. _pages.Where(p => p.DeletedWith == pageId)]);
 
         public Task DeleteDescendantsAsync(Guid pageId, Guid by, DateTimeOffset at, CancellationToken cancellationToken)
         {
@@ -614,11 +614,11 @@ public sealed class SpacePageActsTests
             return Task.CompletedTask;
         }
 
-        public Task<SpacePage?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken) =>
+        public Task<Page?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(_pages.SingleOrDefault(p => p.Id == id));
 
         /// <summary>The subtree under a page, shallowest first, deleted rows included.</summary>
-        private IEnumerable<SpacePage> Below(Guid pageId)
+        private IEnumerable<Page> Below(Guid pageId)
         {
             var level = _pages.Where(p => p.ParentId == pageId).ToList();
             while (level.Count > 0)
@@ -632,7 +632,7 @@ public sealed class SpacePageActsTests
             }
         }
 
-        public void Add(SpacePage page) => _pages.Add(page);
+        public void Add(Page page) => _pages.Add(page);
 
         public void Add(HistoryEntry entry) => History.Add(entry);
 
@@ -644,7 +644,7 @@ public sealed class SpacePageActsTests
             Task.FromResult(_identities.FirstOrDefault(i => i.Id == id));
 
         // Everything below is a port these acts hold and never reach.
-        public Task<IReadOnlyList<SpacePageHitRow>> SearchAsync(
+        public Task<IReadOnlyList<PageHitRow>> SearchAsync(
             IReadOnlyCollection<Guid> spaceIds, string query, int limit, CancellationToken cancellationToken) => throw Unasked();
 
         public Task<Space?> FindLiveAsync(string name, CancellationToken cancellationToken) => throw Unasked();

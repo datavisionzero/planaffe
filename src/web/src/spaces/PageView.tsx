@@ -11,8 +11,8 @@ import { MarkdownField } from "@/shared/MarkdownField";
 import { PageHeader } from "@/shared/PageHeader";
 import { useAbandon } from "@/shared/abandon";
 import { stale } from "@/shared/stale";
-import { spacePagePath, spacePath } from "@/shell/views";
-import type { SpacePage } from "./context";
+import { pagePath, spacePath } from "@/shell/views";
+import type { Page } from "./context";
 import { asFile, download } from "./download";
 import { MoveDialog } from "./MoveDialog";
 import { ancestorsOf, descendantsOf, takesChildren, trailOf } from "./tree";
@@ -21,7 +21,7 @@ import { usePageTree, useSpaceList } from "./useSpaces";
 type Load =
   | { at: "asking" }
   | { at: "failed"; why: string; code: string | undefined; until: string | undefined }
-  | { at: "known"; page: SpacePage };
+  | { at: "known"; page: Page };
 
 /**
  * A page of a space: the Markdown in the middle, rendered in the browser and
@@ -33,7 +33,7 @@ type Load =
  * same question when a form with writing in it is left. The knowledge base
  * gets no second editor (VISION 18).
  */
-export function SpacePageView() {
+export function PageView() {
   const parameters = useParams();
   const name = parameters.name!;
   const path = parameters["*"] ?? "";
@@ -44,7 +44,7 @@ export function SpacePageView() {
   const [editingAt, setEditingAt] = useState<string>();
   // What a delete left behind, for the page in the address: the way back is
   // on the screen that deleted it rather than on a blank one.
-  const [removed, setRemoved] = useState<{ at: string; page: SpacePage; pages: number }>();
+  const [removed, setRemoved] = useState<{ at: string; page: Page; pages: number }>();
   const load: Load = state !== undefined && state.at === at ? state.load : { at: "asking" };
   const editing = editingAt === at;
   const gone = removed !== undefined && removed.at === at ? removed : undefined;
@@ -97,7 +97,7 @@ export function SpacePageView() {
     );
   }
 
-  const known = (page: SpacePage) => setState({ at: `${name}/${page.path}`, load: { at: "known", page } });
+  const known = (page: Page) => setState({ at: `${name}/${page.path}`, load: { at: "known", page } });
 
   if (gone !== undefined) {
     return (
@@ -202,8 +202,8 @@ export function SpacePageView() {
  */
 function Acts({ name, page, onChanged, onDeleted }: {
   name: string;
-  page: SpacePage;
-  onChanged: (page: SpacePage) => void;
+  page: Page;
+  onChanged: (page: Page) => void;
   onDeleted: (pages: number) => void;
 }) {
   const navigate = useNavigate();
@@ -236,14 +236,14 @@ function Acts({ name, page, onChanged, onDeleted }: {
 
           await reload();
           onChanged(data);
-          void navigate(spacePagePath(name, data.path), { replace: true });
+          void navigate(pagePath(name, data.path), { replace: true });
         }}
       />
       <MoveDialog
         page={page}
         onMoved={(moved) => {
           onChanged(moved);
-          void navigate(spacePagePath(moved.space, moved.path), { replace: true });
+          void navigate(pagePath(moved.space, moved.path), { replace: true });
         }}
       />
       <ActionDialog
@@ -274,9 +274,9 @@ function Acts({ name, page, onChanged, onDeleted }: {
  */
 function Gone({ name, page, pages, onRestored }: {
   name: string;
-  page: SpacePage;
+  page: Page;
   pages: number;
-  onRestored: (page: SpacePage) => void;
+  onRestored: (page: Page) => void;
 }) {
   return (
     <>
@@ -302,7 +302,7 @@ function Gone({ name, page, pages, onRestored }: {
  * which is in the address, so it is a link here rather than a sentence to
  * read twice.
  */
-function Restore({ name, path, onRestored }: { name: string; path: string; onRestored: (page: SpacePage) => void }) {
+function Restore({ name, path, onRestored }: { name: string; path: string; onRestored: (page: Page) => void }) {
   const { reload } = usePageTree();
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<{ said: string; above: string | undefined }>();
@@ -341,7 +341,7 @@ function Restore({ name, path, onRestored }: { name: string; path: string; onRes
         <p role="alert" className="text-xs text-destructive">
           {why.said}{" "}
           {why.above !== undefined && (
-            <Link className="text-brand hover:underline" to={spacePagePath(name, why.above)}>
+            <Link className="text-brand hover:underline" to={pagePath(name, why.above)}>
               Restore the page above first
             </Link>
           )}
@@ -369,7 +369,7 @@ function Trail({ name, path }: { name: string; path: string }) {
       {above.map((page) => (
         <span key={page.path} className="flex items-center gap-1">
           <span aria-hidden>/</span>
-          <Link to={spacePagePath(name, page.path)} className="hover:text-foreground hover:underline">{page.title}</Link>
+          <Link to={pagePath(name, page.path)} className="hover:text-foreground hover:underline">{page.title}</Link>
         </span>
       ))}
     </nav>
@@ -389,7 +389,7 @@ function Absent({ name, path, why, code, until, onRestored }: {
   why: string;
   code: string | undefined;
   until: string | undefined;
-  onRestored: (page: SpacePage) => void;
+  onRestored: (page: Page) => void;
 }) {
   const deleted = code === "deleted";
 
@@ -422,14 +422,14 @@ function Absent({ name, path, why, code, until, onRestored }: {
  */
 function EditForm({ name, page, onSaved, onCancel }: {
   name: string;
-  page: SpacePage;
-  onSaved: (page: SpacePage) => void;
+  page: Page;
+  onSaved: (page: Page) => void;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState(page.title);
   const [body, setBody] = useState(page.body);
   const [version, setVersion] = useState(page.updated_at);
-  const [conflict, setConflict] = useState<SpacePage>();
+  const [conflict, setConflict] = useState<Page>();
   const [saving, setSaving] = useState(false);
   const [why, setWhy] = useState<string>();
   const titleId = useId();
@@ -450,7 +450,7 @@ function EditForm({ name, page, onSaved, onCancel }: {
         body: { title, body },
       });
 
-      const current = stale<SpacePage>(answer);
+      const current = stale<Page>(answer);
 
       if (current !== undefined) {
         setConflict(current);
@@ -491,7 +491,7 @@ function EditForm({ name, page, onSaved, onCancel }: {
 }
 
 /** What a stale refusal means, in the words it means it. */
-function Conflict({ page }: { page: SpacePage }): ReactNode {
+function Conflict({ page }: { page: Page }): ReactNode {
   return (
     <div role="alert" className="grid gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
       <p>

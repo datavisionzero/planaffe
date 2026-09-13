@@ -18,7 +18,7 @@ public sealed class HistoryEntryConfiguration : IEntityTypeConfiguration<History
     public void Configure(EntityTypeBuilder<HistoryEntry> builder)
     {
         builder.ToTable("history", table =>
-            table.HasCheckConstraint("ck_history_subject", "num_nonnulls(issue_id, epic_id, space_page_id) = 1"));
+            table.HasCheckConstraint("ck_history_subject", "num_nonnulls(issue_id, epic_id, page_id) = 1"));
 
         // Always generated, so that the order of the ids is the order the rows
         // were written and nothing can insert one out of sequence.
@@ -39,11 +39,11 @@ public sealed class HistoryEntryConfiguration : IEntityTypeConfiguration<History
             .HasConstraintName("fk_history_epic")
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.Property(h => h.SpacePageId).HasColumnName("space_page_id");
-        builder.HasOne<SpacePage>()
+        builder.Property(h => h.PageId).HasColumnName("page_id");
+        builder.HasOne<Page>()
             .WithMany()
-            .HasForeignKey(h => h.SpacePageId)
-            .HasConstraintName("fk_history_space_page")
+            .HasForeignKey(h => h.PageId)
+            .HasConstraintName("fk_history_page")
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Property(h => h.ActorId).HasColumnName("actor_id").IsRequired();
@@ -61,6 +61,6 @@ public sealed class HistoryEntryConfiguration : IEntityTypeConfiguration<History
 
         builder.HasIndex(h => new { h.IssueId, h.Id }).HasDatabaseName("history_issue");
         builder.HasIndex(h => new { h.EpicId, h.Id }).HasDatabaseName("history_epic");
-        builder.HasIndex(h => new { h.SpacePageId, h.Id }).HasDatabaseName("history_space_page");
+        builder.HasIndex(h => new { h.PageId, h.Id }).HasDatabaseName("history_page");
     }
 }

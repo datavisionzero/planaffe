@@ -2,14 +2,15 @@ namespace Planaffe.Domain.Spaces;
 
 /// <summary>
 /// A Markdown document in a space, with a place in a tree at most three levels
-/// deep (<c>CONTEXT.md</c>, Space page; VISION 18, ADR 0028). It is the page of
+/// deep (<c>CONTEXT.md</c>, Page; VISION 18, ADR 0028). It is the page of
 /// VISION 7 with the one thing the bracket asked for: children.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The prefix in the name is left over from the two pages the product briefly
-/// had. The project's flat wiki is withdrawn (VISION 18) and this is the only
-/// page there is; the prefix goes with it, which is a rename of its own.
+/// It is in <c>Spaces</c> rather than a namespace of its own because it hangs
+/// in a space and nowhere else. It was called <c>SpacePage</c> while a project
+/// had a wiki too and a name had to say which page was meant; that wiki is
+/// withdrawn and the prefix went with it.
 /// </para>
 /// <para>
 /// It carries no labels. A label is defined per project and a space has none,
@@ -28,7 +29,7 @@ namespace Planaffe.Domain.Spaces;
 /// somebody else has taken (ADR 0013).
 /// </para>
 /// </remarks>
-public sealed class SpacePage
+public sealed class Page
 {
     public const int TitleMaxLength = 200;
 
@@ -39,12 +40,12 @@ public sealed class SpacePage
     /// </summary>
     public const int MaxDepth = 2;
 
-    private SpacePage()
+    private Page()
     {
         // EF Core materializes through this; every other route goes through Create.
     }
 
-    private SpacePage(
+    private Page(
         Guid id,
         Guid spaceId,
         Guid? parentId,
@@ -122,9 +123,9 @@ public sealed class SpacePage
     /// <paramref name="parent"/> hangs in another space, or is already at
     /// <see cref="MaxDepth"/>.
     /// </exception>
-    public static SpacePage Create(
+    public static Page Create(
         Guid spaceId,
-        SpacePage? parent,
+        Page? parent,
         string slug,
         string title,
         string? body,
@@ -173,7 +174,7 @@ public sealed class SpacePage
     /// <paramref name="parent"/> hangs in another space, or is already at
     /// <see cref="MaxDepth"/>.
     /// </exception>
-    public void MoveUnder(Guid spaceId, SpacePage? parent, Guid by, DateTimeOffset at)
+    public void MoveUnder(Guid spaceId, Page? parent, Guid by, DateTimeOffset at)
     {
         var depth = DepthUnder(spaceId, parent);
 
@@ -239,7 +240,7 @@ public sealed class SpacePage
             : trimmed;
     }
 
-    private static int DepthUnder(Guid spaceId, SpacePage? parent)
+    private static int DepthUnder(Guid spaceId, Page? parent)
     {
         if (parent is null)
         {

@@ -789,7 +789,7 @@ instance. It stays separate from the search above because whoever searches the
 knowledge base is asking a different question from whoever searches tickets,
 and one list holding both would have to explain itself in every row.
 
-An answer is `SpacePageHit[]`, best first — `ts_rank_cd` orders, and the
+An answer is `PageHit[]`, best first — `ts_rank_cd` orders, and the
 space's name, the title and the address decide a tie, so the same question
 twice is the same list twice. This is the one full-text read in the product
 that ranks: everywhere else `q` is a filter and the list keeps its own order,
@@ -1059,18 +1059,18 @@ scope itself, which is where it has to happen: the switch that hides a space
 from an agent is read there and not off a route. The pages below are behind the
 same guarantee and for the same reason.
 
-### Space pages
+### Pages
 
 | method | path | who | does |
 |---|---|---|---|
-| `GET` | `/spaces/{name}/pages` | any | the whole tree as `SpacePageSummary`, without the bodies: a page, then everything under it, siblings by title. Not paginated |
-| `GET` | `/spaces/{name}/pages/{path}` | any | `SpacePage` |
-| `POST` | `/spaces/{name}/pages` | any | `{ slug, title, body?, parent? }` → 201 `SpacePage`; the slug is given, never derived from the title, and `parent` is an address in the same space or absent for a page directly under it |
+| `GET` | `/spaces/{name}/pages` | any | the whole tree as `PageSummary`, without the bodies: a page, then everything under it, siblings by title. Not paginated |
+| `GET` | `/spaces/{name}/pages/{path}` | any | `Page` |
+| `POST` | `/spaces/{name}/pages` | any | `{ slug, title, body?, parent? }` → 201 `Page`; the slug is given, never derived from the title, and `parent` is an address in the same space or absent for a page directly under it |
 | `PATCH` | `/spaces/{name}/pages/{path}` | any | `{ slug?, title?, body? }`, `If-Match` honoured; `slug` renames, `body` set to `null` empties the document. The parent is not here — moving is the act below |
 | `POST` | `/spaces/{name}/pages/move` | any | `{ path, space?, parent? }`: the page under another parent, in this space or another one, with everything below it. `space` absent stays here, `parent` absent means directly under the space |
 | `DELETE` | `/spaces/{name}/pages/{path}` | any | soft delete, the subtree with it; `{ deleted }` says how many pages went |
 | `POST` | `/spaces/{name}/pages/restore` | any | `{ path }`: back, with exactly what went along |
-| `GET` | `/pages` | any | `q` required, `space?`, `limit?` → `SpacePageHit[]`, best first: the one full-text search across the knowledge base |
+| `GET` | `/pages` | any | `q` required, `space?`, `limit?` → `PageHit[]`, best first: the one full-text search across the knowledge base |
 
 **The address carries the tree** ([ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)):
 `{path}` is the slugs from the space down, separated by slashes, at most three
@@ -1114,7 +1114,7 @@ deleted on its own beforehand stays deleted, and a page whose parent is away is
 `transition` with the address to restore first — a live page under a deleted
 one is the state the rule exists to prevent.
 
-**A taken slug is `validation` on `slug`**, as on a project's page, and a slug
+**A taken slug is `validation` on `slug`**, as a taken label name is, and a slug
 belonging to a deleted page says so: it stays spent until the purge, so a
 restore can never land on a name somebody else took. Under its own address a
 deleted page answers `deleted` with `restorable_until`.

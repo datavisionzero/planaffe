@@ -156,7 +156,7 @@ export function spacePath(name: string): string {
  * `/spaces/handbook/settings` are the space's own screens, and no page reaches
  * them because every page address begins with `pages/`.
  */
-export function spacePagePath(space: string, path: string): string {
+export function pagePath(space: string, path: string): string {
   const segments = path.split("/").filter((segment) => segment !== "").map(encodeURIComponent);
 
   return `${spacePath(space)}/pages/${segments.join("/")}`;

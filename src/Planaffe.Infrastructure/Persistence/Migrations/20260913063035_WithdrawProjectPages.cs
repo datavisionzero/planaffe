@@ -22,9 +22,9 @@ namespace Planaffe.Infrastructure.Persistence.Migrations
     /// </para>
     /// <para>
     /// One thing is lost and it is named rather than hidden: a page's labels. A
-    /// space page carries none, because a label is defined per project and a
-    /// space has none (<c>CONTEXT.md</c>, Space page). That is a consequence of
-    /// the bracket rather than something forgotten.
+    /// page in a space carries none, because a label is defined per project and
+    /// a space has none (<c>CONTEXT.md</c>, Page). That is a consequence of the
+    /// bracket rather than something forgotten.
     /// </para>
     /// </remarks>
     public partial class WithdrawProjectPages : Migration

@@ -13,14 +13,14 @@ namespace Planaffe.IntegrationTests;
 /// excerpt Postgres cuts, and the walk that says where a page stands.
 /// </summary>
 [Collection(nameof(PostgresCollection))]
-public sealed class SpacePageSearchTests(PostgresFixture postgres)
+public sealed class PageSearchTests(PostgresFixture postgres)
 {
     [Fact]
     public async Task A_page_is_found_by_its_title_and_by_its_body()
     {
         await using var db = await Migrated.SeededAsync(postgres);
         var world = await WorldAsync(db);
-        var pages = new SpacePages(db.Context);
+        var pages = new Pages(db.Context);
 
         var byTitle = await pages.SearchAsync([world.Handbook.Id], "erster tag", 20, TestContext.Current.CancellationToken);
         var byBody = await pages.SearchAsync([world.Handbook.Id], "Zugangskarte", 20, TestContext.Current.CancellationToken);
@@ -39,7 +39,7 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
         await using var db = await Migrated.SeededAsync(postgres);
         var world = await WorldAsync(db);
 
-        var hit = Assert.Single(await new SpacePages(db.Context)
+        var hit = Assert.Single(await new Pages(db.Context)
             .SearchAsync([world.Handbook.Id], "Zugangskarte", 20, TestContext.Current.CancellationToken));
 
         Assert.Equal("handbuch", hit.Space);
@@ -59,7 +59,7 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
         await using var db = await Migrated.SeededAsync(postgres);
         var world = await WorldAsync(db);
 
-        var hit = Assert.Single(await new SpacePages(db.Context)
+        var hit = Assert.Single(await new Pages(db.Context)
             .SearchAsync([world.Handbook.Id], "Zugangskarte", 20, TestContext.Current.CancellationToken));
 
         Assert.DoesNotContain("<", hit.Headline, StringComparison.Ordinal);
@@ -79,7 +79,7 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
         await using var db = await Migrated.SeededAsync(postgres);
         var world = await WorldAsync(db);
 
-        var hits = await new SpacePages(db.Context)
+        var hits = await new Pages(db.Context)
             .SearchAsync([world.Handbook.Id], "claim-held", 20, TestContext.Current.CancellationToken);
 
         Assert.Equal("betrieb", Assert.Single(hits).Path);
@@ -91,11 +91,11 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
         await using var db = await Migrated.SeededAsync(postgres);
         var world = await WorldAsync(db);
         await db.Context.Database.ExecuteSqlRawAsync(
-            "update space_page set deleted_at = now(), deleted_by = {0} where id = {1}",
+            "update page set deleted_at = now(), deleted_by = {0} where id = {1}",
             [db.User.Id, world.DayOne.Id],
             TestContext.Current.CancellationToken);
 
-        Assert.Empty(await new SpacePages(db.Context)
+        Assert.Empty(await new Pages(db.Context)
             .SearchAsync([world.Handbook.Id], "Zugangskarte", 20, TestContext.Current.CancellationToken));
     }
 
@@ -109,7 +109,7 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
     {
         await using var db = await Migrated.SeededAsync(postgres);
         var world = await WorldAsync(db);
-        var pages = new SpacePages(db.Context);
+        var pages = new Pages(db.Context);
 
         Assert.Equal(
             ["handbuch", "personal"],
@@ -135,7 +135,7 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
     {
         await using var db = await Migrated.SeededAsync(postgres);
         var world = await WorldAsync(db);
-        var pages = new SpacePages(db.Context);
+        var pages = new Pages(db.Context);
 
         var hits = await pages.SearchAsync([world.Handbook.Id], "urlaub", 20, TestContext.Current.CancellationToken);
 
@@ -147,7 +147,7 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
     /// Two spaces: a handbook with a tree two levels deep, and a second one
     /// holding a page that must not turn up in the first one's search.
     /// </summary>
-    private static async Task<(Space Handbook, Space Personal, SpacePage DayOne)> WorldAsync(Migrated db)
+    private static async Task<(Space Handbook, Space Personal, Page DayOne)> WorldAsync(Migrated db)
     {
         var handbook = Space.Create("handbuch", "Handbuch", db.User.Id, Migrated.Now);
         var personal = Space.Create("personal", "Personal", db.User.Id, Migrated.Now);
@@ -155,9 +155,9 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
         db.Context.SpaceAccesses.Add(SpaceAccess.Grant(handbook.Id, db.User.Id, db.User.Id, Migrated.Now));
         db.Context.SpaceAccesses.Add(SpaceAccess.Grant(personal.Id, db.User.Id, db.User.Id, Migrated.Now));
 
-        var onboarding = SpacePage.Create(
+        var onboarding = Page.Create(
             handbook.Id, null, "onboarding", "Onboarding", "Wie eine neue Person ankommt.", db.User.Id, Migrated.Now);
-        var dayOne = SpacePage.Create(
+        var dayOne = Page.Create(
             handbook.Id,
             onboarding,
             "erster-tag",
@@ -165,7 +165,7 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
             "Am ersten Tag bekommt jede neue Person eine Zugangskarte und einen Paten.",
             db.User.Id,
             Migrated.Now);
-        var operations = SpacePage.Create(
+        var operations = Page.Create(
             handbook.Id,
             null,
             "betrieb",
@@ -173,12 +173,12 @@ public sealed class SpacePageSearchTests(PostgresFixture postgres)
             "Ein Ticket antwortet claim-held, wenn es jemand anderes hält. Urlaub wird im Kalender eingetragen. Vertraulich ist nichts davon.",
             db.User.Id,
             Migrated.Now);
-        var holidays = SpacePage.Create(
+        var holidays = Page.Create(
             handbook.Id, null, "urlaub", "Urlaub", "Urlaub wird beantragt, Urlaub wird genehmigt.", db.User.Id, Migrated.Now);
-        var contract = SpacePage.Create(
+        var contract = Page.Create(
             personal.Id, null, "vertrag", "Vertrag", "Vertraulich, und deshalb hier.", db.User.Id, Migrated.Now);
 
-        db.Context.SpacePages.AddRange(onboarding, dayOne, operations, holidays, contract);
+        db.Context.Pages.AddRange(onboarding, dayOne, operations, holidays, contract);
         await db.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
         db.Context.ChangeTracker.Clear();
 

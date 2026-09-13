@@ -9,7 +9,7 @@ namespace Planaffe.Application.Ports;
 /// <param name="TrailPaths">The addresses of the pages above it, from the space down.</param>
 /// <param name="TrailTitles">Their titles, in the same order: a hit says where the page stands.</param>
 /// <param name="Headline">The excerpt, with the words that matched between <see cref="Excerpt"/>'s two marks.</param>
-public sealed record SpacePageHitRow(
+public sealed record PageHitRow(
     string Space,
     string SpaceTitle,
     string Path,
@@ -38,7 +38,7 @@ public static class Excerpt
 }
 
 /// <summary>
-/// The knowledge base's page rows (<c>docs/storage.md</c>, Space pages). A page
+/// The knowledge base's page rows (<c>docs/storage.md</c>, Pages). A page
 /// is found by the slugs from the space down, because that is its address
 /// (ADR 0028), so every lookup here takes a parent rather than a space alone.
 /// </summary>
@@ -48,40 +48,40 @@ public static class Excerpt
 /// expensive is the body, and the list the acts build does not carry one
 /// (ADR 0012).
 /// </remarks>
-public interface ISpacePages
+public interface IPages
 {
     /// <summary>
     /// By slug under its parent — <paramref name="parentId"/> is <c>null</c>
     /// for a page directly under the space. Live only: what a reader and a
     /// writer may reach.
     /// </summary>
-    Task<SpacePage?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken);
+    Task<Page?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken);
 
     /// <summary>By slug under its parent, deleted or not — for the <c>deleted</c> answer and for restore.</summary>
-    Task<SpacePage?> FindAnyAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken);
+    Task<Page?> FindAnyAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken);
 
-    Task<SpacePage?> FindByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<Page?> FindByIdAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
     /// Every live page of the space, in one query: parents before their
     /// children, siblings by title with the slug deciding a tie — the order a
     /// tree is drawn in, and the only order it has (VISION 18).
     /// </summary>
-    Task<IReadOnlyList<SpacePage>> TreeAsync(Guid spaceId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Page>> TreeAsync(Guid spaceId, CancellationToken cancellationToken);
 
     /// <summary>
     /// The live pages under this one, at every level, shallowest first. A
     /// subtree is asked for in one statement rather than one per level,
     /// because everything that happens to a page happens to it whole.
     /// </summary>
-    Task<IReadOnlyList<SpacePage>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Page>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken);
 
     /// <summary>
     /// The pages that went with this one when it was deleted — the rows
     /// carrying its id in <c>deleted_with</c>, deleted or not being a question
     /// that does not arise: nothing else clears the column.
     /// </summary>
-    Task<IReadOnlyList<SpacePage>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Page>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Soft-delete every live page under this one in one statement, stamping
@@ -120,13 +120,13 @@ public interface ISpacePages
     /// through themselves.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<SpacePageHitRow>> SearchAsync(
+    Task<IReadOnlyList<PageHitRow>> SearchAsync(
         IReadOnlyCollection<Guid> spaceIds, string query, int limit, CancellationToken cancellationToken);
 
     /// <summary>The row, tracked and locked for the rest of the transaction.</summary>
-    Task<SpacePage?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken);
+    Task<Page?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken);
 
-    void Add(SpacePage page);
+    void Add(Page page);
 
     Task SaveAsync(CancellationToken cancellationToken);
 }

@@ -2,8 +2,8 @@ import { createContext } from "react";
 import type { Schemas } from "@/api/client";
 
 export type Space = Schemas["Space"];
-export type SpacePageSummary = Schemas["SpacePageSummary"];
-export type SpacePage = Schemas["SpacePage"];
+export type PageSummary = Schemas["PageSummary"];
+export type Page = Schemas["Page"];
 
 /** The spaces the caller may see, as the frame holds them. */
 export type Spaces = { at: "asking" } | { at: "failed" } | { at: "known"; spaces: Space[] };
@@ -19,7 +19,7 @@ export type SpaceList = { spaces: Spaces; reload: () => Promise<void> };
 
 export const SpacesContext = createContext<SpaceList | null>(null);
 
-export type Tree = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; pages: SpacePageSummary[] };
+export type Tree = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; pages: PageSummary[] };
 
 /**
  * The open space's page tree. It is the navigation of the area, so the frame

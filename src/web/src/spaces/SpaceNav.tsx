@@ -11,8 +11,8 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { spacePagePath } from "@/shell/views";
-import type { SpacePageSummary, Tree } from "./context";
+import { pagePath } from "@/shell/views";
+import type { PageSummary, Tree } from "./context";
 import { ancestorsOf, childrenOf } from "./tree";
 
 /**
@@ -72,8 +72,8 @@ export function SpaceNav({ space, tree, path }: { space: string; tree: Tree; pat
 }
 
 type BranchProps = {
-  page: SpacePageSummary;
-  pages: SpacePageSummary[];
+  page: PageSummary;
+  pages: PageSummary[];
   space: string;
   pathname: string;
   isOpen: (path: string) => boolean;
@@ -89,7 +89,7 @@ type BranchProps = {
  */
 function Branch({ page, pages, space, pathname, isOpen, onToggle, onWalk }: BranchProps) {
   const children = childrenOf(pages, page.path);
-  const to = spacePagePath(space, page.path);
+  const to = pagePath(space, page.path);
   const active = pathname === to;
   const open = isOpen(page.path);
   const link = <NavLink to={to} onClick={onWalk} />;

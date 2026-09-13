@@ -297,8 +297,8 @@ contains them, and a client that percent-encodes them names nothing.
 `create` reads the tree out of that same address: **the last slug is the page's
 own, everything in front of it is its parent.** `handbuch/company/onboarding`
 is `onboarding` under `company`, `handbuch/company` is `company` directly under
-the space. The slug is given and never derived from the title, as on a
-project's page (ADR 0021). `view` prints the head and then the body unchanged,
+the space. The slug is given and never derived from the title
+(ADR 0021). `view` prints the head and then the body unchanged,
 so the output pipes straight back into `--body-file -`.
 
 `rename` is its own verb rather than a flag on `edit`, because moving an

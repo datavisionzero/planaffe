@@ -11,14 +11,14 @@ namespace Planaffe.IntegrationTests;
 /// nothing that was already away.
 /// </summary>
 [Collection(nameof(PostgresCollection))]
-public sealed class SpacePageStoreTests(PostgresFixture postgres)
+public sealed class PageStoreTests(PostgresFixture postgres)
 {
     [Fact]
     public async Task The_descendants_are_the_whole_subtree_and_only_the_live_part_of_it()
     {
         await using var db = await Migrated.SeededAsync(postgres);
         var tree = await TreeAsync(db);
-        var pages = new SpacePages(db.Context);
+        var pages = new Pages(db.Context);
 
         Assert.Equal(
             ["handbook", "day-one"],
@@ -27,7 +27,7 @@ public sealed class SpacePageStoreTests(PostgresFixture postgres)
         Assert.Empty(await pages.DescendantsAsync(tree.Product.Id, TestContext.Current.CancellationToken));
 
         await db.Context.Database.ExecuteSqlRawAsync(
-            "update space_page set deleted_at = now(), deleted_by = {0} where id = {1}",
+            "update page set deleted_at = now(), deleted_by = {0} where id = {1}",
             [db.User.Id, tree.Handbook.Id],
             TestContext.Current.CancellationToken);
 
@@ -41,13 +41,13 @@ public sealed class SpacePageStoreTests(PostgresFixture postgres)
     {
         await using var db = await Migrated.SeededAsync(postgres);
         var tree = await TreeAsync(db);
-        var pages = new SpacePages(db.Context);
+        var pages = new Pages(db.Context);
         var now = DateTimeOffset.UtcNow;
 
         // One page went on its own beforehand, so it must stay behind when the
         // subtree comes back.
         await db.Context.Database.ExecuteSqlRawAsync(
-            "update space_page set deleted_at = now(), deleted_by = {0} where id = {1}",
+            "update page set deleted_at = now(), deleted_by = {0} where id = {1}",
             [db.User.Id, tree.DayOne.Id],
             TestContext.Current.CancellationToken);
 
@@ -55,14 +55,14 @@ public sealed class SpacePageStoreTests(PostgresFixture postgres)
 
         await using (var reader = db.Reader())
         {
-            var handbook = await reader.SpacePages.SingleAsync(p => p.Id == tree.Handbook.Id, TestContext.Current.CancellationToken);
+            var handbook = await reader.Pages.SingleAsync(p => p.Id == tree.Handbook.Id, TestContext.Current.CancellationToken);
             Assert.True(handbook.Deleted);
             Assert.Equal(tree.Company.Id, handbook.DeletedWith);
 
-            var dayOne = await reader.SpacePages.SingleAsync(p => p.Id == tree.DayOne.Id, TestContext.Current.CancellationToken);
+            var dayOne = await reader.Pages.SingleAsync(p => p.Id == tree.DayOne.Id, TestContext.Current.CancellationToken);
             Assert.Null(dayOne.DeletedWith);
 
-            var product = await reader.SpacePages.SingleAsync(p => p.Id == tree.Product.Id, TestContext.Current.CancellationToken);
+            var product = await reader.Pages.SingleAsync(p => p.Id == tree.Product.Id, TestContext.Current.CancellationToken);
             Assert.False(product.Deleted);
         }
 
@@ -73,8 +73,8 @@ public sealed class SpacePageStoreTests(PostgresFixture postgres)
         await pages.RestoreCompanionsAsync(tree.Company.Id, TestContext.Current.CancellationToken);
 
         await using var after = db.Reader();
-        Assert.False((await after.SpacePages.SingleAsync(p => p.Id == tree.Handbook.Id, TestContext.Current.CancellationToken)).Deleted);
-        Assert.True((await after.SpacePages.SingleAsync(p => p.Id == tree.DayOne.Id, TestContext.Current.CancellationToken)).Deleted);
+        Assert.False((await after.Pages.SingleAsync(p => p.Id == tree.Handbook.Id, TestContext.Current.CancellationToken)).Deleted);
+        Assert.True((await after.Pages.SingleAsync(p => p.Id == tree.DayOne.Id, TestContext.Current.CancellationToken)).Deleted);
     }
 
     [Fact]
@@ -87,11 +87,11 @@ public sealed class SpacePageStoreTests(PostgresFixture postgres)
         await db.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
         db.Context.ChangeTracker.Clear();
 
-        await new SpacePages(db.Context)
+        await new Pages(db.Context)
             .ShiftDescendantsAsync(tree.Company.Id, elsewhere.Id, 0, TestContext.Current.CancellationToken);
 
         await using var reader = db.Reader();
-        var moved = await reader.SpacePages
+        var moved = await reader.Pages
             .Where(p => p.SpaceId == elsewhere.Id)
             .OrderBy(p => p.Depth)
             .ToListAsync(TestContext.Current.CancellationToken);
@@ -104,18 +104,18 @@ public sealed class SpacePageStoreTests(PostgresFixture postgres)
     /// Two roots, and under one of them two levels: company → handbook →
     /// day-one, and product beside it.
     /// </summary>
-    private static async Task<(SpacePage Company, SpacePage Handbook, SpacePage DayOne, SpacePage Product)> TreeAsync(Migrated db)
+    private static async Task<(Page Company, Page Handbook, Page DayOne, Page Product)> TreeAsync(Migrated db)
     {
         var space = Space.Create("handbuch", "Handbuch", db.User.Id, Migrated.Now);
         db.Context.Spaces.Add(space);
         db.Context.SpaceAccesses.Add(SpaceAccess.Grant(space.Id, db.User.Id, db.User.Id, Migrated.Now));
 
-        var company = SpacePage.Create(space.Id, null, "company", "Company", null, db.User.Id, Migrated.Now);
-        var handbook = SpacePage.Create(space.Id, company, "handbook", "Handbook", null, db.User.Id, Migrated.Now);
-        var dayOne = SpacePage.Create(space.Id, handbook, "day-one", "Day one", null, db.User.Id, Migrated.Now);
-        var product = SpacePage.Create(space.Id, null, "product", "Product", null, db.User.Id, Migrated.Now);
+        var company = Page.Create(space.Id, null, "company", "Company", null, db.User.Id, Migrated.Now);
+        var handbook = Page.Create(space.Id, company, "handbook", "Handbook", null, db.User.Id, Migrated.Now);
+        var dayOne = Page.Create(space.Id, handbook, "day-one", "Day one", null, db.User.Id, Migrated.Now);
+        var product = Page.Create(space.Id, null, "product", "Product", null, db.User.Id, Migrated.Now);
 
-        db.Context.SpacePages.AddRange(company, handbook, dayOne, product);
+        db.Context.Pages.AddRange(company, handbook, dayOne, product);
         await db.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
         db.Context.ChangeTracker.Clear();
 

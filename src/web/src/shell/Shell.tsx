@@ -49,8 +49,8 @@ const ReleaseView = lazy(() => import("@/releases/ReleaseView").then((module) =>
 // The project's settings reach `MarkdownField` too, since the instructions
 // became a text written there rather than a page pointed at (VISION 18).
 const ProjectSettingsView = lazy(() => import("@/settings/ProjectSettingsView").then((module) => ({ default: module.ProjectSettingsView })));
-const SpacePageView = lazy(() => import("@/spaces/SpacePageView").then((module) => ({ default: module.SpacePageView })));
-const NewSpacePageView = lazy(() => import("@/spaces/NewSpacePageView").then((module) => ({ default: module.NewSpacePageView })));
+const PageView = lazy(() => import("@/spaces/PageView").then((module) => ({ default: module.PageView })));
+const NewPageView = lazy(() => import("@/spaces/NewPageView").then((module) => ({ default: module.NewPageView })));
 
 /**
  * The application shell of ADR 0006: the frame every screen sits in, rendered
@@ -221,8 +221,8 @@ export function Shell() {
           <Route path="/spaces" element={<SpacesView />} />
           <Route path="/spaces/:name" element={<SpaceView />} />
           <Route path="/spaces/:name/settings/*" element={<SpaceSettingsView />} />
-          <Route path="/spaces/:name/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewSpacePageView /></Suspense>} />
-          <Route path="/spaces/:name/pages/*" element={<Suspense fallback={<Busy title="Loading the screen…" />}><SpacePageView /></Suspense>} />
+          <Route path="/spaces/:name/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewPageView /></Suspense>} />
+          <Route path="/spaces/:name/pages/*" element={<Suspense fallback={<Busy title="Loading the screen…" />}><PageView /></Suspense>} />
           <Route path="/projects/new" element={<NewProjectView />} />
           <Route path="/:project">
             <Route index element={<Navigate to="ready" replace />} />

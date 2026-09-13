@@ -84,7 +84,7 @@ public sealed class PlanaffeDbContext(DbContextOptions<PlanaffeDbContext> option
     public DbSet<SpaceAccess> SpaceAccesses => Set<SpaceAccess>();
 
     /// <summary>The knowledge base's pages and their tree (VISION 18, ADR 0028).</summary>
-    public DbSet<SpacePage> SpacePages => Set<SpacePage>();
+    public DbSet<Page> Pages => Set<Page>();
 
     public DbSet<Release> Releases => Set<Release>();
 

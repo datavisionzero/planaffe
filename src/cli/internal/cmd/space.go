@@ -92,7 +92,7 @@ func newSpaceView(g *globals) *cobra.Command {
 				return render.JSON(cmd.OutOrStdout(), space.JSON200)
 			}
 
-			tree, err := c.ListSpacePagesWithResponse(cmd.Context(), args[0])
+			tree, err := c.ListPagesWithResponse(cmd.Context(), args[0])
 			if err != nil {
 				return client.Transport(err)
 			}

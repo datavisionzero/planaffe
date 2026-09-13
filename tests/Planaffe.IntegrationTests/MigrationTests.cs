@@ -135,7 +135,7 @@ public sealed class MigrationTests(PostgresFixture postgres)
         // among them, still deleted, because a migration does not end a grace
         // period on the quiet. The page the instructions came out of stayed
         // behind and went with the table.
-        var pages = await context.SpacePages.Where(p => p.SpaceId == space.Id).ToListAsync(TestContext.Current.CancellationToken);
+        var pages = await context.Pages.Where(p => p.SpaceId == space.Id).ToListAsync(TestContext.Current.CancellationToken);
         Assert.Equal(["architecture", "old"], pages.Select(p => p.Slug).Order(StringComparer.Ordinal));
         Assert.All(pages, page => { Assert.Null(page.ParentId); Assert.Equal(0, page.Depth); });
         Assert.NotNull(pages.Single(p => p.Slug == "old").DeletedAt);
@@ -143,8 +143,8 @@ public sealed class MigrationTests(PostgresFixture postgres)
         Assert.DoesNotContain(brief, pages.Select(p => p.Id));
 
         // The history followed its page; the instructions page's went with it.
-        Assert.Equal(1L, await ScalarAsync(connectionString, $"select count(*) from history where space_page_id = '{architecture}'"));
-        Assert.Equal(0L, await ScalarAsync(connectionString, $"select count(*) from history where space_page_id = '{brief}'"));
+        Assert.Equal(1L, await ScalarAsync(connectionString, $"select count(*) from history where page_id = '{architecture}'"));
+        Assert.Equal(0L, await ScalarAsync(connectionString, $"select count(*) from history where page_id = '{brief}'"));
 
         // A project without pages is given no space at all.
         Assert.Equal(0L, await ScalarAsync(connectionString, "select count(*) from space where title = 'the docs'"));

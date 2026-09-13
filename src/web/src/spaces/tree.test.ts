@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { aSpacePage } from "@/shared/testing";
+import { aPage } from "@/shared/testing";
 import { ancestorsOf, childrenOf, descendantsOf, levels, takesChildren, trailOf } from "./tree";
 
 const pages = [
-  aSpacePage("company", "The company"),
-  aSpacePage("company/onboarding", "Onboarding"),
-  aSpacePage("company/onboarding/day-one", "The first day"),
-  aSpacePage("product", "The product"),
+  aPage("company", "The company"),
+  aPage("company/onboarding", "Onboarding"),
+  aPage("company/onboarding/day-one", "The first day"),
+  aPage("product", "The product"),
 ];
 
 describe("the tree of a space (ADR 0028)", () => {

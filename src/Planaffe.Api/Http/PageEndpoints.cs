@@ -4,31 +4,31 @@ using Planaffe.Application.Acts;
 
 namespace Planaffe.Api.Http;
 
-public sealed record CreateSpacePageBody(string? Parent, string? Slug, string? Title, string? Body);
+public sealed record CreatePageBody(string? Parent, string? Slug, string? Title, string? Body);
 
 /// <summary>
 /// A <c>PATCH</c> body where <c>null</c> and absent mean different things:
 /// <c>"body": null</c> empties the document, an absent body leaves it. The
 /// converter below is what tells the two apart.
 /// </summary>
-[JsonConverter(typeof(ChangeSpacePageRequestConverter))]
-public sealed record ChangeSpacePageRequest(string? Slug, string? Title, bool BodyGiven, string? Body);
+[JsonConverter(typeof(ChangePageRequestConverter))]
+public sealed record ChangePageRequest(string? Slug, string? Title, bool BodyGiven, string? Body);
 
 /// <param name="Path">The page, as the address inside its space.</param>
 /// <param name="Space">The space it lands in, or absent to stay in this one.</param>
 /// <param name="Parent">The page it lands under, or absent for the root of that space.</param>
-public sealed record MoveSpacePageBody(string? Path, string? Space, string? Parent);
+public sealed record MovePageBody(string? Path, string? Space, string? Parent);
 
 /// <param name="Path">The deleted page, as the address inside its space.</param>
-public sealed record RestoreSpacePageBody(string? Path);
+public sealed record RestorePageBody(string? Path);
 
 /// <summary>How many pages a deletion took, the page itself included.</summary>
 public sealed record DeletedPages(int Deleted);
 
-/// <inheritdoc cref="ChangeSpacePageRequest"/>
-public sealed class ChangeSpacePageRequestConverter : JsonConverter<ChangeSpacePageRequest>
+/// <inheritdoc cref="ChangePageRequest"/>
+public sealed class ChangePageRequestConverter : JsonConverter<ChangePageRequest>
 {
-    public override ChangeSpacePageRequest Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override ChangePageRequest Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var body = JsonElement.ParseValue(ref reader);
         if (body.ValueKind is not JsonValueKind.Object)
@@ -36,14 +36,14 @@ public sealed class ChangeSpacePageRequestConverter : JsonConverter<ChangeSpaceP
             throw new JsonException("A page change is an object.");
         }
 
-        return new ChangeSpacePageRequest(
+        return new ChangePageRequest(
             Text(body, "slug"),
             Text(body, "title"),
             body.TryGetProperty("body", out _),
             Text(body, "body"));
     }
 
-    public override void Write(Utf8JsonWriter writer, ChangeSpacePageRequest value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, ChangePageRequest value, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
@@ -72,8 +72,8 @@ public sealed class ChangeSpacePageRequestConverter : JsonConverter<ChangeSpaceP
 }
 
 /// <summary>
-/// The pages of a space (<c>docs/api.md</c>, Space pages): the knowledge base's
-/// tree, under the space the way the project's pages are under the project.
+/// The pages of a space (<c>docs/api.md</c>, Pages): the knowledge base's tree,
+/// under the space the way an issue is under its project.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -91,76 +91,76 @@ public sealed class ChangeSpacePageRequestConverter : JsonConverter<ChangeSpaceP
 /// closed to agents.
 /// </para>
 /// </remarks>
-public static class SpacePageEndpoints
+public static class PageEndpoints
 {
-    public static IEndpointRouteBuilder MapSpacePages(this IEndpointRouteBuilder endpoints)
+    public static IEndpointRouteBuilder MapPages(this IEndpointRouteBuilder endpoints)
     {
         var door = endpoints.MapGroup("/spaces/{name}/pages")
             .RequireAuthorization()
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        door.MapGet(string.Empty, (string name, ListSpacePages list, CancellationToken cancellationToken) =>
+        door.MapGet(string.Empty, (string name, ListPages list, CancellationToken cancellationToken) =>
                 list.ExecuteAsync(name, cancellationToken))
-            .WithName("ListSpacePages")
-            .WithSummary("The whole tree as slim SpacePageSummary, without the bodies: a page, then everything under it, siblings by title. Not paginated.")
-            .Produces<IReadOnlyList<SpacePageSummaryShape>>();
+            .WithName("ListPages")
+            .WithSummary("The whole tree as slim PageSummary, without the bodies: a page, then everything under it, siblings by title. Not paginated.")
+            .Produces<IReadOnlyList<PageSummaryShape>>();
 
-        door.MapPost(string.Empty, async (string name, CreateSpacePageBody? request, CreateSpacePage create, CancellationToken cancellationToken) =>
+        door.MapPost(string.Empty, async (string name, CreatePageBody? request, CreatePage create, CancellationToken cancellationToken) =>
             {
                 var page = await create.ExecuteAsync(
                     name,
-                    new CreateSpacePageRequest(request?.Parent, request?.Slug, request?.Title, request?.Body),
+                    new CreatePageRequest(request?.Parent, request?.Slug, request?.Title, request?.Body),
                     cancellationToken);
                 return Results.Created($"/spaces/{name}/pages/{page.Path}", page);
             })
-            .WithName("CreateSpacePage")
+            .WithName("CreatePage")
             .WithSummary("Create a page under `parent`, or directly under the space where it is absent. The slug is given, never derived from the title.")
-            .Produces<SpacePageShape>(StatusCodes.Status201Created)
+            .Produces<PageShape>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
-        door.MapPost("/move", (string name, MoveSpacePageBody? request, MoveSpacePage move, CancellationToken cancellationToken) =>
+        door.MapPost("/move", (string name, MovePageBody? request, MovePage move, CancellationToken cancellationToken) =>
                 move.ExecuteAsync(
                     name,
                     request?.Path ?? string.Empty,
-                    new SpacePageMove(request?.Space, request?.Parent),
+                    new PageMove(request?.Space, request?.Parent),
                     cancellationToken))
-            .WithName("MoveSpacePage")
+            .WithName("MovePage")
             .WithSummary("Move a page under another parent, in this space or another one, with everything below it. `cycle` under itself, `too-deep` where the subtree would pass the third level.")
-            .Produces<SpacePageShape>()
+            .Produces<PageShape>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
-        door.MapPost("/restore", (string name, RestoreSpacePageBody? request, RestoreSpacePage restore, CancellationToken cancellationToken) =>
+        door.MapPost("/restore", (string name, RestorePageBody? request, RestorePage restore, CancellationToken cancellationToken) =>
                 restore.ExecuteAsync(name, request?.Path ?? string.Empty, cancellationToken))
-            .WithName("RestoreSpacePage")
+            .WithName("RestorePage")
             .WithSummary("Bring a deleted page back with exactly what went along. A page whose parent is still deleted is `transition`.")
-            .Produces<SpacePageShape>()
+            .Produces<PageShape>()
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
-        door.MapGet("/{*path}", (string name, string path, ReadSpacePage read, CancellationToken cancellationToken) =>
+        door.MapGet("/{*path}", (string name, string path, ReadPage read, CancellationToken cancellationToken) =>
                 read.ExecuteAsync(name, path, cancellationToken))
-            .WithName("ReadSpacePage")
+            .WithName("ReadPage")
             .WithSummary("The complete page: the Markdown, its address, its parent's, the author and who touched it last. `path` is the slugs from the space down, separated by slashes.")
-            .Produces<SpacePageShape>();
+            .Produces<PageShape>();
 
-        door.MapPatch("/{*path}", (string name, string path, ChangeSpacePageRequest? request, HttpRequest http, ChangeSpacePage change, CancellationToken cancellationToken) =>
+        door.MapPatch("/{*path}", (string name, string path, ChangePageRequest? request, HttpRequest http, ChangePage change, CancellationToken cancellationToken) =>
                 change.ExecuteAsync(
                     name,
                     path,
-                    new SpacePageChanges(request?.Slug, request?.Title, request?.BodyGiven ?? false, request?.Body),
+                    new PageChanges(request?.Slug, request?.Title, request?.BodyGiven ?? false, request?.Body),
                     http.Headers.IfMatch.ToString(),
                     cancellationToken))
-            .WithName("ChangeSpacePage")
+            .WithName("ChangePage")
             .WithSummary("Change the title, the Markdown or the slug; `If-Match` with the `updated_at` last read guards the document. The parent is not here: moving is an act of its own.")
-            .Produces<SpacePageShape>()
+            .Produces<PageShape>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status412PreconditionFailed);
 
-        door.MapDelete("/{*path}", async (string name, string path, DeleteSpacePage delete, CancellationToken cancellationToken) =>
+        door.MapDelete("/{*path}", async (string name, string path, DeletePage delete, CancellationToken cancellationToken) =>
                 new DeletedPages(await delete.ExecuteAsync(name, path, cancellationToken)))
-            .WithName("DeleteSpacePage")
+            .WithName("DeletePage")
             .WithSummary("Soft-delete a page and every page under it; the answer says how many went. Their slugs stay spent until the purge.")
             .Produces<DeletedPages>();
 
@@ -193,7 +193,7 @@ public static class SpacePageEndpoints
 
         endpoints.MapGet(
                 "/pages",
-                (string? q, string? space, int? limit, SearchSpacePages search, CancellationToken cancellationToken) =>
+                (string? q, string? space, int? limit, SearchPages search, CancellationToken cancellationToken) =>
                     search.ExecuteAsync(q, space, limit, cancellationToken))
             .RequireAuthorization()
             .WithName("SearchPages")
@@ -201,7 +201,7 @@ public static class SpacePageEndpoints
                 "Full-text search over the titles and bodies of the knowledge base's pages, best first, in the spaces the caller may see. "
                 + "`q` takes the words a search box takes and is required; `space` narrows to one space by name; `limit` is 1 to 100 and defaults to 20. "
                 + "A hit carries where the page stands and an excerpt, never a body.")
-            .Produces<IReadOnlyList<SpacePageHitShape>>()
+            .Produces<IReadOnlyList<PageHitShape>>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status404NotFound);

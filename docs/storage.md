@@ -468,7 +468,7 @@ create table history (
     id            bigint      not null generated always as identity primary key,
     issue_id      uuid        references issue      (id) on delete cascade,
     epic_id       uuid        references epic       (id) on delete cascade,
-    space_page_id uuid        references space_page (id) on delete cascade,
+    page_id       uuid        references page       (id) on delete cascade,
     actor_id      uuid        not null references identity (id),
     at            timestamptz not null,
     field         text        not null,
@@ -476,12 +476,12 @@ create table history (
     new_value     text,
     note          text,
 
-    check (num_nonnulls(issue_id, epic_id, space_page_id) = 1)
+    check (num_nonnulls(issue_id, epic_id, page_id) = 1)
 );
 
 create index history_issue      on history (issue_id, id);
 create index history_epic       on history (epic_id, id);
-create index history_space_page on history (space_page_id, id);
+create index history_page       on history (page_id, id);
 ```
 
 One row per change: who, when, which field, from what to what (VISION 7). An
@@ -490,10 +490,10 @@ concept and the two smaller ones are tiny; the check keeps every row pointing at
 exactly one subject.
 
 Each subject arrived with the thing it records, and the check grew and shrank
-with it rather than the table gaining a column that says which kind a row is.
-It held a fourth, `page_id`, while a project had a wiki of its own; that wiki is
-withdrawn (VISION 18) and every row of it was carried over to `space_page_id`
-before the column went.
+with it rather than the table gaining a column that says which kind a row is. It
+held a fourth while a project had a wiki of its own; that wiki is withdrawn
+(VISION 18), every row of it was carried over to the knowledge base's page
+before the column went, and what is left took the plain name `page_id`.
 
 `field` is the name of the column or edge that changed, spelled as the API
 spells it: `title`, `description`, `result`, `status`, `ready`, `priority`,
@@ -658,13 +658,13 @@ alter table comment add column search tsvector
     generated always as (to_tsvector('simple', body)) stored;
 alter table question add column search tsvector
     generated always as (to_tsvector('simple', question || ' ' || coalesce(answer, ''))) stored;
-alter table space_page add column search tsvector
+alter table page add column search tsvector
     generated always as (to_tsvector('simple', title || ' ' || body)) stored;
 
-create index issue_search      on issue      using gin (search);
-create index comment_search    on comment    using gin (search);
-create index question_search   on question   using gin (search);
-create index space_page_search on space_page using gin (search);
+create index issue_search    on issue    using gin (search);
+create index comment_search  on comment  using gin (search);
+create index question_search on question using gin (search);
+create index page_search     on page     using gin (search);
 ```
 
 `simple`, not `english`: ticket text is written in whatever language the
@@ -678,8 +678,8 @@ order, and `q` is one filter beside `label`.
 
 **The knowledge base is the one exception, and it is deliberate.** There the
 search is the navigation rather than a filter on a list somebody is already
-reading (VISION 18), so `space_page` is read with `ts_rank_cd` deciding the
-order and `ts_headline` cutting an excerpt out of the body, in one statement
+reading (VISION 18), so `page` is read with `ts_rank_cd` deciding the order and
+`ts_headline` cutting an excerpt out of the body, in one statement
 that also walks the tree to say where each hit stands. The excerpt is marked
 with `chr(2)` and `chr(3)` rather than with the `<b>` Postgres would use, and
 the body has both characters taken out of it before the excerpt is cut: what
@@ -906,13 +906,13 @@ rows and resolve to their owner first. Creating a space adds its creator in the
 same transaction, exactly as creating a project does. There is no migration
 that fills this table: no space exists before the feature does.
 
-## Space pages
+## Pages
 
 ```sql
-create table space_page (
+create table page (
     id           uuid        not null primary key,
     space_id     uuid        not null references space (id) on delete cascade,
-    parent_id    uuid        references space_page (id) on delete cascade,
+    parent_id    uuid        references page (id) on delete cascade,
     depth        int         not null check (depth >= 0 and depth <= 2),
     slug         text        not null,
     title        text        not null,
@@ -926,18 +926,18 @@ create table space_page (
     deleted_with uuid
 );
 
-create unique index space_page_slug on space_page (space_id, parent_id, slug)
+create unique index page_slug on page (space_id, parent_id, slug)
     nulls not distinct;
 ```
 
 The knowledge base's page (VISION 18,
 [ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)):
 Markdown addressed by a name rather than a key, with a place in a tree. It is
-the only page table there is. A `page` hanging on a project stood beside it
-while the project had a wiki — a second table rather than a nullable column on
-the first, so that nothing about the older one had to change for a transition it
-was not going to survive — and its rows were carried in here when that wiki was
-withdrawn.
+the only page table there is. It was `space_page` while a project had a wiki of
+its own — a second table rather than a nullable column on the first, so that
+nothing about the older one had to change for a transition it was not going to
+survive — and it took the plain name when that wiki was withdrawn and its rows
+were carried in here.
 
 There is no `key` and no `number` column, because a page is the one object
 addressed by a name
@@ -957,8 +957,8 @@ directly under the space, so three levels in all.
 what `nulls not distinct` is for: the pages directly under a space have no
 parent, and without it Postgres would count every one of those rows as distinct
 and let them all take the same slug. The index covers deleted rows for the
-reason the project page's does: a slug stays spent until the purge, so a
-restore never lands on a name somebody else has taken.
+reason ADR 0013 gives: a slug stays spent until the purge, so a restore never
+lands on a name somebody else has taken.
 
 **`deleted_with` is what makes a subtree one thing.** Deleting a page soft-deletes
 every live descendant in the same act; each of them carries the id of the page

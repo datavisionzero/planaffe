@@ -7,8 +7,8 @@ import { Choose } from "@/shared/Choose";
 import { MarkdownField } from "@/shared/MarkdownField";
 import { PageHeader } from "@/shared/PageHeader";
 import { useAbandon } from "@/shared/abandon";
-import { spacePagePath, spacePath } from "@/shell/views";
-import type { SpacePageSummary } from "./context";
+import { pagePath, spacePath } from "@/shell/views";
+import type { PageSummary } from "./context";
 import { takesChildren } from "./tree";
 import { usePageTree } from "./useSpaces";
 
@@ -22,7 +22,7 @@ import { usePageTree } from "./useSpaces";
  * page can ever stand where it does: a page's address always begins with
  * `pages/`.
  */
-export function NewSpacePageView() {
+export function NewPageView() {
   const { name } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -62,7 +62,7 @@ export function NewSpacePageView() {
       // The frame holds the tree, so the frame is what catches up — before the
       // address it is about to lead to is drawn under a navigation without it.
       await reload();
-      void navigate(spacePagePath(name!, data.path), { replace: true });
+      void navigate(pagePath(name!, data.path), { replace: true });
     } catch {
       setWhy("The instance did not answer.");
     } finally {
@@ -106,6 +106,6 @@ export function NewSpacePageView() {
 }
 
 /** The tree, flattened into a list of choices that still says what hangs where. */
-function indented(page: SpacePageSummary): string {
+function indented(page: PageSummary): string {
   return `${"— ".repeat(page.depth)}${page.title}`;
 }

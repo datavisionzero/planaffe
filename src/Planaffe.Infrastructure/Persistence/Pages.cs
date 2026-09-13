@@ -15,37 +15,37 @@ namespace Planaffe.Infrastructure.Persistence;
 /// depth limit would let every one of them be written as two joins today, and
 /// the recursion is what keeps them true if the limit ever moves.
 /// </remarks>
-public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
+public sealed class Pages(PlanaffeDbContext context) : IPages
 {
-    public Task<SpacePage?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
-        context.SpacePages.SingleOrDefaultAsync(
+    public Task<Page?> FindLiveAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
+        context.Pages.SingleOrDefaultAsync(
             p => p.SpaceId == spaceId && p.ParentId == parentId && p.Slug == slug && p.DeletedAt == null,
             cancellationToken);
 
-    public Task<SpacePage?> FindAnyAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
-        context.SpacePages.SingleOrDefaultAsync(
+    public Task<Page?> FindAnyAsync(Guid spaceId, Guid? parentId, string slug, CancellationToken cancellationToken) =>
+        context.Pages.SingleOrDefaultAsync(
             p => p.SpaceId == spaceId && p.ParentId == parentId && p.Slug == slug,
             cancellationToken);
 
-    public Task<SpacePage?> FindByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        context.SpacePages.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+    public Task<Page?> FindByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        context.Pages.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<SpacePage>> TreeAsync(Guid spaceId, CancellationToken cancellationToken) =>
-        await context.SpacePages
+    public async Task<IReadOnlyList<Page>> TreeAsync(Guid spaceId, CancellationToken cancellationToken) =>
+        await context.Pages
             .Where(p => p.SpaceId == spaceId && p.DeletedAt == null)
             .OrderBy(p => p.Depth)
             .ThenBy(p => p.Title)
             .ThenBy(p => p.Slug)
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<SpacePage>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken) =>
-        await context.SpacePages.FromSql(
+    public async Task<IReadOnlyList<Page>> DescendantsAsync(Guid pageId, CancellationToken cancellationToken) =>
+        await context.Pages.FromSql(
             $"""
              with recursive subtree as (
-                 select child.* from space_page child
+                 select child.* from page child
                   where child.parent_id = {pageId} and child.deleted_at is null
                  union all
-                 select child.* from space_page child
+                 select child.* from page child
                    join subtree on child.parent_id = subtree.id
                   where child.deleted_at is null)
              select * from subtree
@@ -53,8 +53,8 @@ public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
             .OrderBy(p => p.Depth)
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<SpacePage>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken) =>
-        await context.SpacePages
+    public async Task<IReadOnlyList<Page>> CompanionsAsync(Guid pageId, CancellationToken cancellationToken) =>
+        await context.Pages
             .Where(p => p.DeletedWith == pageId)
             .OrderBy(p => p.Depth)
             .ToListAsync(cancellationToken);
@@ -63,13 +63,13 @@ public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
         context.Database.ExecuteSqlAsync(
             $"""
              with recursive subtree as (
-                 select child.id, child.parent_id from space_page child
+                 select child.id, child.parent_id from page child
                   where child.parent_id = {pageId} and child.deleted_at is null
                  union all
-                 select child.id, child.parent_id from space_page child
+                 select child.id, child.parent_id from page child
                    join subtree on child.parent_id = subtree.id
                   where child.deleted_at is null)
-             update space_page
+             update page
                 set deleted_at = {at}, deleted_by = {by}, deleted_with = {pageId}
               where id in (select id from subtree)
              """,
@@ -78,7 +78,7 @@ public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
     public Task RestoreCompanionsAsync(Guid pageId, CancellationToken cancellationToken) =>
         context.Database.ExecuteSqlAsync(
             $"""
-             update space_page
+             update page
                 set deleted_at = null, deleted_by = null, deleted_with = null
               where deleted_with = {pageId}
              """,
@@ -88,12 +88,12 @@ public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
         context.Database.ExecuteSqlAsync(
             $"""
              with recursive subtree as (
-                 select child.id, child.parent_id from space_page child
+                 select child.id, child.parent_id from page child
                   where child.parent_id = {pageId}
                  union all
-                 select child.id, child.parent_id from space_page child
+                 select child.id, child.parent_id from page child
                    join subtree on child.parent_id = subtree.id)
-             update space_page
+             update page
                 set space_id = {spaceId}, depth = depth + {levels}
               where id in (select id from subtree)
              """,
@@ -140,7 +140,7 @@ public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
     /// cannot write a mark of its own, and nothing that leaves here is markup.
     /// </para>
     /// </remarks>
-    public async Task<IReadOnlyList<SpacePageHitRow>> SearchAsync(
+    public async Task<IReadOnlyList<PageHitRow>> SearchAsync(
         IReadOnlyCollection<Guid> spaceIds, string query, int limit, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(spaceIds);
@@ -158,16 +158,16 @@ public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
             $"""
              with recursive tree as (
                  select page.id, page.slug as path, array[]::text[] as trail_paths, array[]::text[] as trail_titles
-                   from space_page page
+                   from page page
                   where page.parent_id is null and page.deleted_at is null and page.space_id = any({ids})
                  union all
                  select child.id,
                         parent.path || '/' || child.slug,
                         parent.trail_paths || parent.path,
                         parent.trail_titles || above.title
-                   from space_page child
+                   from page child
                    join tree parent on parent.id = child.parent_id
-                   join space_page above on above.id = parent.id
+                   join page above on above.id = parent.id
                   where child.deleted_at is null)
              select space.name as "Space",
                     space.title as "SpaceTitle",
@@ -180,7 +180,7 @@ public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
                                 asked.query,
                                 'StartSel=' || {start} || ',StopSel=' || {stop} || ',MaxWords=28,MinWords=12,ShortWord=2') as "Headline"
                from websearch_to_tsquery('simple', {query}) as asked(query)
-               join space_page page
+               join page page
                  on page.search @@ asked.query and page.deleted_at is null and page.space_id = any({ids})
                join tree on tree.id = page.id
                join space on space.id = page.space_id
@@ -189,22 +189,22 @@ public sealed class SpacePages(PlanaffeDbContext context) : ISpacePages
              """)
             .ToListAsync(cancellationToken);
 
-        return [.. hits.Select(hit => new SpacePageHitRow(
+        return [.. hits.Select(hit => new PageHitRow(
             hit.Space, hit.SpaceTitle, hit.Path, hit.Title, hit.TrailPaths, hit.TrailTitles, hit.Headline))];
     }
 
-    public async Task<SpacePage?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Page?> LoadForWriteAsync(Guid id, CancellationToken cancellationToken)
     {
         if (context.Database.CurrentTransaction is null)
         {
             throw new InvalidOperationException("A row is loaded for writing inside a transaction, or the lock is worth nothing.");
         }
 
-        await context.Database.ExecuteSqlRawAsync("select id from space_page where id = {0} for update", [id], cancellationToken);
-        return await context.SpacePages.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+        await context.Database.ExecuteSqlRawAsync("select id from page where id = {0} for update", [id], cancellationToken);
+        return await context.Pages.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
-    public void Add(SpacePage page) => context.SpacePages.Add(page);
+    public void Add(Page page) => context.Pages.Add(page);
 
     public Task SaveAsync(CancellationToken cancellationToken) => context.SaveChangesAsync(cancellationToken);
 }

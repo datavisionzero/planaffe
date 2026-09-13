@@ -88,10 +88,9 @@ public sealed class SchemaTests(PostgresFixture postgres)
 
         Assert.Equal(
             [
-                "__EFMigrationsHistory",
-                "blocker", "browser_session", "comment", "device_login", "epic", "epic_label", "history", "idempotency", "identity", "identity_metadata",
-                "issue", "issue_label", "label", "one_time_secret", "project", "project_access", "question", "release", "release_issue",
-                "space", "space_access", "space_page", "token",
+                "__EFMigrationsHistory", "blocker", "browser_session", "comment", "device_login", "epic", "epic_label", "history", "idempotency",
+                "identity", "identity_metadata", "issue", "issue_label", "label", "one_time_secret", "page", "project", "project_access", "question",
+                "release", "release_issue", "space", "space_access", "token",
             ],
             tables);
     }
@@ -113,16 +112,15 @@ public sealed class SchemaTests(PostgresFixture postgres)
 
         Assert.Equal(
             [
-                "PK___EFMigrationsHistory",
-                "blocker_blocked", "browser_session_hash", "browser_session_user", "comment_issue", "comment_search", "device_login_code", "device_login_expiry",
-                "epic_number", "history_epic", "history_issue", "history_space_page",
-                "identity_email", "identity_metadata_identity", "identity_name", "issue_assignee", "issue_claim", "issue_epic", "issue_next",
-                "issue_number", "issue_parent", "issue_search", "issue_updated", "label_name",
-                "one_live_login_per_code", "one_live_secret_per_purpose", "one_time_secret_hash",
-                "pk_blocker", "pk_browser_session", "pk_comment", "pk_device_login", "pk_epic", "pk_epic_label", "pk_history", "pk_idempotency",
-                "pk_identity", "pk_identity_metadata", "pk_issue", "pk_issue_label", "pk_label", "pk_one_time_secret", "pk_project", "pk_project_access", "pk_question", "pk_release",
-                "pk_release_issue", "pk_space", "pk_space_access", "pk_space_page", "pk_token", "project_access_user", "project_key", "question_issue", "question_open", "question_search", "release_issue_issue",
-                "release_name", "release_open", "space_access_user", "space_name", "space_page_search", "space_page_slug", "token_agent", "token_secret_hash",
+                "PK___EFMigrationsHistory", "blocker_blocked", "browser_session_hash", "browser_session_user", "comment_issue", "comment_search",
+                "device_login_code", "device_login_expiry", "epic_number", "history_epic", "history_issue", "history_page", "identity_email",
+                "identity_metadata_identity", "identity_name", "issue_assignee", "issue_claim", "issue_epic", "issue_next", "issue_number",
+                "issue_parent", "issue_search", "issue_updated", "label_name", "one_live_login_per_code", "one_live_secret_per_purpose",
+                "one_time_secret_hash", "page_search", "page_slug", "pk_blocker", "pk_browser_session", "pk_comment", "pk_device_login", "pk_epic",
+                "pk_epic_label", "pk_history", "pk_idempotency", "pk_identity", "pk_identity_metadata", "pk_issue", "pk_issue_label", "pk_label",
+                "pk_one_time_secret", "pk_page", "pk_project", "pk_project_access", "pk_question", "pk_release", "pk_release_issue", "pk_space",
+                "pk_space_access", "pk_token", "project_access_user", "project_key", "question_issue", "question_open", "question_search",
+                "release_issue_issue", "release_name", "release_open", "space_access_user", "space_name", "token_agent", "token_secret_hash",
             ],
             indexes);
 

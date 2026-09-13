@@ -12,7 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Choose } from "@/shared/Choose";
-import type { SpacePage, SpacePageSummary } from "./context";
+import type { Page, PageSummary } from "./context";
 import { descendantsOf, levels } from "./tree";
 import { usePageTree, useSpaceList } from "./useSpaces";
 
@@ -27,13 +27,13 @@ import { usePageTree, useSpaceList } from "./useSpaces";
  * only the instance can know is shown in the instance's own words when it
  * says no.
  */
-export function MoveDialog({ page, onMoved }: { page: SpacePage; onMoved: (page: SpacePage) => void }) {
+export function MoveDialog({ page, onMoved }: { page: Page; onMoved: (page: Page) => void }) {
   const { spaces } = useSpaceList();
   const here = usePageTree();
   const [open, setOpen] = useState(false);
   const [space, setSpace] = useState(page.space);
   const [parent, setParent] = useState("");
-  const [elsewhere, setElsewhere] = useState<{ of: string; pages: SpacePageSummary[] }>();
+  const [elsewhere, setElsewhere] = useState<{ of: string; pages: PageSummary[] }>();
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<string>();
 

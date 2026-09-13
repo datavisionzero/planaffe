@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api, describe, type Schemas } from "@/api/client";
 
-export type SpacePageHit = Schemas["SpacePageHit"];
+export type PageHit = Schemas["PageHit"];
 
 export type Hits =
   | { at: "asking" }
   | { at: "failed"; why: string }
-  | { at: "known"; hits: SpacePageHit[] };
+  | { at: "known"; hits: PageHit[] };
 
 /** Enough of a word to ask the instance about, as in the palette. */
 export const shortest = 2;

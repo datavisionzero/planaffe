@@ -15,13 +15,13 @@ public sealed class HistoryEntry
     private HistoryEntry()
     {
         // EF Core materializes through this; every other route goes through
-        // OnIssue, OnEpic or OnSpacePage.
+        // OnIssue, OnEpic or OnPage.
     }
 
     private HistoryEntry(
         Guid? issueId,
         Guid? epicId,
-        Guid? spacePageId,
+        Guid? pageId,
         Guid actorId,
         DateTimeOffset at,
         string field,
@@ -31,7 +31,7 @@ public sealed class HistoryEntry
     {
         IssueId = issueId;
         EpicId = epicId;
-        SpacePageId = spacePageId;
+        PageId = pageId;
         ActorId = actorId;
         At = at;
         Field = field;
@@ -48,7 +48,7 @@ public sealed class HistoryEntry
     public Guid? EpicId { get; private init; }
 
     /// <summary>A page of the knowledge base (VISION 18).</summary>
-    public Guid? SpacePageId { get; private init; }
+    public Guid? PageId { get; private init; }
 
     public Guid ActorId { get; private init; }
 
@@ -84,15 +84,15 @@ public sealed class HistoryEntry
         string? note = null) =>
         new(null, epicId, null, actorId, at, Named(field), oldValue, newValue, note);
 
-    public static HistoryEntry OnSpacePage(
-        Guid spacePageId,
+    public static HistoryEntry OnPage(
+        Guid pageId,
         Guid actorId,
         DateTimeOffset at,
         string field,
         string? oldValue = null,
         string? newValue = null,
         string? note = null) =>
-        new(null, null, spacePageId, actorId, at, Named(field), oldValue, newValue, note);
+        new(null, null, pageId, actorId, at, Named(field), oldValue, newValue, note);
 
     private static string Named(string field) =>
         string.IsNullOrWhiteSpace(field)

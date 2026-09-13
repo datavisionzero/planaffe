@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/shared/PageHeader";
-import { spacePagePath, spacePath } from "@/shell/views";
+import { pagePath, spacePath } from "@/shell/views";
 import { SearchResults } from "./SearchResults";
 import { childrenOf } from "./tree";
 import { usePageTree, useSpaceList } from "./useSpaces";
@@ -72,7 +72,7 @@ export function SpaceView() {
             {childrenOf(tree.pages, null).map((page) => (
               <li key={page.path}>
                 <Link
-                  to={spacePagePath(name!, page.path)}
+                  to={pagePath(name!, page.path)}
                   className="flex min-h-10 items-center gap-3 px-3 py-1 hover:bg-accent"
                 >
                   <span className="min-w-0 flex-1 truncate">{page.title}</span>

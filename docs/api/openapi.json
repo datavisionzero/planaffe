@@ -556,7 +556,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/SpacePageHit"
+                    "$ref": "#/components/schemas/PageHit"
                   }
                 }
               }
@@ -6098,8 +6098,8 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "The whole tree as slim SpacePageSummary, without the bodies: a page, then everything under it, siblings by title. Not paginated.",
-        "operationId": "ListSpacePages",
+        "summary": "The whole tree as slim PageSummary, without the bodies: a page, then everything under it, siblings by title. Not paginated.",
+        "operationId": "ListPages",
         "parameters": [
           {
             "name": "name",
@@ -6138,7 +6138,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/SpacePageSummary"
+                    "$ref": "#/components/schemas/PageSummary"
                   }
                 }
               }
@@ -6151,7 +6151,7 @@
           "planaffe"
         ],
         "summary": "Create a page under `parent`, or directly under the space where it is absent. The slug is given, never derived from the title.",
-        "operationId": "CreateSpacePage",
+        "operationId": "CreatePage",
         "parameters": [
           {
             "name": "name",
@@ -6166,7 +6166,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateSpacePageBody"
+                "$ref": "#/components/schemas/CreatePageBody"
               }
             }
           },
@@ -6198,7 +6198,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SpacePage"
+                  "$ref": "#/components/schemas/Page"
                 }
               }
             }
@@ -6232,7 +6232,7 @@
           "planaffe"
         ],
         "summary": "Move a page under another parent, in this space or another one, with everything below it. `cycle` under itself, `too-deep` where the subtree would pass the third level.",
-        "operationId": "MoveSpacePage",
+        "operationId": "MovePage",
         "parameters": [
           {
             "name": "name",
@@ -6247,7 +6247,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MoveSpacePageBody"
+                "$ref": "#/components/schemas/MovePageBody"
               }
             }
           },
@@ -6279,7 +6279,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SpacePage"
+                  "$ref": "#/components/schemas/Page"
                 }
               }
             }
@@ -6313,7 +6313,7 @@
           "planaffe"
         ],
         "summary": "Bring a deleted page back with exactly what went along. A page whose parent is still deleted is `transition`.",
-        "operationId": "RestoreSpacePage",
+        "operationId": "RestorePage",
         "parameters": [
           {
             "name": "name",
@@ -6328,7 +6328,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RestoreSpacePageBody"
+                "$ref": "#/components/schemas/RestorePageBody"
               }
             }
           },
@@ -6360,7 +6360,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SpacePage"
+                  "$ref": "#/components/schemas/Page"
                 }
               }
             }
@@ -6384,7 +6384,7 @@
           "planaffe"
         ],
         "summary": "The complete page: the Markdown, its address, its parent's, the author and who touched it last. `path` is the slugs from the space down, separated by slashes.",
-        "operationId": "ReadSpacePage",
+        "operationId": "ReadPage",
         "parameters": [
           {
             "name": "name",
@@ -6429,7 +6429,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SpacePage"
+                  "$ref": "#/components/schemas/Page"
                 }
               }
             }
@@ -6441,7 +6441,7 @@
           "planaffe"
         ],
         "summary": "Change the title, the Markdown or the slug; `If-Match` with the `updated_at` last read guards the document. The parent is not here: moving is an act of its own.",
-        "operationId": "ChangeSpacePage",
+        "operationId": "ChangePage",
         "parameters": [
           {
             "name": "name",
@@ -6464,7 +6464,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ChangeSpacePageRequest"
+                "$ref": "#/components/schemas/ChangePageRequest"
               }
             }
           },
@@ -6496,7 +6496,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SpacePage"
+                  "$ref": "#/components/schemas/Page"
                 }
               }
             }
@@ -6528,7 +6528,7 @@
           "planaffe"
         ],
         "summary": "Soft-delete a page and every page under it; the answer says how many went. Their slugs stay spent until the purge.",
-        "operationId": "DeleteSpacePage",
+        "operationId": "DeletePage",
         "parameters": [
           {
             "name": "name",
@@ -7645,6 +7645,7 @@
         }
       },
       "ChangeLabelRequest": {},
+      "ChangePageRequest": {},
       "ChangePasswordRequest": {
         "required": [
           "current_password",
@@ -7750,7 +7751,6 @@
           }
         }
       },
-      "ChangeSpacePageRequest": {},
       "ChangedIssues": {
         "required": [
           "items"
@@ -7979,6 +7979,41 @@
           }
         }
       },
+      "CreatePageBody": {
+        "required": [
+          "parent",
+          "slug",
+          "title",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "parent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "body": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CreateProjectRequest": {
         "required": [
           "key",
@@ -8038,41 +8073,6 @@
             "type": [
               "null",
               "boolean"
-            ]
-          }
-        }
-      },
-      "CreateSpacePageBody": {
-        "required": [
-          "parent",
-          "slug",
-          "title",
-          "body"
-        ],
-        "type": "object",
-        "properties": {
-          "parent": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "slug": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "title": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "body": {
-            "type": [
-              "null",
-              "string"
             ]
           }
         }
@@ -9014,7 +9014,7 @@
           }
         }
       },
-      "MoveSpacePageBody": {
+      "MovePageBody": {
         "required": [
           "path",
           "space",
@@ -9328,6 +9328,164 @@
           "agents": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "Page": {
+        "required": [
+          "path",
+          "space",
+          "slug",
+          "parent",
+          "depth",
+          "title",
+          "body",
+          "author",
+          "updated_by",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "space": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "parent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "depth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/IdentityRef"
+          },
+          "updated_by": {
+            "$ref": "#/components/schemas/IdentityRef"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PageHit": {
+        "required": [
+          "path",
+          "space",
+          "space_title",
+          "title",
+          "trail",
+          "excerpt"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "space": {
+            "type": "string"
+          },
+          "space_title": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "trail": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PageStep"
+            }
+          },
+          "excerpt": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExcerptSegment"
+            }
+          }
+        }
+      },
+      "PageStep": {
+        "required": [
+          "path",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "PageSummary": {
+        "required": [
+          "path",
+          "space",
+          "slug",
+          "parent",
+          "depth",
+          "title",
+          "updated_by",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "space": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "parent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "depth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_by": {
+            "$ref": "#/components/schemas/IdentityRef"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -9913,7 +10071,7 @@
           }
         }
       },
-      "RestoreSpacePageBody": {
+      "RestorePageBody": {
         "required": [
           "path"
         ],
@@ -10067,164 +10225,6 @@
               "null",
               "string"
             ],
-            "format": "date-time"
-          }
-        }
-      },
-      "SpacePage": {
-        "required": [
-          "path",
-          "space",
-          "slug",
-          "parent",
-          "depth",
-          "title",
-          "body",
-          "author",
-          "updated_by",
-          "created_at",
-          "updated_at"
-        ],
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "space": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "parent": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "depth": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string"
-          },
-          "author": {
-            "$ref": "#/components/schemas/IdentityRef"
-          },
-          "updated_by": {
-            "$ref": "#/components/schemas/IdentityRef"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "SpacePageHit": {
-        "required": [
-          "path",
-          "space",
-          "space_title",
-          "title",
-          "trail",
-          "excerpt"
-        ],
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "space": {
-            "type": "string"
-          },
-          "space_title": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "trail": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SpacePageStep"
-            }
-          },
-          "excerpt": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ExcerptSegment"
-            }
-          }
-        }
-      },
-      "SpacePageStep": {
-        "required": [
-          "path",
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          }
-        }
-      },
-      "SpacePageSummary": {
-        "required": [
-          "path",
-          "space",
-          "slug",
-          "parent",
-          "depth",
-          "title",
-          "updated_by",
-          "created_at",
-          "updated_at"
-        ],
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "space": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "parent": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "depth": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "updated_by": {
-            "$ref": "#/components/schemas/IdentityRef"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updated_at": {
-            "type": "string",
             "format": "date-time"
           }
         }

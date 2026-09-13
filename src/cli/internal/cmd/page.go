@@ -72,11 +72,11 @@ func (a address) under() (parent, slug string) {
 	return "", a.path
 }
 
-func printPage(g *globals, cmd *cobra.Command, page api.SpacePage) error {
+func printPage(g *globals, cmd *cobra.Command, page api.Page) error {
 	if g.json {
 		return render.JSON(cmd.OutOrStdout(), page)
 	}
-	render.SpacePage(cmd.OutOrStdout(), page)
+	render.Page(cmd.OutOrStdout(), page)
 	return nil
 }
 
@@ -91,7 +91,7 @@ func newPageList(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListSpacePagesWithResponse(cmd.Context(), args[0])
+			resp, err := c.ListPagesWithResponse(cmd.Context(), args[0])
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -123,7 +123,7 @@ func newPageView(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReadSpacePageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress)
+			resp, err := c.ReadPageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress)
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -161,8 +161,8 @@ func newPageCreate(g *globals) *cobra.Command {
 			}
 
 			parent, slug := at.under()
-			request := api.CreateSpacePageBody{Slug: &slug, Title: &title, Body: body, Parent: optional(parent)}
-			resp, err := c.CreateSpacePageWithResponse(cmd.Context(), at.space, request)
+			request := api.CreatePageBody{Slug: &slug, Title: &title, Body: body, Parent: optional(parent)}
+			resp, err := c.CreatePageWithResponse(cmd.Context(), at.space, request)
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -244,7 +244,7 @@ func changePage(g *globals, cmd *cobra.Command, at address, changes map[string]a
 		return err
 	}
 	body, _ := json.Marshal(changes)
-	resp, err := c.ChangeSpacePageWithBodyWithResponse(cmd.Context(), at.space, at.path, "application/json", bytes.NewReader(body),
+	resp, err := c.ChangePageWithBodyWithResponse(cmd.Context(), at.space, at.path, "application/json", bytes.NewReader(body),
 		client.ByAddress,
 		func(_ context.Context, req *http.Request) error {
 			if ifMatch != "" {
@@ -282,7 +282,7 @@ func newPageMove(g *globals) *cobra.Command {
 				return err
 			}
 
-			request := api.MoveSpacePageBody{Path: &at.path}
+			request := api.MovePageBody{Path: &at.path}
 			if under != "" {
 				space, path, found := strings.Cut(under, "/")
 				if space == "" || (found && path == "") {
@@ -298,7 +298,7 @@ func newPageMove(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.MoveSpacePageWithResponse(cmd.Context(), at.space, request)
+			resp, err := c.MovePageWithResponse(cmd.Context(), at.space, request)
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -327,7 +327,7 @@ func newPageDelete(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.DeleteSpacePageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress)
+			resp, err := c.DeletePageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress)
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -369,7 +369,7 @@ func newPageRestore(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RestoreSpacePageWithResponse(cmd.Context(), at.space, api.RestoreSpacePageBody{Path: &at.path})
+			resp, err := c.RestorePageWithResponse(cmd.Context(), at.space, api.RestorePageBody{Path: &at.path})
 			if err != nil {
 				return client.Transport(err)
 			}

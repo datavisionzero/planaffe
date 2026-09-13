@@ -120,7 +120,7 @@ export function aHit(
   return { path, space: space.name, space_title: space.title, title, trail, excerpt };
 }
 
-export function aSpacePage(path: string, title: string, space = aSpace.name) {
+export function aPage(path: string, title: string, space = aSpace.name) {
   const segments = path.split("/");
 
   return {

@@ -2,19 +2,19 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/session/Session";
-import { aProject, aSpace, aSpacePage, aUser, installInstance, renderAt, type Route } from "@/shared/testing";
+import { aProject, aSpace, aPage, aUser, installInstance, renderAt, type Route } from "@/shared/testing";
 import { Shell } from "@/shell/Shell";
 
 const other = { ...aSpace, name: "customers", title: "Customers" };
 
 const tree = [
-  aSpacePage("company", "The company"),
-  aSpacePage("company/onboarding", "Onboarding"),
-  aSpacePage("company/onboarding/day-one", "The first day"),
-  aSpacePage("product", "The product"),
+  aPage("company", "The company"),
+  aPage("company/onboarding", "Onboarding"),
+  aPage("company/onboarding/day-one", "The first day"),
+  aPage("product", "The product"),
 ];
 
-const page = { ...aSpacePage("company/onboarding", "Onboarding"), body: "Who hands over what." };
+const page = { ...aPage("company/onboarding", "Onboarding"), body: "Who hands over what." };
 
 function tree_(path: string, routes: Record<string, Route> = {}) {
   const instance = installInstance({
@@ -45,8 +45,8 @@ afterEach(() => {
 describe("the tree in the hand (ADR 0028)", () => {
   it("creates a page under the parent the address names, with a given slug", async () => {
     const instance = tree_("/spaces/handbook/new?parent=company", {
-      "POST /spaces/handbook/pages": { status: 201, body: aSpacePage("company/values", "Our values") },
-      "GET /spaces/handbook/pages/company/values": { body: { ...aSpacePage("company/values", "Our values"), body: "" } },
+      "POST /spaces/handbook/pages": { status: 201, body: aPage("company/values", "Our values") },
+      "GET /spaces/handbook/pages/company/values": { body: { ...aPage("company/values", "Our values"), body: "" } },
     });
 
     const under = await screen.findByRole("combobox", { name: "Under" });
@@ -91,8 +91,8 @@ describe("the tree in the hand (ADR 0028)", () => {
 
   it("renames a page and says how many pages hang below it", async () => {
     const instance = tree_("/spaces/handbook/pages/company/onboarding", {
-      "PATCH /spaces/handbook/pages/company/onboarding": { body: aSpacePage("company/arrival", "Onboarding") },
-      "GET /spaces/handbook/pages/company/arrival": { body: { ...aSpacePage("company/arrival", "Onboarding"), body: "x" } },
+      "PATCH /spaces/handbook/pages/company/onboarding": { body: aPage("company/arrival", "Onboarding") },
+      "GET /spaces/handbook/pages/company/arrival": { body: { ...aPage("company/arrival", "Onboarding"), body: "x" } },
     });
 
     await userEvent.click(await screen.findByRole("button", { name: "Rename page" }));
@@ -110,8 +110,8 @@ describe("the tree in the hand (ADR 0028)", () => {
 
   it("moves a page into another space, with everything below it", async () => {
     const instance = tree_("/spaces/handbook/pages/company/onboarding", {
-      "POST /spaces/handbook/pages/move": { body: aSpacePage("onboarding", "Onboarding", "customers") },
-      "GET /spaces/customers/pages/onboarding": { body: { ...aSpacePage("onboarding", "Onboarding", "customers"), body: "x" } },
+      "POST /spaces/handbook/pages/move": { body: aPage("onboarding", "Onboarding", "customers") },
+      "GET /spaces/customers/pages/onboarding": { body: { ...aPage("onboarding", "Onboarding", "customers"), body: "x" } },
     });
 
     await userEvent.click(await screen.findByRole("button", { name: "Move page" }));

@@ -454,20 +454,20 @@ func Space(w io.Writer, s api.Space) {
 // the eye and is the one thing a reader needs next: it is what the page is
 // reached by, and it is unique where a slug is only unique under its parent
 // (ADR 0028).
-func SpaceTree(w io.Writer, items []api.SpacePageSummary) {
+func SpaceTree(w io.Writer, items []api.PageSummary) {
 	for _, p := range items {
 		address := strings.Repeat("  ", int(p.Depth)) + p.Path
 		fmt.Fprintf(w, "%-40s %-10s %s\n", address, p.UpdatedAt.Format("2006-01-02"), p.Title)
 	}
 }
 
-// SpacePage prints the head — where the page stands, what it is called, when
+// Page prints the head — where the page stands, what it is called, when
 // it last moved — and then the Markdown exactly as it is stored, so that the
 // output pipes straight back into `--body-file -`.
 //
 // The head opens with the address, space and all, because that is what the
 // page is reached by and what a reader types next (ADR 0028).
-func SpacePage(w io.Writer, p api.SpacePage) {
+func Page(w io.Writer, p api.Page) {
 	fmt.Fprintf(w, "%s/%s  %s\n", p.Space, p.Path, p.Title)
 	fmt.Fprintf(w, "updated: %s by %s  author: %s\n", p.UpdatedAt.Format(time.RFC3339), p.UpdatedBy.Name, p.Author.Name)
 	if p.Body != "" {
@@ -494,7 +494,7 @@ func Terminal(w io.Writer) bool {
 // are known rather than guessed at. They are drawn bold where the output is a
 // terminal and as plain text everywhere else: an escape in a pipe is noise in
 // somebody's parser.
-func Hits(w io.Writer, hits []api.SpacePageHit, marked bool) {
+func Hits(w io.Writer, hits []api.PageHit, marked bool) {
 	for _, hit := range hits {
 		fmt.Fprintf(w, "%-16s %-32s %s\n", hit.Space, hit.Path, hit.Title)
 

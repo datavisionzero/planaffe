@@ -4,7 +4,7 @@ using Planaffe.Domain;
 namespace Planaffe.Application.Acts;
 
 /// <summary>One step of the way down to a hit: a page above it, and its address.</summary>
-public sealed record SpacePageStep(string Path, string Title);
+public sealed record PageStep(string Path, string Title);
 
 /// <summary>
 /// One piece of an excerpt: a run of the body, and whether the search matched
@@ -20,12 +20,12 @@ public sealed record ExcerptSegment(string Text, bool Hit);
 /// It carries no body — a hit is the way to a page, and the page is read
 /// complete under its own address (ADR 0012).
 /// </summary>
-public sealed record SpacePageHitShape(
+public sealed record PageHitShape(
     string Path,
     string Space,
     string SpaceTitle,
     string Title,
-    IReadOnlyList<SpacePageStep> Trail,
+    IReadOnlyList<PageStep> Trail,
     IReadOnlyList<ExcerptSegment> Excerpt);
 
 /// <summary>
@@ -46,7 +46,7 @@ public sealed record SpacePageHitShape(
 /// list holding both would have to explain itself in every row.
 /// </para>
 /// </remarks>
-public sealed class SearchSpacePages(ISpaces spaces, SpaceScope scope, ISpacePages pages, InstanceSettings settings)
+public sealed class SearchPages(ISpaces spaces, SpaceScope scope, IPages pages, InstanceSettings settings)
 {
     /// <summary>What a search answers with when nobody says how much.</summary>
     public const int DefaultLimit = 20;
@@ -61,7 +61,7 @@ public sealed class SearchSpacePages(ISpaces spaces, SpaceScope scope, ISpacePag
     /// <param name="query">The words, as a search box takes them: <c>claim expired</c>, <c>"for update"</c>, <c>-flaky</c>.</param>
     /// <param name="space">One space by name, or nothing for the whole knowledge base.</param>
     /// <exception cref="Refusal"><c>validation</c> on <c>q</c> or <c>limit</c>; <c>not-found</c> for a space this caller has not got.</exception>
-    public async Task<IReadOnlyList<SpacePageHitShape>> ExecuteAsync(
+    public async Task<IReadOnlyList<PageHitShape>> ExecuteAsync(
         string? query, string? space, int? limit, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -87,13 +87,13 @@ public sealed class SearchSpacePages(ISpaces spaces, SpaceScope scope, ISpacePag
         return [.. hits.Select(Shape)];
     }
 
-    private static SpacePageHitShape Shape(SpacePageHitRow hit) =>
+    private static PageHitShape Shape(PageHitRow hit) =>
         new(
             hit.Path,
             hit.Space,
             hit.SpaceTitle,
             hit.Title,
-            [.. hit.TrailPaths.Zip(hit.TrailTitles, (path, title) => new SpacePageStep(path, title))],
+            [.. hit.TrailPaths.Zip(hit.TrailTitles, (path, title) => new PageStep(path, title))],
             Excerpts.Of(hit.Headline));
 }
 

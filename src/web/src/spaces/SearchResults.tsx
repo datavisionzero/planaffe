@@ -1,8 +1,8 @@
 import { useCallback, useRef } from "react";
 import { Link } from "react-router";
 import { Skeleton } from "@/components/ui/skeleton";
-import { spacePagePath } from "@/shell/views";
-import { shortest, useKnowledgeSearch, type SpacePageHit } from "./search";
+import { pagePath } from "@/shell/views";
+import { shortest, useKnowledgeSearch, type PageHit } from "./search";
 
 /**
  * What a search found: a hit says where the page stands and shows the words
@@ -70,7 +70,7 @@ export function SearchResults({ query, space }: { query: string; space: string |
       {hits.hits.map((hit) => (
         <li key={`${hit.space}/${hit.path}`}>
           <Link
-            to={spacePagePath(hit.space, hit.path)}
+            to={pagePath(hit.space, hit.path)}
             className="block px-4 py-2 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none md:px-6"
           >
             <p className="truncate text-xs text-muted-foreground">
@@ -92,7 +92,7 @@ export function SearchResults({ query, space }: { query: string; space: string |
  * with markup in it. Nothing the server writes reaches the tree as HTML
  * (ADR 0007), and marking is the client's to do.
  */
-export function Excerpt({ excerpt }: { excerpt: SpacePageHit["excerpt"] }) {
+export function Excerpt({ excerpt }: { excerpt: PageHit["excerpt"] }) {
   return (
     <>
       {excerpt.map((piece, at) =>

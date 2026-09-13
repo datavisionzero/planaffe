@@ -5,13 +5,13 @@ using System.Text.Json;
 namespace Planaffe.IntegrationTests;
 
 /// <summary>
-/// The pages of a space over HTTP (<c>docs/api.md</c>, Space pages): an address
+/// The pages of a space over HTTP (<c>docs/api.md</c>, Pages): an address
 /// that carries the tree, three levels and no fourth, a subtree that goes and
 /// comes back whole, and a space closed to agents that answers an agent exactly
 /// as it answers a stranger (ADR 0027, ADR 0028).
 /// </summary>
 [Collection(nameof(PostgresCollection))]
-public sealed class SpacePageEndpointTests(PostgresFixture postgres)
+public sealed class PageEndpointTests(PostgresFixture postgres)
 {
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
 
