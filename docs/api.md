@@ -144,21 +144,6 @@ about.
 counts issues that are not deleted; the issues themselves are
 `GET /issues?epic=PLAN-E2`.
 
-`PageSummary` and `Page`:
-
-```json
-{ "slug": "architecture", "project": "PLAN", "title": "Architecture",
-  "labels": ["reference"],
-  "updated_by": { "id": "…", "kind": "user", "name": "maintainer" },
-  "created_at": "…", "updated_at": "…" }
-```
-
-`Page` adds `body` — the Markdown — `author`, and the full label objects. The
-summary carries no body on purpose: a wiki of thirty pages would otherwise be a
-context eater for anything that only wanted to know what is there
-(ADR 0012). `updated_by` is in both, because the list is read for who touched
-what last.
-
 `Project`:
 
 ```json
@@ -614,40 +599,6 @@ you" list, with the blocker-chain rule, is `GET /projects/{key}/needs-you`.
 | `DELETE` | `/epics/{key}` | any | soft delete, refused with `has-issues` while any issue, deleted ones included, references it |
 | `POST` | `/epics/{key}/restore` | any | back |
 
-### Pages
-
-| method | path | who | does |
-|---|---|---|---|
-| `GET` | `/projects/{key}/pages` | any | every page of the project as `PageSummary`, by slug, without the bodies; `q` is the full-text filter over title and body, `label` repeatable and all must match. Not paginated |
-| `GET` | `/projects/{key}/pages/{slug}` | any | `Page` |
-| `POST` | `/projects/{key}/pages` | any | `{ slug, title, body?, labels? }` → 201 `Page`; the slug is given, never derived from the title (ADR 0021) |
-| `PATCH` | `/projects/{key}/pages/{slug}` | any | `{ slug?, title?, body?, labels? }`, `If-Match` honoured; `slug` renames, `body` set to `null` empties the document, `labels` replaces the whole set with the groups enforced as on an issue |
-| `DELETE` | `/projects/{key}/pages/{slug}` | any | soft delete; 204 |
-| `POST` | `/projects/{key}/pages/{slug}/restore` | any | back, under the slug it kept |
-
-The page sits under the project rather than at `/pages` because it is named
-within a project instead of carrying a key that already says which one — the
-same place labels and releases have, for the same reason.
-
-**The list is not paginated and takes no cursor.** The wiki is flat by decision
-(VISION 7), a project's pages are few, and what would make a list expensive is
-the body, which is not in it. The full-text search is what replaces navigation
-here, not a page of results.
-
-**A taken slug is `validation` on `slug`**, and a slug belonging to a deleted
-page says so — it stays spent until the purge, so that a restore can never land
-on a name somebody else took in the meantime. A slug that could not be one
-(`Not A Slug`) is `not-found` rather than `validation` when it arrives in the
-path: nothing is named there, and the path is not a field.
-
-**A rename leaves nothing behind.** The old address is gone the moment the
-`PATCH` returns, nothing forwards, and the history's `slug` entry with both
-values is the one place the old name survives (ADR 0021).
-
-There is no comment endpoint and no history endpoint on a page. Whoever has
-something to do makes a ticket, which is what keeps the discussion in one place;
-the history is written and read from the database, as an epic's is.
-
 ## What cut two adds
 
 Designed in PLAN-32 (2026-09-02), on the schema `docs/storage.md` describes
@@ -822,15 +773,13 @@ the claim and waits for the answer, for at most the rest of the claim (VISION
 
 ### Search
 
-`q` on `GET /issues`, `GET /questions` and `GET /projects/{key}/pages`: a
-full-text filter in the words a search box takes — `claim expired`,
-`"for update"`, `-flaky` — matched with `websearch_to_tsquery` against the
-`simple` configuration, so identifiers survive (`docs/storage.md`, Full-text
-search). On issues it matches the title, the description, the result, and the
-issue's comments and questions; on questions the question and its answer; on
-pages the title and the body. A filter, not a ranking: the list keeps its
-order. The CLI: `pa issue list -q "…"`, `pa question list -q "…"`,
-`pa page list -q "…"`.
+`q` on `GET /issues` and `GET /questions`: a full-text filter in the words a
+search box takes — `claim expired`, `"for update"`, `-flaky` — matched with
+`websearch_to_tsquery` against the `simple` configuration, so identifiers
+survive (`docs/storage.md`, Full-text search). On issues it matches the title,
+the description, the result, and the issue's comments and questions; on
+questions the question and its answer. A filter, not a ranking: the list keeps
+its order. The CLI: `pa issue list -q "…"`, `pa question list -q "…"`.
 
 **The knowledge base is searched apart from all of this, and it ranks.** `GET
 /pages?q=…` is one full-text search across every space the caller may see —
@@ -1174,13 +1123,14 @@ deleted page answers `deleted` with `restorable_until`.
 searches the knowledge base and not one space (VISION 18), so it cannot hang
 under `/spaces/{name}`; a catch-all is already there, and `/spaces/search`
 would spend a name somebody may give a space — the reason a space is created
-through a dialog rather than at `/spaces/new`. `/pages` is free: the project's
-wiki is `/projects/{key}/pages`, and this is the word the knowledge base ends
-up with. The section "Search" below says what it answers.
+through a dialog rather than at `/spaces/new`. `/pages` is the knowledge
+base's, and now the only thing in the product that word names: the project's
+wiki is withdrawn. The section "Search" below says what it answers.
 
 **A page carries no labels.** A label is defined per project and a space has
 none; this is the bracket's consequence rather than a field left for later.
 
-There is no comment endpoint and no history endpoint here either, for the
-reasons the project's pages give.
+There is no comment endpoint and no history endpoint on a page. Whoever has
+something to do makes a ticket, which is what keeps the discussion in one
+place; the history is written and read from the database, as an epic's is.
 

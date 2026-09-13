@@ -181,11 +181,10 @@ public static class SpacePageEndpoints
     /// name somebody may take.
     /// </para>
     /// <para>
-    /// So it is <c>/pages</c>, which is free: the project's wiki lives under
-    /// <c>/projects/{key}/pages</c>, and it is the word the knowledge base
-    /// ends up with anyway. Without <c>q</c> the answer is <c>validation</c>
-    /// rather than every page in the instance — the address is a search and
-    /// not a list.
+    /// So it is <c>/pages</c>, which the knowledge base now has to itself: the
+    /// project's wiki is withdrawn (VISION 18). Without <c>q</c> the answer is
+    /// <c>validation</c> rather than every page in the instance — the address
+    /// is a search and not a list.
     /// </para>
     /// </remarks>
     public static IEndpointRouteBuilder MapKnowledgeSearch(this IEndpointRouteBuilder endpoints)

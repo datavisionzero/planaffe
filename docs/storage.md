@@ -468,7 +468,6 @@ create table history (
     id            bigint      not null generated always as identity primary key,
     issue_id      uuid        references issue      (id) on delete cascade,
     epic_id       uuid        references epic       (id) on delete cascade,
-    page_id       uuid        references page       (id) on delete cascade,
     space_page_id uuid        references space_page (id) on delete cascade,
     actor_id      uuid        not null references identity (id),
     at            timestamptz not null,
@@ -477,29 +476,30 @@ create table history (
     new_value     text,
     note          text,
 
-    check (num_nonnulls(issue_id, epic_id, page_id, space_page_id) = 1)
+    check (num_nonnulls(issue_id, epic_id, space_page_id) = 1)
 );
 
 create index history_issue      on history (issue_id, id);
 create index history_epic       on history (epic_id, id);
-create index history_page       on history (page_id, id);
 create index history_space_page on history (space_page_id, id);
 ```
 
 One row per change: who, when, which field, from what to what (VISION 7). An
-issue's history, an epic's, a project page's and a space page's live in one
-table because they are one concept and the three smaller ones are tiny; the
-check keeps every row pointing at exactly one subject.
+issue's history, an epic's and a page's live in one table because they are one
+concept and the two smaller ones are tiny; the check keeps every row pointing at
+exactly one subject.
 
-Each subject arrived with the thing it records, and the check grew with it
-rather than the table gaining a column that says which kind a row is. The
-newest of them is `space_page_id`, the knowledge base's page (VISION 18).
+Each subject arrived with the thing it records, and the check grew and shrank
+with it rather than the table gaining a column that says which kind a row is.
+It held a fourth, `page_id`, while a project had a wiki of its own; that wiki is
+withdrawn (VISION 18) and every row of it was carried over to `space_page_id`
+before the column went.
 
 `field` is the name of the column or edge that changed, spelled as the API
 spells it: `title`, `description`, `result`, `status`, `ready`, `priority`,
 `assignee`, `claim`, `epic`, `label`, `blocked_by`, `deleted` — plus `created`
-for the row's birth, with no values, `body` and `slug` on a page, `parent` on a
-page of the knowledge base — where the two values are the whole address,
+for the row's birth, with no values, `body` and `slug` on a page of the
+knowledge base, and `parent` on one — where the two values are the whole address,
 `handbook/company/onboarding`, because a move can change the space as well —
 and `comment` on an issue. For
 `description`, `result` and `body` the values are null: the entry records *that* the text changed, not how. For an edge
@@ -658,15 +658,12 @@ alter table comment add column search tsvector
     generated always as (to_tsvector('simple', body)) stored;
 alter table question add column search tsvector
     generated always as (to_tsvector('simple', question || ' ' || coalesce(answer, ''))) stored;
-alter table page add column search tsvector
-    generated always as (to_tsvector('simple', title || ' ' || body)) stored;
 alter table space_page add column search tsvector
     generated always as (to_tsvector('simple', title || ' ' || body)) stored;
 
 create index issue_search      on issue      using gin (search);
 create index comment_search    on comment    using gin (search);
 create index question_search   on question   using gin (search);
-create index page_search       on page       using gin (search);
 create index space_page_search on space_page using gin (search);
 ```
 
@@ -856,64 +853,6 @@ forgiving attempts is safer than making authentication depend on a cleanup table
 or another service. Deployments with several application replicas are outside
 the MVP topology.
 
-## Pages
-
-```sql
-create table page (
-    id          uuid        not null primary key,
-    project_id  uuid        not null references project (id) on delete cascade,
-    slug        text        not null,
-    title       text        not null,
-    body        text        not null default '',
-    created_by  uuid        not null references identity (id),
-    created_at  timestamptz not null,
-    updated_by  uuid        not null references identity (id),
-    updated_at  timestamptz not null,
-    deleted_at  timestamptz,
-    deleted_by  uuid        references identity (id)
-);
-
-create unique index page_slug on page (project_id, slug);
-
-create table page_label (
-    page_id  uuid not null references page  (id) on delete cascade,
-    label_id uuid not null references label (id) on delete cascade,
-    primary key (page_id, label_id)
-);
-```
-
-The project's flat wiki (VISION 7): Markdown addressed by a slug, with no
-hierarchy, no comments and no attachments. There is no `key` and no `number`
-column, because a page is the one object addressed by a name
-([ADR 0021](./adr/0021-a-pages-address-is-its-slug-not-a-key.md)); the slug is
-what the URL carries in both directions.
-
-**The unique index covers deleted rows on purpose.** A soft-deleted page keeps
-its slug until the purge takes it, so that restoring one never lands on a name
-somebody else has taken in the meantime — the same reasoning that keeps a
-deleted label's name spent. A create against a spent slug is refused, and the
-refusal says the page is deleted and restorable rather than pretending the name
-is in use.
-
-**Renaming is an ordinary update of `slug`.** Nothing forwards the old one and
-there is no redirect table; ADR 0021 has the argument. The rename stands in the
-history as a `slug` entry with both values, which is the one place the old
-address survives.
-
-**`updated_at` is the version**, as at the issue and the epic, so a page
-inherits the guarded write of `api.md` ("Concurrency on text fields") without a
-mechanism of its own. `updated_by` is beside it because a wiki's list is read
-for who touched what last, and reading that out of the history for every row of
-the list would be a join for a fact the row can carry.
-
-Labels are the ordinary ones through `page_label`, under the same group rule
-and through the same code as the issue's and the epic's.
-
-**The page is in the full-text search**, over its title and its body, with the
-column and the index the section above describes. That is not a nicety: the
-wiki is flat because the search is what a hierarchy would have been for, so a
-page nothing finds is a page nothing leads to.
-
 ## Spaces
 
 ```sql
@@ -993,10 +932,17 @@ create unique index space_page_slug on space_page (space_id, parent_id, slug)
 
 The knowledge base's page (VISION 18,
 [ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)):
-the `page` table above with a place in a tree. The two stand side by side until
-the project's wiki is withdrawn, which is why this is a second table rather
-than a nullable column on the first — nothing about the older one has to change
-for a transition it is not going to survive.
+Markdown addressed by a name rather than a key, with a place in a tree. It is
+the only page table there is. A `page` hanging on a project stood beside it
+while the project had a wiki — a second table rather than a nullable column on
+the first, so that nothing about the older one had to change for a transition it
+was not going to survive — and its rows were carried in here when that wiki was
+withdrawn.
+
+There is no `key` and no `number` column, because a page is the one object
+addressed by a name
+([ADR 0021](./adr/0021-a-pages-address-is-its-slug-not-a-key.md)); the slugs
+from the space down are what the URL carries in both directions.
 
 **It carries no `project_id` and no labels.** The first for the reason the
 space carries none; the second because a label is defined per project and a

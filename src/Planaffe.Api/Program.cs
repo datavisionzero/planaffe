@@ -155,14 +155,6 @@ builder.Services.AddScoped<ReadEpic>();
 builder.Services.AddScoped<ChangeEpic>();
 builder.Services.AddScoped<MoveEpic>();
 
-// The flat wiki (VISION 7, ADR 0021): a project's pages, addressed by slug.
-builder.Services.AddScoped<PageAssembler>();
-builder.Services.AddScoped<ListPages>();
-builder.Services.AddScoped<ReadPage>();
-builder.Services.AddScoped<CreatePage>();
-builder.Services.AddScoped<ChangePage>();
-builder.Services.AddScoped<MovePage>();
-
 // The knowledge base's bracket (VISION 18, ADR 0027): spaces, who sees them,
 // and the switch that closes one to agents.
 builder.Services.AddScoped<SpaceAssembler>();
@@ -275,7 +267,6 @@ app.MapLabels();
 app.MapIssues();
 app.MapConversation();
 app.MapEpics();
-app.MapPages();
 app.MapSpaces();
 app.MapSpacePages();
 app.MapKnowledgeSearch();

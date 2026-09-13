@@ -14,7 +14,7 @@ namespace Planaffe.Domain;
 /// <c>architecture</c> and <c>Architecture</c> cannot both exist beside each
 /// other — and hyphen-separated because the slug is read aloud in running
 /// text, where an underscore or a slash reads as punctuation nobody meant.
-/// It lives here rather than under <c>Pages</c> because two things are
+/// It lives here rather than under <c>Spaces</c> because two things are
 /// addressed this way, and neither of them owns the form.
 /// </para>
 /// <para>

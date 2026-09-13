@@ -426,31 +426,6 @@ func EpicSummaries(w io.Writer, items []api.EpicSummary) {
 	}
 }
 
-// Page prints the head — where it lives, what it is called, when it last moved
-// — and then the Markdown exactly as it is stored, so that the output can be
-// piped straight back into `--body-file -`.
-func Page(w io.Writer, p api.Page) {
-	fmt.Fprintf(w, "%s/%s  %s\n", p.Project, p.Slug, p.Title)
-	fmt.Fprintf(w, "updated: %s by %s  author: %s\n", p.UpdatedAt.Format(time.RFC3339), p.UpdatedBy.Name, p.Author.Name)
-	if len(p.Labels) > 0 {
-		names := make([]string, 0, len(p.Labels))
-		for _, l := range p.Labels {
-			names = append(names, l.Name)
-		}
-		fmt.Fprintf(w, "labels: %s\n", strings.Join(names, ", "))
-	}
-	if p.Body != "" {
-		fmt.Fprintf(w, "\n%s\n", p.Body)
-	}
-}
-
-// PageSummaries prints the flat wiki: the address, when it last moved, the title.
-func PageSummaries(w io.Writer, items []api.PageSummary) {
-	for _, p := range items {
-		fmt.Fprintf(w, "%-24s %-10s %s\n", p.Slug, p.UpdatedAt.Format("2006-01-02"), p.Title)
-	}
-}
-
 // Spaces prints the knowledge base's brackets: the name, the title, and the
 // switch where it is closed. An agent never sees a closed one — it is absent
 // from the answer, not marked in it (ADR 0027) — so the marker is a user's

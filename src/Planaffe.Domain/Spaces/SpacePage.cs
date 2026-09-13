@@ -7,19 +7,17 @@ namespace Planaffe.Domain.Spaces;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The prefix in the name says which of two pages the product means. The
-/// project's flat wiki is <see cref="Pages.Page"/> and is being withdrawn
-/// (VISION 18); until it is, the two live in two tables, so that nothing about
-/// the older one has to become nullable for a transition. When the project's
-/// wiki goes, the prefix goes with it and what is left is the page.
+/// The prefix in the name is left over from the two pages the product briefly
+/// had. The project's flat wiki is withdrawn (VISION 18) and this is the only
+/// page there is; the prefix goes with it, which is a rename of its own.
 /// </para>
 /// <para>
 /// It carries no labels. A label is defined per project and a space has none,
 /// so this is a consequence of the bracket rather than something forgotten.
 /// </para>
 /// <para>
-/// <see cref="UpdatedAt"/> is the version, as at the issue, the epic and the
-/// project's page, so that this page inherits the guarded write of
+/// <see cref="UpdatedAt"/> is the version, as at the issue and the epic, so
+/// that this page inherits the guarded write of
 /// <c>docs/api.md</c> ("Concurrency on text fields") rather than carrying a
 /// mechanism of its own.
 /// </para>
