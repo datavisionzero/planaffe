@@ -32,7 +32,7 @@ func newSpace(g *globals) *cobra.Command {
 		Use:   "space",
 		Short: "Spaces: the knowledge base's bracket, the pages in it, and the search across them.",
 	}
-	cmd.AddCommand(newSpaceList(g), newSpaceView(g), newSpaceSearch(g))
+	cmd.AddCommand(newSpaceList(g), newSpaceView(g), newSpacePage(g), newSpaceSearch(g))
 	return cmd
 }
 
@@ -110,7 +110,7 @@ func newSpaceView(g *globals) *cobra.Command {
 			// A space with nothing in it says so rather than ending on its
 			// head, the way `pa needs-you` answers an empty list.
 			if len(*tree.JSON200) == 0 {
-				fmt.Fprintf(out, "\nNo pages in %s yet.\n", args[0])
+				fmt.Fprintf(out, "\nNo pages in %s yet; `pa space page create %s/<slug> --title …` writes the first.\n", args[0], args[0])
 				return nil
 			}
 			fmt.Fprintln(out)

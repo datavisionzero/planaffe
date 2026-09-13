@@ -87,6 +87,28 @@ func New(cfg config.Config, httpClient *http.Client) (*Client, error) {
 	return c, nil
 }
 
+// ByAddress is what a call needs whose path parameter is an address rather
+// than a name.
+//
+// A page in the knowledge base is reached by the slugs from the root down, and
+// the slashes between them are the address itself (ADR 0028). `docs/api.md`
+// says it outright: this is the one path parameter in the contract that
+// contains slashes, and a client that percent-encodes them names nothing. The
+// generated client escapes every path parameter whole, which is right for
+// every other route — a release named with a slash still wants the escape — so
+// the three calls that carry an address say so rather than the client changing
+// its mind for all of them. The web application draws the same line in
+// `byAddress`.
+//
+// The repair is to drop the escaped spelling the generator wrote. `URL.Path`
+// already holds what was meant, separators and all; with no `RawPath` beside
+// it, net/http writes the path it escapes itself, and that leaves a separator
+// alone while still escaping everything else.
+func ByAddress(_ context.Context, req *http.Request) error {
+	req.URL.RawPath = ""
+	return nil
+}
+
 // UserAgent is `pa/<version> (<os>/<arch>)`.
 func UserAgent() string {
 	return fmt.Sprintf("pa/%s (%s/%s)", version.Version, runtime.GOOS, runtime.GOARCH)

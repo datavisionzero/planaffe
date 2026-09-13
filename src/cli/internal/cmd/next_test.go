@@ -62,13 +62,19 @@ func readAll(r *http.Request) (string, error) {
 
 func run(t *testing.T, server *httptest.Server, dir string, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
+	return runWith(t, server, dir, "", args...)
+}
+
+// runWith is `run` for a command that reads its Markdown from stdin.
+func runWith(t *testing.T, server *httptest.Server, dir, stdin string, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
 	var out, errOut bytes.Buffer
 	code = Run(context.Background(), args, Env{
 		Getenv: func(k string) string {
 			return map[string]string{"PLANAFFE_URL": server.URL, "PLANAFFE_TOKEN": "pa_test-token-of-thirty-two-characters-or-more"}[k]
 		},
 		Dir:    dir,
-		Stdin:  strings.NewReader(""),
+		Stdin:  strings.NewReader(stdin),
 		Stdout: &out,
 		Stderr: &errOut,
 		HTTP:   server.Client(),

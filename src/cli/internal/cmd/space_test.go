@@ -277,7 +277,7 @@ func TestSpaceViewOfASpaceWithoutPagesSaysSo(t *testing.T) {
 	if code != exit.OK || stderr != "" {
 		t.Fatalf("code %d, stderr %q", code, stderr)
 	}
-	if !strings.Contains(out, "No pages in handbuch yet.") {
+	if !strings.Contains(out, "No pages in handbuch yet;") {
 		t.Errorf("stdout %q says nothing", out)
 	}
 }

@@ -484,6 +484,20 @@ func SpaceTree(w io.Writer, items []api.SpacePageSummary) {
 	}
 }
 
+// SpacePage prints the head — where the page stands, what it is called, when
+// it last moved — and then the Markdown exactly as it is stored, so that the
+// output pipes straight back into `--body-file -`.
+//
+// The head opens with the address, space and all, because that is what the
+// page is reached by and what a reader types next (ADR 0028).
+func SpacePage(w io.Writer, p api.SpacePage) {
+	fmt.Fprintf(w, "%s/%s  %s\n", p.Space, p.Path, p.Title)
+	fmt.Fprintf(w, "updated: %s by %s  author: %s\n", p.UpdatedAt.Format(time.RFC3339), p.UpdatedBy.Name, p.Author.Name)
+	if p.Body != "" {
+		fmt.Fprintf(w, "\n%s\n", p.Body)
+	}
+}
+
 // Terminal says whether w is a terminal — the one question that decides
 // whether anything but text is written. A buffer, a pipe and a file are all
 // "no", which is what keeps `pa space search … > hits.txt` free of escapes.

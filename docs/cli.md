@@ -187,6 +187,11 @@ pa page delete architecture · pa page restore architecture
 
 pa space list                               # the knowledge base: every space you may see, the closed ones marked
 pa space view handbuch                      # one space: the head, and the tree of the pages in it
+pa space page list handbuch                 # the tree alone: the address, when it last moved, the title
+pa space page view handbuch/company/onboarding          # the head, then the Markdown as it is stored
+pa space page create handbuch/company/onboarding --title "Onboarding" --body-file -
+pa space page edit handbuch/company/onboarding --body-file - --if-match "<updated_at>"
+pa space page rename handbuch/company/onboarding einarbeitung   # the old address leads nowhere (ADR 0028)
 pa space search "onboarding pate"           # the space, the address, the title, the excerpt under it
 pa space search "vertrag" --space personal  # one space by name
 pa space search "claim-held" --limit 5 --json
@@ -280,6 +285,31 @@ key to narrow. What the caller may not see is not filtered here but absent from
 the answer — a space closed to an agent is missing from an agent's list, and
 under its own name it is `not-found`, which is what a space that never existed
 answers ([ADR 0027](./adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)).
+
+**A page is one argument, and the argument is its address.** `handbuch/company/onboarding`
+is the space in front and the slugs from the root down behind it — the address
+of [ADR 0028](./adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md),
+the path in the HTTP route, and what stands in the browser's location bar, all
+spelled the same way. An address is copied out of a tree, a search hit or a
+sentence, and taking it as two arguments would mean editing it first. `pa` cuts
+at the first slash; a word without one names a space rather than a page and is
+a usage mistake (exit 2) that never reaches the instance. The slashes travel to
+the instance as slashes: this is the one path parameter in the contract that
+contains them, and a client that percent-encodes them names nothing.
+
+`create` reads the tree out of that same address: **the last slug is the page's
+own, everything in front of it is its parent.** `handbuch/company/onboarding`
+is `onboarding` under `company`, `handbuch/company` is `company` directly under
+the space. The slug is given and never derived from the title, as on a
+project's page (ADR 0021). `view` prints the head and then the body unchanged,
+so the output pipes straight back into `--body-file -`.
+
+`rename` is its own verb rather than a flag on `edit`, because moving an
+address is not the same kind of act as editing a text: nothing forwards, and
+with a page the address of every page under it moves too. It takes a slug and
+not an address — what the page is called where it stands is `rename`, where it
+stands is `move`. There is no `--label` on a page in a space, and that is not
+an omission: a label is defined per project and a space has none.
 
 **Creating a space, renaming it, the switch, deleting it and granting access to
 it are not on the console.** They are a human's acts, the one border VISION 18
