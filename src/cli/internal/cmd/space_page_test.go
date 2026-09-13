@@ -267,7 +267,7 @@ func TestSpacePageRenameRefusesAnAddress(t *testing.T) {
 // is not there for it — answers with the instance's own sentence.
 func TestSpacePageViewOfAPageThatIsNotThere(t *testing.T) {
 	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) {
-		return 404, `{"type":"about:blank","title":"Nothing by that key or id","status":404,"detail":"No page company/onboarding in handbuch.","code":"not-found"}`
+		return 404, `{"type":"/problems/not-found","title":"Nothing by that key or id","status":404,"detail":"No page company/onboarding in handbuch."}`
 	}}
 	server := httptest.NewServer(f.handler())
 	defer server.Close()
@@ -278,6 +278,195 @@ func TestSpacePageViewOfAPageThatIsNotThere(t *testing.T) {
 		t.Fatalf("code %d", code)
 	}
 	if out != "" || !strings.Contains(stderr, "No page company/onboarding in handbuch.") {
+		t.Errorf("stdout %q, stderr %q", out, stderr)
+	}
+}
+
+// --under takes an address: the space in front, the parent behind it. The
+// move itself is asked at the space the page is in now.
+func TestSpacePageMoveUnderAPageByItsAddress(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "space", "page", "move", "handbuch/company/onboarding", "--under", "handbuch/product")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodPost || asked.RequestURI != "/spaces/handbuch/pages/move" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["path"] != "company/onboarding" || sent["space"] != "handbuch" || sent["parent"] != "product" {
+		t.Errorf("sent %v", sent)
+	}
+}
+
+// A word without a slash is a space, and the page lands directly under it.
+func TestSpacePageMoveIntoAnotherSpaceByItsName(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "space", "page", "move", "handbuch/company/onboarding", "--under", "archive")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["space"] != "archive" || sent["parent"] != nil {
+		t.Errorf("sent %v", sent)
+	}
+}
+
+// No --under is the way up: the page lands directly under the space it is
+// already in, and neither field is sent.
+func TestSpacePageMoveWithoutUnderGoesToTheTopOfItsSpace(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "space", "page", "move", "handbuch/company/onboarding")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["path"] != "company/onboarding" || sent["space"] != nil || sent["parent"] != nil {
+		t.Errorf("sent %v", sent)
+	}
+}
+
+// A subtree that would pass the third level is refused with the height in it,
+// and pa hands the instance's sentence over as it came.
+func TestSpacePageMoveThatWouldGoTooDeep(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) {
+		return 422, `{"type":"/problems/too-deep","title":"Too deep","status":422,"detail":"handbuch/company/onboarding is 2 levels tall and there is room for 1 where it would land.","depth":1}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "page", "move", "handbuch/company/onboarding", "--under", "handbuch/product/detail")
+
+	if code == exit.OK {
+		t.Fatalf("code %d", code)
+	}
+	if out != "" || !strings.Contains(stderr, "there is room for 1 where it would land") {
+		t.Errorf("stdout %q, stderr %q", out, stderr)
+	}
+}
+
+func TestSpacePageMoveUnderNothingIsAUsageMistake(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, _, stderr := run(t, server, t.TempDir(), "space", "page", "move", "handbuch/company/onboarding", "--under", "archive/")
+
+	if code != exit.Usage || !strings.Contains(stderr, "--under") {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if len(f.requests) != 0 {
+		t.Errorf("%d requests", len(f.requests))
+	}
+}
+
+// Whoever asked about one page has to learn that three are gone.
+func TestSpacePageDeleteSaysHowManyWent(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 200, `{"deleted":3}` }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "page", "delete", "handbuch/company")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodDelete || asked.RequestURI != "/spaces/handbuch/pages/company" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	if !strings.Contains(out, "with the 2 pages under it") || !strings.Contains(out, "pa space page restore handbuch/company") {
+		t.Errorf("stdout %q", out)
+	}
+}
+
+// One page on its own says so without a count nobody asked for.
+func TestSpacePageDeleteOfALeafSaysItPlainly(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 200, `{"deleted":1}` }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "page", "delete", "handbuch/company/onboarding")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if !strings.Contains(out, "handbuch/company/onboarding deleted; ") || strings.Contains(out, "under it") {
+		t.Errorf("stdout %q", out)
+	}
+}
+
+func TestSpacePageDeleteJSONIsTheCount(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) { return 200, `{"deleted":3}` }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, _ := run(t, server, t.TempDir(), "space", "page", "delete", "handbuch/company", "--json")
+
+	if code != exit.OK || !strings.Contains(out, `"deleted": 3`) {
+		t.Fatalf("code %d, stdout %q", code, out)
+	}
+}
+
+func TestSpacePageRestoreCarriesTheAddressInTheBody(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: serving(spacePage)}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "page", "restore", "handbuch/company/onboarding")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	asked := f.requests[0]
+	if asked.Method != http.MethodPost || asked.RequestURI != "/spaces/handbuch/pages/restore" {
+		t.Fatalf("%s %s", asked.Method, asked.RequestURI)
+	}
+	if f.bodies[0] != `{"path":"company/onboarding"}` {
+		t.Errorf("sent %q", f.bodies[0])
+	}
+	if !strings.Contains(out, "handbuch/company/onboarding  Onboarding") {
+		t.Errorf("stdout %q is not the page it brought back", out)
+	}
+}
+
+// A live page under a deleted one is the state the rule exists to prevent, so
+// the refusal names the page to restore first.
+func TestSpacePageRestoreUnderADeletedParent(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) {
+		return 422, `{"type":"/problems/transition","title":"Not from here","status":422,"detail":"handbuch/company is deleted; restore it first."}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "page", "restore", "handbuch/company/onboarding")
+
+	if code == exit.OK {
+		t.Fatalf("code %d", code)
+	}
+	if out != "" || !strings.Contains(stderr, "restore it first") {
 		t.Errorf("stdout %q, stderr %q", out, stderr)
 	}
 }

@@ -125,6 +125,27 @@ pa issue release PROJ-42                 # give it back unfinished
 pa issue create "…" --description-file - # a ticket of your own: --ready or ask
 ```
 
-Everything else — creating tickets in bulk, epics, labels, releases — is
-`pa <object> --help`.
+### The knowledge base
+
+What is true regardless of any ticket does not live on a ticket. It lives in
+the knowledge base: **spaces**, and Markdown pages in a shallow tree inside
+them. Read it before you ask, and write down what the next run should not have
+to work out again.
+
+```sh
+pa space search "onboarding"                   # across every space you may see, best first
+pa space view handbuch                         # one space: the head, and its tree
+pa space page view handbuch/company/onboarding # the page, as the Markdown it is
+pa space page create handbuch/company/onboarding --title "…" --body-file -
+```
+
+A page is addressed by its space and the slugs under it, and that whole address
+is the argument — the last slug is the page's own name, everything in front of
+it says where it hangs. A space you cannot see is not there for you: under its
+name you get the answer a space that never existed would give, and that is not
+a mistake to report. **You never create, rename or delete a space and never
+grant access to one.** A human draws the brackets; you work inside them.
+
+Everything else — creating tickets in bulk, epics, labels, releases, moving and
+deleting pages — is `pa <object> --help`.
 ````

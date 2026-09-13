@@ -192,6 +192,10 @@ pa space page view handbuch/company/onboarding          # the head, then the Mar
 pa space page create handbuch/company/onboarding --title "Onboarding" --body-file -
 pa space page edit handbuch/company/onboarding --body-file - --if-match "<updated_at>"
 pa space page rename handbuch/company/onboarding einarbeitung   # the old address leads nowhere (ADR 0028)
+pa space page move handbuch/company/onboarding --under handbuch/product   # under another parent, subtree and all
+pa space page move handbuch/company/onboarding --under archive            # into another space, at the top of it
+pa space page move handbuch/company/onboarding                            # to the top of the space it is in
+pa space page delete handbuch/company · pa space page restore handbuch/company
 pa space search "onboarding pate"           # the space, the address, the title, the excerpt under it
 pa space search "vertrag" --space personal  # one space by name
 pa space search "claim-held" --limit 5 --json
@@ -310,6 +314,22 @@ with a page the address of every page under it moves too. It takes a slug and
 not an address — what the page is called where it stands is `rename`, where it
 stands is `move`. There is no `--label` on a page in a space, and that is not
 an omission: a label is defined per project and a space has none.
+
+**Moving is a step of its own and one flag covers both ends of it.** `--under`
+takes the same address form as everything else: `handbuch/product` is a page,
+and a word without a slash is a space — `archive` means "directly under the
+space archive". Left out, the page lands directly under the space it is already
+in, which is the way up and wants no second spelling. It is not a field on
+`edit` because it rewrites the depth of everything below the page and has
+refusals no other change has: under itself, past the third level, or onto a
+slug that is taken where it would land. pa hands each of those over in the
+instance's own words.
+
+`delete` takes the subtree with it and says how many pages went, because
+whoever asked about one page has to learn that three are gone. `restore` brings
+back exactly what went along; a page whose parent is still deleted is refused
+with the address to restore first. Both addresses stay spent until the purge,
+so a restore never lands on a name somebody has taken meanwhile (ADR 0013).
 
 **Creating a space, renaming it, the switch, deleting it and granting access to
 it are not on the console.** They are a human's acts, the one border VISION 18

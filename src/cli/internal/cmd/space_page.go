@@ -39,7 +39,7 @@ func newSpacePage(g *globals) *cobra.Command {
 		Use:   "page",
 		Short: "Pages in a space: the knowledge base's Markdown, addressed by the slugs from the space down.",
 	}
-	cmd.AddCommand(newSpacePageList(g), newSpacePageView(g), newSpacePageCreate(g), newSpacePageEdit(g), newSpacePageRename(g))
+	cmd.AddCommand(newSpacePageList(g), newSpacePageView(g), newSpacePageCreate(g), newSpacePageEdit(g), newSpacePageRename(g), newSpacePageMove(g), newSpacePageDelete(g), newSpacePageRestore(g))
 	return cmd
 }
 
@@ -254,4 +254,124 @@ func changeSpacePage(g *globals, cmd *cobra.Command, at address, changes map[str
 		return err
 	}
 	return printSpacePage(g, cmd, *resp.JSON200)
+}
+
+// newSpacePageMove hangs the page under another parent, with everything below
+// it. It is a step of its own rather than a field of `edit` because it rewrites
+// the depth of the whole subtree and has refusals no other change has — under
+// itself, past the third level, onto a slug that is taken where it would land.
+// That is the line ADR 0016 draws for the status, applied to the tree.
+//
+// One flag covers both fields of the contract. `--under` takes the same
+// address form as everything else here — `handbuch/product` is a page, and a
+// word without a slash is a space, `archive` meaning "directly under the space
+// archive". Left out, the page lands directly under the space it is already
+// in, which is the way up and wants no second spelling.
+func newSpacePageMove(g *globals) *cobra.Command {
+	var under string
+	cmd := &cobra.Command{
+		Use: "move ADDRESS [--under TARGET]", Short: "Hang the page under another parent, in this space or another one, with everything below it.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			at, err := parseAddress(args[0])
+			if err != nil {
+				return err
+			}
+
+			request := api.MoveSpacePageBody{Path: &at.path}
+			if under != "" {
+				space, path, found := strings.Cut(under, "/")
+				if space == "" || (found && path == "") {
+					return &config.UsageError{
+						Message: "--under is a page by its address, or a space by its name: handbuch/product, or archive.",
+					}
+				}
+				request.Space = &space
+				request.Parent = optional(path)
+			}
+
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			resp, err := c.MoveSpacePageWithResponse(cmd.Context(), at.space, request)
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			return printSpacePage(g, cmd, *resp.JSON200)
+		},
+	}
+	cmd.Flags().StringVar(&under, "under", "", "the new parent by its address, or a space by its name; absent means directly under the space it is in")
+	return cmd
+}
+
+// newSpacePageDelete takes the subtree with it and says how many went. A
+// caller who asked about one page has to learn that three are gone, which is
+// why the route answers a count rather than nothing at all.
+func newSpacePageDelete(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use: "delete ADDRESS", Short: "Soft-delete a page and every page under it; the addresses stay spent until the purge.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			at, err := parseAddress(args[0])
+			if err != nil {
+				return err
+			}
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			resp, err := c.DeleteSpacePageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress)
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), deleted(args[0], int(resp.JSON200.Deleted)))
+			return nil
+		},
+	}
+}
+
+// deleted is the sentence after a delete. The count is in it whenever it is
+// more than one, because a caller who asked about one page has to learn that
+// three are gone — and the route answers a number rather than nothing for
+// exactly that reason.
+func deleted(at string, many int) string {
+	if many > 1 {
+		return fmt.Sprintf("%s deleted with the %d pages under it; `pa space page restore %s` brings them back.", at, many-1, at)
+	}
+	return fmt.Sprintf("%s deleted; `pa space page restore %s` brings it back.", at, at)
+}
+
+// newSpacePageRestore brings back exactly what went along. A page whose parent
+// is still deleted is refused with the address to restore first: a live page
+// under a deleted one is the state the rule exists to prevent.
+func newSpacePageRestore(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use: "restore ADDRESS", Short: "Bring a deleted page back, with exactly the pages that went with it.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			at, err := parseAddress(args[0])
+			if err != nil {
+				return err
+			}
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			resp, err := c.RestoreSpacePageWithResponse(cmd.Context(), at.space, api.RestoreSpacePageBody{Path: &at.path})
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			return printSpacePage(g, cmd, *resp.JSON200)
+		},
+	}
 }
