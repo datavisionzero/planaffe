@@ -185,7 +185,9 @@ pa page edit architecture --body-file - --if-match "<updated_at>"
 pa page rename architecture betriebshandbuch   # the old slug leads nowhere afterwards (ADR 0021)
 pa page delete architecture · pa page restore architecture
 
-pa space search "onboarding pate"           # the knowledge base: the space, the address, the title, the excerpt under it
+pa space list                               # the knowledge base: every space you may see, the closed ones marked
+pa space view handbuch                      # one space: the head, and the tree of the pages in it
+pa space search "onboarding pate"           # the space, the address, the title, the excerpt under it
 pa space search "vertrag" --space personal  # one space by name
 pa space search "claim-held" --limit 5 --json
 
@@ -259,8 +261,31 @@ else.
 The word is `space` rather than `page` on purpose. `pa page` is the project's
 wiki and points somewhere else entirely, and a `pa page search` answering about
 the knowledge base while `pa page list` answered about a project would be the
-one ambiguity this product must not have. The rest of what a person does with a
-space and its pages hangs under `pa space` as it arrives.
+one ambiguity this product must not have. Everything a person does with a space
+and its pages hangs under `pa space`, and when the project's wiki is withdrawn
+(`VISION.md` 18.) the word comes free and this moves to `pa page`.
+
+`pa space list` is one line per space — the name, the title, and `closed to
+agents` where the switch is set. `pa space view` is one space whole: the head,
+and then the tree of the pages in it, each row carrying its address and
+indented by its depth. That is the division [ADR 0012](./adr/0012-a-list-returns-a-slim-issue-and-only-a-single-issue-is-complete.md)
+draws for the issue, a second time — a list stays slim, a single object is
+complete — and the tree is what makes a space complete, because its head is
+four lines. Under `--json` `view` is the space as the route answered it and the
+tree is not fetched at all; the tree has its own verb.
+
+**Nothing under `pa space` takes a project**, and none of it reads a
+`.planaffe`: the knowledge base belongs to no project, so there is nothing for a
+key to narrow. What the caller may not see is not filtered here but absent from
+the answer — a space closed to an agent is missing from an agent's list, and
+under its own name it is `not-found`, which is what a space that never existed
+answers ([ADR 0027](./adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)).
+
+**Creating a space, renaming it, the switch, deleting it and granting access to
+it are not on the console.** They are a human's acts, the one border VISION 18
+draws around what an agent does in the knowledge base, and they are done in the
+browser. The CLI deliberately does not mirror the whole interface here: the
+border is the bracket, not the work inside it.
 
 A page is addressed by its slug, which is given and never derived from the
 title. Renaming is its own verb rather than a flag on `edit`, because moving an

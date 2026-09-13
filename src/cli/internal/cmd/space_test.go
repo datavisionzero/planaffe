@@ -142,3 +142,180 @@ func TestSpaceSearchThatFoundNothingSaysSoAndIsNoError(t *testing.T) {
 		t.Errorf("stdout %q says nothing", out)
 	}
 }
+
+const spaces = `[{"name":"handbuch","title":"Handbuch","closed_to_agents":false,
+"author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},
+"created_at":"2026-09-12T09:00:00.000000Z","updated_at":"2026-09-12T09:00:00.000000Z","deleted_at":null},
+{"name":"personal","title":"Personalien","closed_to_agents":true,
+"author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},
+"created_at":"2026-09-12T09:00:00.000000Z","updated_at":"2026-09-12T09:00:00.000000Z","deleted_at":null}]`
+
+const tree = `[{"path":"company","space":"handbuch","slug":"company","parent":null,"depth":0,"title":"Die Firma",
+"updated_by":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},
+"created_at":"2026-09-12T09:00:00.000000Z","updated_at":"2026-09-12T09:00:00.000000Z"},
+{"path":"company/onboarding","space":"handbuch","slug":"onboarding","parent":"company","depth":1,"title":"Onboarding",
+"updated_by":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},
+"created_at":"2026-09-12T09:00:00.000000Z","updated_at":"2026-09-13T11:00:00.000000Z"}]`
+
+// answering serves each path its own body, so that a command asking two routes
+// is tested on what it did with both.
+func answering(bodies map[string]string) func(*http.Request) (int, string) {
+	return func(r *http.Request) (int, string) {
+		body, ok := bodies[r.URL.Path]
+		if !ok {
+			return 404, `{"status":404,"detail":"No such route here.","code":"not-found"}`
+		}
+		return 200, body
+	}
+}
+
+func TestSpaceListIsALinePerSpaceAndMarksTheClosedOne(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: answering(map[string]string{"/spaces": spaces})}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	// No `.planaffe` anywhere: the knowledge base has no project, so nothing
+	// under `pa space` may ask for one.
+	code, out, stderr := run(t, server, t.TempDir(), "space", "list")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if f.requests[0].URL.Path != "/spaces" || f.requests[0].Method != http.MethodGet {
+		t.Fatalf("%s %s", f.requests[0].Method, f.requests[0].URL.Path)
+	}
+	if !strings.Contains(out, "handbuch") || !strings.Contains(out, "Handbuch") {
+		t.Errorf("stdout %q", out)
+	}
+	if !strings.Contains(out, "closed to agents") {
+		t.Errorf("stdout %q says nothing about the switch", out)
+	}
+	// And it says it about the one space it is set on.
+	if strings.Count(out, "closed to agents") != 1 {
+		t.Errorf("stdout %q marks more than the closed space", out)
+	}
+}
+
+func TestSpaceListJSONIsTheAnswer(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: answering(map[string]string{"/spaces": spaces})}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, _ := run(t, server, t.TempDir(), "space", "list", "--json")
+
+	if code != exit.OK {
+		t.Fatalf("code %d", code)
+	}
+	for _, want := range []string{`"closed_to_agents": true`, `"name": "handbuch"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout %q lacks %s", out, want)
+		}
+	}
+}
+
+// The whole space: the head from its own route, the tree from the pages'.
+func TestSpaceViewPrintsTheHeadAndTheTree(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: answering(map[string]string{
+		"/spaces/handbuch":       `{"name":"handbuch","title":"Handbuch","closed_to_agents":false,"author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"created_at":"2026-09-12T09:00:00.000000Z","updated_at":"2026-09-12T09:00:00.000000Z","deleted_at":null}`,
+		"/spaces/handbuch/pages": tree,
+	})}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "view", "handbuch")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if len(f.requests) != 2 || f.requests[1].URL.Path != "/spaces/handbuch/pages" {
+		t.Fatalf("asked %d routes, the last %q", len(f.requests), f.requests[len(f.requests)-1].URL.Path)
+	}
+	if !strings.Contains(out, "handbuch  Handbuch") || !strings.Contains(out, "author: maintainer") {
+		t.Errorf("stdout %q is not the head", out)
+	}
+	// The address whole on every row, and the child indented under its parent.
+	if !strings.Contains(out, "\ncompany  ") || !strings.Contains(out, "\n  company/onboarding ") {
+		t.Errorf("stdout %q is not the tree", out)
+	}
+	if !strings.Contains(out, "2026-09-13") || !strings.Contains(out, "Onboarding") {
+		t.Errorf("stdout %q lacks when the page moved or what it is called", out)
+	}
+}
+
+// --json is the space as the route answered it, and the tree is not fetched:
+// two objects under one flag would be a shape of pa's own making.
+func TestSpaceViewJSONIsTheSpaceAndAsksNothingElse(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: answering(map[string]string{
+		"/spaces/handbuch": `{"name":"handbuch","title":"Handbuch","closed_to_agents":false,"author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"created_at":"2026-09-12T09:00:00.000000Z","updated_at":"2026-09-12T09:00:00.000000Z","deleted_at":null}`,
+	})}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "view", "handbuch", "--json")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if len(f.requests) != 1 {
+		t.Fatalf("asked %d routes", len(f.requests))
+	}
+	if !strings.Contains(out, `"name": "handbuch"`) {
+		t.Errorf("stdout %q", out)
+	}
+}
+
+func TestSpaceViewOfASpaceWithoutPagesSaysSo(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: answering(map[string]string{
+		"/spaces/handbuch":       `{"name":"handbuch","title":"Handbuch","closed_to_agents":false,"author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"created_at":"2026-09-12T09:00:00.000000Z","updated_at":"2026-09-12T09:00:00.000000Z","deleted_at":null}`,
+		"/spaces/handbuch/pages": `[]`,
+	})}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "view", "handbuch")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if !strings.Contains(out, "No pages in handbuch yet.") {
+		t.Errorf("stdout %q says nothing", out)
+	}
+}
+
+// A space this caller has not got — closed to it, or never granted — answers
+// what a space that does not exist answers, and pa adds nothing (ADR 0027).
+func TestSpaceViewOfASpaceThatIsNotThere(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(_ *http.Request) (int, string) {
+		return 404, `{"type":"about:blank","title":"Nothing by that key or id","status":404,"detail":"No space personal.","code":"not-found"}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "view", "personal")
+
+	if code != exit.NotFound {
+		t.Fatalf("code %d", code)
+	}
+	if out != "" || !strings.Contains(stderr, "No space personal.") {
+		t.Errorf("stdout %q, stderr %q", out, stderr)
+	}
+	// The tree was never asked for: the space is the answer.
+	if len(f.requests) != 1 {
+		t.Errorf("asked %d routes", len(f.requests))
+	}
+}
+
+func TestSpaceListWithoutASingleSpaceSaysSo(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: answering(map[string]string{"/spaces": `[]`})}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, stderr := run(t, server, t.TempDir(), "space", "list")
+
+	if code != exit.OK || stderr != "" {
+		t.Fatalf("code %d, stderr %q", code, stderr)
+	}
+	if !strings.Contains(out, "No spaces here.") {
+		t.Errorf("stdout %q", out)
+	}
+}

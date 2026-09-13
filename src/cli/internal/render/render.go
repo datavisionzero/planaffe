@@ -449,6 +449,41 @@ func PageSummaries(w io.Writer, items []api.PageSummary) {
 	}
 }
 
+// Spaces prints the knowledge base's brackets: the name, the title, and the
+// switch where it is closed. An agent never sees a closed one — it is absent
+// from the answer, not marked in it (ADR 0027) — so the marker is a user's
+// column and says nothing to anybody else.
+func Spaces(w io.Writer, spaces []api.Space) {
+	for _, s := range spaces {
+		closed := ""
+		if s.ClosedToAgents {
+			closed = "  closed to agents"
+		}
+		fmt.Fprintf(w, "%-24s %s%s\n", s.Name, s.Title, closed)
+	}
+}
+
+// Space prints one space: the head, and then the tree under it.
+func Space(w io.Writer, s api.Space) {
+	fmt.Fprintf(w, "%s  %s\n", s.Name, s.Title)
+	fmt.Fprintf(w, "closed to agents: %t  author: %s\n", s.ClosedToAgents, s.Author.Name)
+}
+
+// SpaceTree prints the pages of a space as the tree they are: the address,
+// indented by its depth, when it last moved, and the title.
+//
+// Every row carries the whole address rather than the slug alone. The
+// indentation already says where a page hangs, so the address is redundant to
+// the eye and is the one thing a reader needs next: it is what the page is
+// reached by, and it is unique where a slug is only unique under its parent
+// (ADR 0028).
+func SpaceTree(w io.Writer, items []api.SpacePageSummary) {
+	for _, p := range items {
+		address := strings.Repeat("  ", int(p.Depth)) + p.Path
+		fmt.Fprintf(w, "%-40s %-10s %s\n", address, p.UpdatedAt.Format("2006-01-02"), p.Title)
+	}
+}
+
 // Terminal says whether w is a terminal — the one question that decides
 // whether anything but text is written. A buffer, a pipe and a file are all
 // "no", which is what keeps `pa space search … > hits.txt` free of escapes.

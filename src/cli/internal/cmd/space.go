@@ -12,22 +12,112 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/render"
 )
 
-// newSpace is the knowledge base on the console. It carries one verb today —
-// the search — and the rest of what a person does with a space and its pages
-// hangs under it later.
+// newSpace is the knowledge base on the console.
 //
 // The word is `space` and not `page` on purpose. `pa page` is the project's
 // wiki and points somewhere else entirely; a `pa page search` that answered
 // about the knowledge base while `pa page list` answered about a project would
 // be the one ambiguity this product must not have. A page of the knowledge
-// base hangs on a space, so it is reached through one.
+// base hangs on a space, so it is reached through one. When the project's wiki
+// is withdrawn (VISION 18) the word comes free and this moves to `pa page`;
+// that is the epic that takes the wiki away, not this one.
+//
+// What is not here is what an agent may not do: creating a space, renaming it,
+// the switch, deleting it and granting access to it. Those are a human's acts
+// and they stay in the browser for now — the CLI does not mirror the whole
+// interface here, and the border is the bracket rather than the work in it
+// (VISION 18, ADR 0027).
 func newSpace(g *globals) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "space",
-		Short: "Spaces: the knowledge base's bracket, and the search across the pages in it.",
+		Short: "Spaces: the knowledge base's bracket, the pages in it, and the search across them.",
 	}
-	cmd.AddCommand(newSpaceSearch(g))
+	cmd.AddCommand(newSpaceList(g), newSpaceView(g), newSpaceSearch(g))
 	return cmd
+}
+
+// newSpaceList is the knowledge base seen from outside: what brackets there
+// are. Nothing is filtered here — a space the caller may not see is absent
+// from the answer, and one closed to an agent is absent from an agent's
+// answer, which is the same absence for the same reason (ADR 0027).
+func newSpaceList(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use: "list", Short: "Every space you may see, by name. What is not in it is not there for you.", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// No project: the knowledge base has none, so nothing here asks
+			// for a `.planaffe` or for --project.
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			resp, err := c.ListSpacesWithResponse(cmd.Context())
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), resp.JSON200)
+			}
+			if len(*resp.JSON200) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No spaces here. A space is a human's to create.")
+				return nil
+			}
+			render.Spaces(cmd.OutOrStdout(), *resp.JSON200)
+			return nil
+		},
+	}
+}
+
+// newSpaceView is one space complete: the head, and the tree of what stands in
+// it. That is the division ADR 0012 draws for the issue, a second time — a
+// list stays slim, a single object is whole — and the tree is what makes this
+// one whole, because a space is otherwise four lines of head.
+//
+// Under --json it is the space as the route answered it and the tree is not
+// fetched at all: two objects under one flag would be a shape of pa's own
+// invention, and the tree has its own verb in `pa space page list`.
+func newSpaceView(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use: "view NAME", Short: "One space: the head, and the tree of the pages in it.", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, c, err := g.load()
+			if err != nil {
+				return err
+			}
+			space, err := c.ReadSpaceWithResponse(cmd.Context(), args[0])
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(space.HTTPResponse, space.Body); err != nil {
+				return err
+			}
+			if g.json {
+				return render.JSON(cmd.OutOrStdout(), space.JSON200)
+			}
+
+			tree, err := c.ListSpacePagesWithResponse(cmd.Context(), args[0])
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(tree.HTTPResponse, tree.Body); err != nil {
+				return err
+			}
+
+			out := cmd.OutOrStdout()
+			render.Space(out, *space.JSON200)
+			// A space with nothing in it says so rather than ending on its
+			// head, the way `pa needs-you` answers an empty list.
+			if len(*tree.JSON200) == 0 {
+				fmt.Fprintf(out, "\nNo pages in %s yet.\n", args[0])
+				return nil
+			}
+			fmt.Fprintln(out)
+			render.SpaceTree(out, *tree.JSON200)
+			return nil
+		},
+	}
 }
 
 // newSpaceSearch is the one search across the knowledge base (VISION 18). It
