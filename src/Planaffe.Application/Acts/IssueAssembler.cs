@@ -13,7 +13,6 @@ public sealed class IssueAssembler(
     IIdentities identities,
     IEpics epics,
     IProjects projects,
-    IPages pages,
     ILabels labels,
     IReleases releases,
     ProjectScope scope)
@@ -88,12 +87,10 @@ public sealed class IssueAssembler(
         var projectLabels = await labels.ListAsync(project.Id, cancellationToken);
 
         // The project's instructions travel with the ticket, which is the whole
-        // of VISION 15.3: one page, delivered wherever the package is, and never
-        // a second route an agent has to know about. A designated page that is
-        // deleted resolves to nothing here and comes back with its restore.
-        var instructions = project.InstructionsPageId is { } instructionsId
-            ? (await pages.FindLiveManyAsync([instructionsId], cancellationToken)).SingleOrDefault()
-            : null;
+        // of VISION 15.3: one text, delivered wherever the package is, and
+        // never a second route an agent has to know about. It is a field on the
+        // project and nothing is looked up for it, which is exactly the point —
+        // it follows project access and no second rule (VISION 18).
         var releaseNames = await releases.CurrentNamesAsync([row.Id], cancellationToken);
         var allowedProjects = await scope.ProjectIdsAsync(cancellationToken);
 
@@ -135,7 +132,7 @@ public sealed class IssueAssembler(
                 project.TriageRequired,
                 project.ReviewRequired,
                 [.. projectLabels.Select(LabelShape.Of)],
-                instructions is null ? null : new InstructionsShape(instructions.Slug, instructions.Title, instructions.Body)),
+                project.Instructions),
             row.CreatedAt,
             row.UpdatedAt,
             row.ClosedAt);

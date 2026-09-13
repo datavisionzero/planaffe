@@ -10,7 +10,7 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/exit"
 )
 
-const project = `{"key":"PLAN","name":"planaffe","triage_required":false,"review_required":true,"instructions_page":"agents","created_at":"2026-09-02T14:00:00.000000Z","updated_at":"2026-09-02T14:00:00.000000Z"}`
+const project = `{"key":"PLAN","name":"planaffe","triage_required":false,"review_required":true,"instructions":"Tests run with just test.","created_at":"2026-09-02T14:00:00.000000Z","updated_at":"2026-09-02T14:00:00.000000Z"}`
 const label = `{"name":"bug","group":"kind","description":"Something that should work and does not."}`
 const epic = `{"key":"PLAN-E2","project":"PLAN","title":"Backend","description":"The plan.","status":"open","author":{"id":"0198e0c0-0000-7000-8000-000000000002","kind":"user","name":"maintainer"},"labels":[` + label + `],"progress":{"total":7,"closed":5,"done":4,"canceled":1},"created_at":"2026-09-02T14:00:00.000000Z","updated_at":"2026-09-02T14:00:00.000000Z","closed_at":null}`
 
@@ -59,8 +59,6 @@ func TestProjectLabelAndEpicVerbsHitTheirEndpoints(t *testing.T) {
 		{[]string{"project", "list"}, "GET", "/projects", nil, "PLAN"},
 		{[]string{"project", "view"}, "GET", "/projects/PLAN", nil, "review required: true"},
 		{[]string{"project", "edit", "PLAN", "--triage-required", "true", "--name", "renamed"}, "PATCH", "/projects/PLAN", map[string]any{"triage_required": true, "name": "renamed"}, ""},
-		{[]string{"project", "edit", "PLAN", "--instructions-page", "agents"}, "PATCH", "/projects/PLAN", map[string]any{"instructions_page": "agents"}, "instructions: agents"},
-		{[]string{"project", "edit", "PLAN", "--instructions-page", "none"}, "PATCH", "/projects/PLAN", map[string]any{"instructions_page": nil}, ""},
 		{[]string{"project", "delete", "PLAN", "--confirm", "plan"}, "DELETE", "/projects/PLAN", nil, "PLAN deleted"},
 		{[]string{"project", "restore", "PLAN"}, "POST", "/projects/PLAN/restore", nil, "PLAN"},
 		{[]string{"label", "list"}, "GET", "/projects/PLAN/labels", nil, "Something that should work"},
@@ -168,5 +166,40 @@ func TestProjectLabelAndEpicVerbsHitTheirEndpoints(t *testing.T) {
 	}
 	if !canceled {
 		t.Error("--cancel-open cancels the open issue in the same command")
+	}
+}
+
+// The instructions are a Markdown field like every other one the CLI writes:
+// from a file or stdin, never from an editor (VISION 6.1). `pa project view`
+// says that there are some and not what they say — a project is read to be
+// administered, and the text arrives with a ticket (VISION 15.5).
+func TestProjectEditWritesTheInstructionsFromStdin(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(*http.Request) (int, string) { return 200, project }}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	code, out, errOut := runWith(t, server, repository(t, "project = PLAN\n"), "Tests run with just test.\n",
+		"project", "edit", "PLAN", "--instructions-file", "-")
+	if code != exit.OK || errOut != "" {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+
+	var body map[string]any
+	_ = json.Unmarshal([]byte(f.bodies[len(f.bodies)-1]), &body)
+	if body["instructions"] != "Tests run with just test." {
+		t.Errorf("body = %v", body)
+	}
+	if !strings.Contains(out, "instructions: 25 characters") {
+		t.Errorf("view says nothing about the instructions:\n%s", out)
+	}
+
+	// A blank text takes them away, and it is the whole way to do that.
+	code, _, errOut = runWith(t, server, repository(t, "project = PLAN\n"), "", "project", "edit", "PLAN", "--instructions-file", "-")
+	if code != exit.OK || errOut != "" {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+	_ = json.Unmarshal([]byte(f.bodies[len(f.bodies)-1]), &body)
+	if body["instructions"] != "" {
+		t.Errorf("blank did not clear: %v", body)
 	}
 }

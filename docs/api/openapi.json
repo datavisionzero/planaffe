@@ -2041,7 +2041,7 @@
         "tags": [
           "planaffe"
         ],
-        "summary": "Change the name, the switches or the instructions page. Users only; the key is immutable.",
+        "summary": "Change the name, the switches or the instructions. Users only; the key is immutable.",
         "operationId": "ChangeProject",
         "parameters": [
           {
@@ -8088,7 +8088,7 @@
           "name",
           "triage_required",
           "review_required",
-          "instructions_page"
+          "instructions"
         ],
         "type": "object",
         "properties": {
@@ -8110,7 +8110,7 @@
               "boolean"
             ]
           },
-          "instructions_page": {
+          "instructions": {
             "type": [
               "null",
               "string"
@@ -8966,25 +8966,6 @@
             "$ref": "#/components/schemas/IdentityKind"
           },
           "name": {
-            "type": "string"
-          }
-        }
-      },
-      "Instructions": {
-        "required": [
-          "slug",
-          "title",
-          "body"
-        ],
-        "type": "object",
-        "properties": {
-          "slug": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "body": {
             "type": "string"
           }
         }
@@ -10004,7 +9985,7 @@
           "name",
           "triage_required",
           "review_required",
-          "instructions_page",
+          "instructions",
           "created_at",
           "updated_at"
         ],
@@ -10022,7 +10003,7 @@
           "review_required": {
             "type": "boolean"
           },
-          "instructions_page": {
+          "instructions": {
             "type": [
               "null",
               "string"
@@ -10068,13 +10049,9 @@
             }
           },
           "instructions": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/Instructions"
-              }
+            "type": [
+              "null",
+              "string"
             ]
           }
         }

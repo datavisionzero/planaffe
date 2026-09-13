@@ -101,7 +101,7 @@ const issue = `{"key":"PLAN-42","project":"PLAN","title":"Settle the claim","des
 "blocked_by":[{"key":"PLAN-40","title":"The schema","status":"done","open":false,"result":"Four tables, and the view derives the status."}],"blocks":[],
 "open_questions":0,"open_blockers":0,"open_sub_issues":0,"comments":[],"questions":[],
 "project_context":{"key":"PLAN","name":"planaffe","triage_required":false,"review_required":false,"labels":[],
-"instructions":{"slug":"agents","title":"How work runs here","body":"Tests run here with just test, and no dependency lands without asking."}},
+"instructions":"Tests run here with just test, and no dependency lands without asking."},
 "created_at":"2026-09-02T14:00:00.000000Z","updated_at":"2026-09-02T14:03:07.123456Z","closed_at":null}`
 
 const reasons = `{"blocked":3,"waiting_for_answer":2,"in_progress":4,"in_review":5,"parked":6,"not_ready":1,"assigned_elsewhere":0}`
@@ -130,7 +130,7 @@ func TestNextClaimPrintsTheIssueAndSendsWhatEveryWriteCarries(t *testing.T) {
 	// decided — in that order, widest first, and none of it as a reference to
 	// fetch afterwards.
 	for _, want := range []string{
-		"## How work runs here (PLAN/agents)",
+		"## Instructions (PLAN)",
 		"Tests run here with just test, and no dependency lands without asking.",
 		"## What PLAN-40 decided  The schema",
 		"Four tables, and the view derives the status.",
@@ -139,7 +139,7 @@ func TestNextClaimPrintsTheIssueAndSendsWhatEveryWriteCarries(t *testing.T) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Index(out, "How work runs here") > strings.Index(out, "The plan.") {
+	if strings.Index(out, "## Instructions (PLAN)") > strings.Index(out, "The plan.") {
 		t.Errorf("the project's instructions belong above the epic's document:\n%s", out)
 	}
 

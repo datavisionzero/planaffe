@@ -106,7 +106,7 @@ create table project (
     review_required    boolean     not null default false,
     last_issue_number  integer     not null default 0,
     last_epic_number   integer     not null default 0,
-    instructions_page_id uuid      references page (id) on delete set null,
+    instructions       text,
     created_by         uuid        not null references identity (id),
     created_at         timestamptz not null,
     updated_at         timestamptz not null,
@@ -117,15 +117,15 @@ create table project (
 create unique index project_key on project (key);
 ```
 
-**`instructions_page_id` is the page every agent is handed with its ticket**
-(VISION 15.3, `CONTEXT.md`, Instructions). One page per project and not a flag
-on each of them, so the context an agent carries cannot grow by marking more of
-them. It is the page's id and not its slug, so that renaming the address the
-wiki reaches it by (ADR 0021) leaves the designation where it was. `on delete
-set null` is the whole of the cleanup: the purge takes a page whose grace
-period has passed without asking anybody, and the project simply stops pointing
-at one. While a designated page is soft-deleted the pointer stands and delivers
-nothing, and the restore brings it back.
+**`instructions` is the text every agent is handed with its ticket** (VISION
+15.3, `CONTEXT.md`, Instructions). One text per project and not a flag on any
+number of documents, so the context an agent carries cannot grow by marking
+more of them. It is a column and not a reference to a document elsewhere,
+because it travels inside the context package and so has to follow project
+access and no second rule (VISION 18): in a space it could be closed to the
+agent that needs it. `null` and not the empty string where a project carries
+none — the write path collapses a blank text into `null`, so the two never
+disagree.
 
 The project key matches `^[A-Z][A-Z0-9]{1,9}$` — upper case, no hyphen, because
 the hyphen is what separates it from the number in `PLAN-42` and from `E` in

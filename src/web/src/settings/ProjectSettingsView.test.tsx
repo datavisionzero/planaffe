@@ -55,29 +55,30 @@ it("moves between areas without growing the address", async () => {
   expect(await screen.findByRole("heading", { name: "Members" })).toBeInTheDocument();
 });
 
-// One page of the wiki is the project's instructions (`CONTEXT.md`,
-// Instructions). The screen designates it and does not edit it: the text is an
-// ordinary page, written where every other page is written.
-it("designates one page of the wiki as the project's instructions", async () => {
+// The instructions are a text on the project (`CONTEXT.md`, Instructions).
+// They are written here, because since VISION 18 there is no document
+// elsewhere to point at — and this is the one text that must follow project
+// access and no second rule.
+it("writes the text every agent is handed with every ticket", async () => {
   const instance = installInstance({
-    "GET /projects/PLAN": aProject,
+    "GET /projects/PLAN": { ...aProject, instructions: "Tests run with `just test`." },
     "GET /projects/PLAN/users": [],
-    "GET /projects/PLAN/pages": [
-      { slug: "agents", project: "PLAN", title: "How work runs here", labels: [], updated_by: aUser, created_at: "", updated_at: "" },
-      { slug: "architecture", project: "PLAN", title: "Architecture", labels: [], updated_by: aUser, created_at: "", updated_at: "" },
-    ],
-    "PATCH /projects/PLAN": { ...aProject, instructions_page: "agents" },
+    "PATCH /projects/PLAN": { ...aProject, instructions: "No dependency lands without asking." },
   });
   renderAt("/PLAN/settings/instructions", <SessionProvider value={{ me: aUser, signOut: vi.fn() }}><Routes><Route path="/:project/settings/*" element={<ProjectSettingsView />} /></Routes></SessionProvider>);
   const user = userEvent.setup();
 
-  await user.click(await screen.findByRole("combobox", { name: "Instructions page" }));
-  await user.click(await screen.findByRole("option", { name: /agents/ }));
+  // What stands on the project is what the field opens with. By role, because
+  // the section around it carries the same name.
+  const field = await screen.findByRole("textbox", { name: "Instructions" });
+  expect(field).toHaveValue("Tests run with `just test`.");
+
+  await user.clear(field);
+  await user.type(field, "No dependency lands without asking.");
+  await user.click(screen.getByRole("button", { name: "Save instructions" }));
 
   expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
   const request = instance.calls.find((call) => call.method === "PATCH")!;
-  expect(await request.json()).toEqual({ instructions_page: "agents" });
-
-  // Chosen, the page is one click away: the text is edited in the wiki.
-  expect(await screen.findByRole("link", { name: "Open agents" })).toHaveAttribute("href", "/PLAN/pages/agents");
+  expect(await request.json()).toEqual({ instructions: "No dependency lands without asking." });
+  expect(field).toHaveValue("No dependency lands without asking.");
 });

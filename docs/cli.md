@@ -164,7 +164,7 @@ Projects, labels, epics, pages and releases:
 ```
 pa project create PLAN "planaffe" [--triage-required] [--review-required]
 pa project list · pa project view [KEY] · pa project edit PLAN --review-required true --name "…"
-pa project edit PLAN --instructions-page agents      # the one page every agent is handed with every ticket; none takes it away
+pa project edit PLAN --instructions-file -           # the text every agent is handed with every ticket; a blank text takes it away
 pa project access list PLAN
 pa project access grant PLAN <user-id> · pa project access revoke PLAN <user-id> # administrators only
 pa project delete PLAN --confirm PLAN      # the key typed twice, never prompted for; administrators only

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 import { api, describe, type Project, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Picker, type Choice } from "@/components/ui/picker";
 import { useSession } from "@/session/useSession";
 import { ActionDialog } from "@/shared/ActionDialog";
+import { MarkdownField } from "@/shared/MarkdownField";
 import { submitting } from "./forms";
 import { Row, Rows, Said, Section, SettingsShell } from "./SettingsShell";
 
@@ -80,72 +80,59 @@ function General() {
 }
 
 /**
- * Which page of the wiki every agent is handed with every ticket
- * (`CONTEXT.md`, Instructions). One page and not a mark on any number of them:
- * three marked pages would be three pages of context on every ticket, and that
- * budget is the point. The text is not edited here — it is an ordinary page,
- * written where every other page is written, and this screen only says which
- * one it is.
+ * The text every agent is handed with every ticket (`CONTEXT.md`,
+ * Instructions). It is a field on the project and not a document somewhere
+ * else: it travels inside the context package, so it has to follow project
+ * access and no second rule — in a space it could be closed to the agent that
+ * needs it (VISION 18). One text and not a mark on any number of documents,
+ * because the context an agent carries is the budget the whole idea is about.
  */
 function Instructions() {
   const { project: key } = useParams();
   const [project, setProject] = useState<Project>();
-  const [pages, setPages] = useState<Schemas["PageSummary"][]>([]);
+  const [instructions, setInstructions] = useState("");
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let current = true;
     void (async () => {
-      const [read, listed] = await Promise.all([
-        api.GET("/projects/{key}", { params: { path: { key: key! } } }),
-        api.GET("/projects/{key}/pages", { params: { path: { key: key! } } }),
-      ]);
+      const { data } = await api.GET("/projects/{key}", { params: { path: { key: key! } } });
       if (!current) return;
-      setProject(read.data);
-      setPages(listed.data ?? []);
+      setProject(data);
+      setInstructions(data?.instructions ?? "");
     })();
     return () => { current = false; };
   }, [key]);
 
-  const chosen = project?.instructions_page ?? "";
-  const choices: Choice[] = [
-    { id: "", name: "None", hint: "Agents are handed the ticket and nothing else" },
-    ...pages.map((page) => ({ id: page.slug, name: page.slug, hint: page.title })),
-  ];
-
-  async function designate(slug: string) {
+  async function save() {
     setNotice("");
     const r = await api.PATCH("/projects/{key}", {
       params: { path: { key: key! } },
       // Only this field: every property of the change is required in the
       // contract, and a change that names the others would write them too.
-      body: { instructions_page: slug === "" ? null : slug } as never,
+      body: { instructions } as never,
     });
     if (!r.data) { setNotice(describe(r.error, r.response.status)); return; }
     setProject(r.data);
+    setInstructions(r.data.instructions ?? "");
     setNotice("Saved.");
   }
 
   return (
     <Section
       title="Instructions"
-      description="One page of this project's wiki, delivered to every agent with every ticket — what holds for all work here, whoever does it."
+      description="Delivered to every agent with every ticket — what holds for all work here, whoever does it and in whichever repository."
     >
       {project && (
-        <div className="grid max-w-lg gap-3">
-          <Picker
-            label="Instructions page"
-            placeholder="None"
-            empty={pages.length === 0 ? "This project has no pages yet." : "No page of this project matches."}
-            choices={choices}
-            value={chosen === "" ? [] : [chosen]}
-            onChange={(slugs) => void designate(slugs[0] ?? "")}
+        <div className="grid max-w-3xl gap-3">
+          <MarkdownField
+            label="Instructions"
+            value={instructions}
+            onChange={setInstructions}
+            onSubmit={() => void save()}
+            hint="Markdown. Leave it empty and agents are handed the ticket and nothing else."
           />
-          {chosen !== "" && (
-            <Link className="w-fit text-sm underline underline-offset-4" to={`/${key}/pages/${chosen}`}>
-              Open {chosen}
-            </Link>
-          )}
+          <Button type="button" className="w-fit" onClick={() => void save()}>Save instructions</Button>
         </div>
       )}
       <Said notice={notice} />

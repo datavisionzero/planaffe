@@ -132,8 +132,8 @@ func Issue(w io.Writer, issue api.Issue) {
 	// The context package, widest first: what holds for the whole project, then
 	// for the theme, then the ticket itself (VISION 15.5). The instructions are
 	// printed here and nowhere else, because this is where the package arrives.
-	if i := issue.ProjectContext.Instructions; i != nil && i.Body != "" {
-		fmt.Fprintf(w, "\n## %s (%s/%s)\n\n%s\n", i.Title, issue.ProjectContext.Key, i.Slug, i.Body)
+	if i := issue.ProjectContext.Instructions; i != nil && *i != "" {
+		fmt.Fprintf(w, "\n## Instructions (%s)\n\n%s\n", issue.ProjectContext.Key, *i)
 	}
 	if issue.Epic != nil && issue.Epic.Description != "" {
 		fmt.Fprintf(w, "\n## %s (%s)\n\n%s\n", issue.Epic.Title, issue.Epic.Key, issue.Epic.Description)
@@ -367,8 +367,10 @@ func plural(many int, thing string) string {
 func Project(w io.Writer, p api.Project) {
 	fmt.Fprintf(w, "%s  %s\n", p.Key, p.Name)
 	fmt.Fprintf(w, "triage required: %t  review required: %t", p.TriageRequired, p.ReviewRequired)
-	if p.InstructionsPage != nil {
-		fmt.Fprintf(w, "  instructions: %s", *p.InstructionsPage)
+	// Whether there are any, not the text: a project is read to be
+	// administered, and the instructions are read with a ticket.
+	if p.Instructions != nil && *p.Instructions != "" {
+		fmt.Fprintf(w, "  instructions: %d characters", len([]rune(*p.Instructions)))
 	}
 	fmt.Fprintln(w)
 }

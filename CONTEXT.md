@@ -154,12 +154,15 @@ its pages. It is being withdrawn in favour of the **Space page** below (VISION
 _Avoid_: wiki page, document, article, note, knowledge base
 
 **Instructions**:
-The one page a project designates as the text every agent is handed with every
+The Markdown a project carries as the text every agent is handed with every
 ticket — what holds for all work here, whoever does it and in whichever
-repository. One page per project and not a mark on any number of them: the
+repository. One text per project and not a mark on any number of documents: the
 context an agent carries is the budget the whole idea is about, and whoever
-needs more writes it into that page and notices it growing.
-_Avoid_: system prompt, project prompt, agent instructions, AGENTS.md, rules
+needs more writes it in here and notices it growing. It is a field on the
+project and not a document elsewhere, because it travels inside the ticket and
+so has to follow project access and no second rule (VISION 18).
+_Avoid_: system prompt, project prompt, agent instructions, AGENTS.md, rules,
+instructions page
 
 **Label**:
 A free tag defined per project, optionally carrying a one-line description of

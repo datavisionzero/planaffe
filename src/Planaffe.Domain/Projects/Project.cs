@@ -53,19 +53,21 @@ public sealed class Project
     public bool ReviewRequired { get; private set; }
 
     /// <summary>
-    /// The one page every agent is handed with every ticket
+    /// The text every agent is handed with every ticket
     /// (<c>CONTEXT.md</c>, Instructions; VISION 15.3), or <c>null</c> where the
-    /// project designates none. One page and not a flag on each of them: three
-    /// marked pages would be three pages of context on every ticket, and the
-    /// context budget is the resource the whole idea is about (VISION 6.1).
+    /// project carries none. Markdown, like a description, and deliberately a
+    /// field rather than a document somewhere else: it travels inside the
+    /// context package (VISION 15.5), so it has to follow project access and no
+    /// second rule. In a space it could be closed to the agent that needs it or
+    /// invisible to somebody who has the project, and a text that is sometimes
+    /// delivered is worse than one that is always there (VISION 18).
     /// </summary>
     /// <remarks>
-    /// It is the page's id and not its slug, so that renaming the address the
-    /// wiki reaches it by (ADR 0021) leaves the designation where it was. The
-    /// designation follows the page: a deleted one delivers nothing until it is
-    /// restored, and the purge clears this column with the row.
+    /// One text and not a mark on any number of documents: the context budget
+    /// is the resource the whole idea is about (VISION 6.1), and whoever needs
+    /// more instructions writes them in here and notices it growing.
     /// </remarks>
-    public Guid? InstructionsPageId { get; private set; }
+    public string? Instructions { get; private set; }
 
     public int LastIssueNumber { get; private init; }
 
@@ -87,13 +89,14 @@ public sealed class Project
         new(Guid.CreateVersion7(), ProjectKey.Normalize(key), NormalizeName(name), createdBy, createdAt);
 
     /// <summary>
-    /// Point the project at the page every agent is handed with its ticket, or
-    /// at none. Which page exists, and that it is one of this project's, is the
-    /// act's to establish; this type only holds the pointer.
+    /// Write the text every agent is handed with its ticket, or take it away.
+    /// Blank and <c>null</c> are the same thing, as everywhere a body is
+    /// written: a project carrying an empty instruction carries none.
     /// </summary>
-    public void Instruct(Guid? pageId, DateTimeOffset at)
+    public void Instruct(string? instructions, DateTimeOffset at)
     {
-        InstructionsPageId = pageId;
+        var trimmed = instructions?.Trim();
+        Instructions = string.IsNullOrEmpty(trimmed) ? null : trimmed;
         UpdatedAt = at;
     }
 

@@ -10,12 +10,12 @@ public sealed record CreateProjectRequest(string? Key, string? Name, bool? Triag
 
 /// <summary>
 /// Only what is present changes; the key is not among them.
-/// <c>instructions_page</c> is the slug of the page every agent is handed with
-/// every ticket, and present as <c>null</c> it takes the designation away. This
-/// type is the contract's; the act takes <see cref="ProjectChanges"/>, which
-/// tells absent from null.
+/// <c>instructions</c> is the Markdown every agent is handed with every ticket,
+/// and present as <c>null</c> — or blank — it takes the text away. This type is
+/// the contract's; the act takes <see cref="ProjectChanges"/>, which tells
+/// absent from null.
 /// </summary>
-public sealed record ChangeProjectRequest(string? Name, bool? TriageRequired, bool? ReviewRequired, string? InstructionsPage);
+public sealed record ChangeProjectRequest(string? Name, bool? TriageRequired, bool? ReviewRequired, string? Instructions);
 
 /// <summary>Projects (<c>docs/api.md</c>): read by anyone, changed by a user, deleted by an administrator.</summary>
 public static class ProjectEndpoints
@@ -68,7 +68,7 @@ public static class ProjectEndpoints
                 return await change.ExecuteAsync(key, Changes(body.RootElement), cancellationToken);
             })
             .WithName("ChangeProject")
-            .WithSummary("Change the name, the switches or the instructions page. Users only; the key is immutable.")
+            .WithSummary("Change the name, the switches or the instructions. Users only; the key is immutable.")
             .Accepts<ChangeProjectRequest>("application/json")
             .Produces<ProjectShape>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -160,8 +160,8 @@ public static class ProjectEndpoints
 
     // Present, present-as-null and absent are three things in a PATCH, and only
     // the raw document tells them apart — the same reading `PATCH /issues/{key}`
-    // does, for the same reason: `instructions_page` set to null takes the
-    // designation away, and leaving it out leaves it alone.
+    // does, for the same reason: `instructions` set to null takes the text
+    // away, and leaving it out leaves it alone.
     private static ProjectChanges Changes(JsonElement body)
     {
         if (body.ValueKind is not JsonValueKind.Object)
@@ -173,8 +173,8 @@ public static class ProjectEndpoints
             Text(body, "name"),
             Flag(body, "triage_required"),
             Flag(body, "review_required"),
-            body.TryGetProperty("instructions_page", out _),
-            Text(body, "instructions_page"));
+            body.TryGetProperty("instructions", out _),
+            Text(body, "instructions"));
     }
 
     private static string? Text(JsonElement body, string property) =>

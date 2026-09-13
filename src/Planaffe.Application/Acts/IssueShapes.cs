@@ -58,24 +58,24 @@ public sealed record QuestionShape(
     DateTimeOffset? AnsweredAt);
 
 /// <summary>
-/// The page a project designates as its instructions (<c>CONTEXT.md</c>,
-/// Instructions), as the context package carries it: the document itself, and
-/// the address it can be changed at.
-/// </summary>
-public sealed record InstructionsShape(string Slug, string Title, string Body);
-
-/// <summary>
 /// The project as the complete issue carries it: the switches, the labels with
 /// their descriptions, and the instructions every agent is handed with every
-/// ticket.
+/// ticket (<c>CONTEXT.md</c>, Instructions).
 /// </summary>
+/// <remarks>
+/// <paramref name="Instructions"/> is the Markdown itself and not a reference
+/// to it. It was an object with a slug and a title while the text lived in a
+/// page of the project's wiki; the wiki is withdrawn (VISION 18) and what the
+/// package promises an agent is a text, not a document it would then have to
+/// go and read.
+/// </remarks>
 public sealed record ProjectContextShape(
     string Key,
     string Name,
     bool TriageRequired,
     bool ReviewRequired,
     IReadOnlyList<LabelShape> Labels,
-    InstructionsShape? Instructions);
+    string? Instructions);
 
 /// <summary>
 /// The complete issue — the context package of VISION 15.5: the ticket, its

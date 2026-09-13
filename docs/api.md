@@ -124,13 +124,13 @@ is what the work starts from, and a successor has decided nothing yet. It is
 `null` where the blocker recorded none, and on a link into a project the caller
 does not reach, which stays hidden and assumed open as it always was.
 
-`project_context.instructions` is the page the project designates (VISION
-15.3), or `null` — the document itself and the slug it can be changed at. One
-page and not a flag on each of them: three marked pages would be three pages of
-context on every ticket, and the context budget is the resource the idea is
-about. It is the same page the wiki serves at
-`GET /projects/{key}/pages/{slug}`, not a second kind of Markdown on the
-project.
+`project_context.instructions` is the project's instructions as Markdown
+(VISION 15.3), or `null` where it carries none. The text itself and not a
+reference to it: it was an object with a slug and a title while it lived in a
+page of the project's wiki, and the wiki is withdrawn (VISION 18) — what the
+package promises is a text, not a document to go and read. One text and not a
+flag on any number of documents: the context budget is the resource the idea is
+about.
 
 `EpicSummary` and `Epic`:
 
@@ -163,15 +163,14 @@ what last.
 
 ```json
 { "key": "PLAN", "name": "planaffe", "triage_required": false, "review_required": false,
-  "instructions_page": "agents", "created_at": "…", "updated_at": "…" }
+  "instructions": "Tests run with `just test`.", "created_at": "…", "updated_at": "…" }
 ```
 
-`instructions_page` is the slug of the page every agent is handed with every
-ticket, or `null` where the project designates none. The text is not here: a
-project is read to be administered, and the instructions are read with a
-ticket, where `ProjectContext` carries them. The designation follows the page —
-it goes quiet while the page is deleted, comes back with the restore, and the
-purge takes it with the row.
+`instructions` is the Markdown every agent is handed with every ticket, or
+`null` where the project carries none. It is here because there is nowhere else
+to read or write it: it is a field on the project since VISION 18, so that it
+follows project access and no second rule. The delivery is still
+`ProjectContext` inside the package, and this is where it is administered.
 
 `User`, `BrowserSession` and `SmtpStatus`:
 
@@ -434,7 +433,7 @@ metadata back channel (`PATCH /me/metadata`) is cut two.
 | `POST` | `/projects` | user | `{ key, name, triage_required?, review_required? }` → 201 `Project`, with the `kind` label group and the creator's project access created |
 | `GET` | `/projects` | any | every project the caller sees; no pagination |
 | `GET` | `/projects/{key}` | any | `Project` |
-| `PATCH` | `/projects/{key}` | assigned user | `{ name?, triage_required?, review_required?, instructions_page? }`; the key is immutable. `instructions_page` is the slug of one of the project's live pages, and `null` takes the designation away; a slug that names nothing is `validation` on that field. Users only, like the rest of this row: an agent that could designate the page would be writing its own instructions |
+| `PATCH` | `/projects/{key}` | assigned user | `{ name?, triage_required?, review_required?, instructions? }`; the key is immutable. `instructions` is the Markdown every agent is handed with every ticket, and `null` — or a blank text — takes it away. Users only, like the rest of this row: an agent that could write them would be writing its own brief |
 | `DELETE` | `/projects/{key}` | administrator | soft delete of the project and everything in it; 204. The CLI asks for the key to be typed; the API does not |
 | `POST` | `/projects/{key}/restore` | administrator | back, with everything in it, into whatever state it was |
 
