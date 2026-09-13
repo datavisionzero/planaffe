@@ -73,7 +73,8 @@ under the old parent may be taken under the new one, and a subtree that fits at
 its current depth may not fit under a deeper parent. Those are refusals of the
 move, not of the page, and they say which of the two happened.
 
-**A project's page keeps ADR 0021 unchanged while it exists.** Its slug is
-unique within the project and its address carries no tree. The two rules stand
-side by side until the project's wiki is withdrawn (VISION 18), and then only
-this one is left.
+**This is the only rule left.** A project's page kept ADR 0021 unchanged while
+it existed — a slug unique within the project, an address with no tree — and
+the two stood side by side until the project's wiki was withdrawn (VISION 18).
+It is withdrawn, its pages were carried into spaces, and a page is addressed
+one way in the whole product.

@@ -171,7 +171,7 @@ published output.
 
 Its own layout follows the shell
 ([ADR 0006](./adr/0006-the-web-application-is-a-shell-before-it-is-a-screen.md)):
-one folder per area — `shell`, `issues`, `epics`, `pages`, `releases`,
+one folder per area — `shell`, `issues`, `epics`, `releases`,
 `projects`, `spaces`, `settings`, `session`, `shared`, `api` — where each area owns its screens and
 `shell/Shell.tsx` owns the routes. `spaces` is the knowledge base, which is the
 second area of the same application rather than a second application

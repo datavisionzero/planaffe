@@ -6,6 +6,17 @@ over HTTP. It gets no key and no number, it is the only object in the product
 that does not, and renaming it is allowed: the old slug leads nowhere
 afterwards and the rename stands in the history.
 
+> **The subject of this decision no longer exists, and the decision does.** The
+> project's wiki is withdrawn (VISION 18, [ADR 0027](./0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)),
+> so no page hangs in a project and no address looks like the one above any
+> more. What the page inherited is everything below: a page of the knowledge
+> base is still reached by a name rather than a key, still renameable, and
+> still forwards nothing.
+> [ADR 0028](./0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)
+> is where that reasoning stands today, and it changed one sentence of this one
+> — a slug is unique under its parent rather than within a project. Read this
+> for the why and that one for the shape.
+
 ## Why
 
 A key is the right address for a thing that is talked about while it is being
@@ -72,4 +83,6 @@ characters a slug may carry belongs to the HTTP contract, not here.
 
 **Uniqueness is per project, like everything else.** Two projects may both have
 `architecture`, and neither knows about the other — the project is in the
-address in both directions.
+address in both directions. *(This is the one paragraph ADR 0028 reversed: a
+slug is unique under its parent, and there is no project in the address at
+all.)*

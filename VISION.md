@@ -305,7 +305,7 @@ Epic and release are orthogonal and do not fight: the **epic says what belongs t
 
 ### The Page
 
-> **Superseded by the knowledge base (18.), 12 September 2026.** The page is built and works, and it leaves the project again: the knowledge this section is about turned out to have a larger bracket than a project has, and one that carries access of its own. What stands below stands as the reasoning — why knowledge belongs on the instance rather than in the repository, and why a product for work needs a place for thinking. What changes is where a page lives, who may see it, and that it may have children. Two sentences below are reversed outright and say so where they stand. The one text that cannot follow the page into a space is the instructions, which come back to the project as a field of their own (15.3, 18.).
+> **Superseded by the knowledge base (18.), 12 September 2026; withdrawn 13 September 2026.** The page is built and works, and it left the project again: the knowledge this section is about turned out to have a larger bracket than a project has, and one that carries access of its own. What stands below stands as the reasoning — why knowledge belongs on the instance rather than in the repository, and why a product for work needs a place for thinking. What changes is where a page lives, who may see it, and that it may have children. Two sentences below are reversed outright and say so where they stand. The one text that could not follow the page into a space is the instructions, which came back to the project as a field of their own (15.3, 18.). The withdrawal is done: `/projects/{key}/pages` is gone, and the pages that were there were carried into a space of their own before the table fell.
 
 Everything above either is an issue or brackets one. A project also holds knowledge that is no assignment at all: the architecture, the conventions, what an operator has to know, the reasoning nobody wants to reconstruct twice. That is the **page** — a flat wiki, one per project.
 
@@ -634,7 +634,7 @@ The page (7.) is the one item decided after those three cuts had been designed. 
 - Password sign-in, revocable browser sessions, email invitation and password recovery
 - A complete CLI with machine-readable output
 - A responsive web interface
-- Pages: the project's flat wiki — Markdown addressed by a slug, with history and in the search (see 7.) — built, and withdrawn again when the knowledge base arrives (18.)
+- Pages: the project's flat wiki — Markdown addressed by a slug, with history and in the search (see 7.) — built, and withdrawn again with the knowledge base (18.); a page hangs in a space now
 - A Docker Compose setup and documentation
 
 **Not included (deliberately deferred):**
@@ -676,7 +676,7 @@ What that is good for: what does an epic really cost? Which model handles which 
 
 > **Absorbed into the page (7.) and built, 6 September 2026.** These instructions are one page the project designates, not a second kind of Markdown on the project, and building them separately would have left the product with two of them. They are delivered inside the context package (15.5) and nowhere else. What follows is the reasoning, which stands; only the place has changed — and one detail with it, because a switch on every page would have let the context grow by marking more of them.
 >
-> **And moved once more, 12 September 2026.** With the page leaving the project for a space of its own (18.), the instructions come back to the project as a field of their own. The argument against that field was that it would be a second kind of Markdown on the project; there is no longer a first. The argument for the field is stronger than it was: this is the one text every agent is handed with every ticket, and it must follow project access and no second rule.
+> **And moved once more, 12 September 2026; built as a field 13 September 2026.** With the page leaving the project for a space of its own (18.), the instructions come back to the project as a field of their own. The argument against that field was that it would be a second kind of Markdown on the project; there is no longer a first. The argument for the field is stronger than it was: this is the one text every agent is handed with every ticket, and it must follow project access and no second rule. It is a column on the project, `instructions` in the contract, and the text itself inside the context package rather than a document to go and read.
 
 The user stores a text on the project that is delivered to every agent with every ticket — a kind of system prompt for the project. "Tests run with `just test`", "no new dependencies without asking", "migrations always reversible".
 
@@ -812,6 +812,8 @@ With that, the vision and all three cuts are decided, and the order of building
 is settled ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)).
 
 ## 18. The Knowledge Base
+
+> **Built, 13 September 2026.** The space, the tree, the interface, the search and the console stand, and the project's wiki is withdrawn: what was a project page was carried into a space of its own, and the instructions are a field on the project. What is below is the reasoning and it has not changed. Of what the last paragraph leaves open, none has been decided — a whole space still does not travel as a folder, the tree still sorts itself, and what happens to a page whose parent is deleted was answered by the tree rather than by this section: deleting takes the subtree along and restoring brings exactly it back.
 
 The tracker answers one question: what has to be done. Everything in the
 sections above either is an assignment or brackets one. This section is about

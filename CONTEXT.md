@@ -144,15 +144,6 @@ no name until publishing names it, freezes it and opens the next; a sub-issue
 ships with its parent.
 _Avoid_: milestone, version, sprint, iteration
 
-**Page**:
-A Markdown document in a project, addressed by its **Slug**: the project's flat
-wiki, and the place a plan lives until tickets are cut from it. Ordinary labels,
-history like an issue's, and `updated_at` as its version. No hierarchy, no
-comments, no attachments, no per-page access — whoever reaches the project reaches
-its pages. It is being withdrawn in favour of the **Space page** below (VISION
-18); while both exist, this entry is the one that hangs in a project.
-_Avoid_: wiki page, document, article, note, knowledge base
-
 **Instructions**:
 The Markdown a project carries as the text every agent is handed with every
 ticket — what holds for all work here, whoever does it and in whichever
@@ -218,19 +209,21 @@ every route an agent is ever given — the CLI, the HTTP API, and the MCP server
 when it comes. An agent inherits its owner's spaces minus every closed one.
 _Avoid_: private, secret, hidden, human-only, no-CLI
 
-**Space page**:
-A Markdown document in a space, addressed by the slugs from the space down —
-`/spaces/handbook/pages/company/onboarding` — and hanging under other pages at
-most three levels deep. It is the **Page** above with a place in a tree: the
-same title, body, history and `updated_at` as its version, guarded by
-`If-Match` the same way. It carries no labels, because a label is defined per
-project and a space has none, and its slug is unique under its parent rather
-than across the space ([ADR 0028](docs/adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)).
+**Page**:
+A Markdown document in a **Space**, addressed by the slugs from the space
+down — `/spaces/handbook/pages/company/onboarding` — and hanging under other
+pages at most three levels deep. A title, a body, a history like an issue's, and
+`updated_at` as its version, guarded by `If-Match` the same way. It carries no
+labels, because a label is defined per project and a space has none, and its
+slug is unique under its parent rather than across the space
+([ADR 0028](docs/adr/0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)).
 Deleting one takes its subtree along and restoring it brings that subtree back;
-siblings sort themselves by title, and no hand keeps an order. The prefix says
-which of the two the product means while both exist — when the project's wiki
-is withdrawn, this is simply the page.
-_Avoid_: wiki page, article, node, child page, document, subpage
+siblings sort themselves by title, and no hand keeps an order. A page hung on a
+project until the project's wiki was withdrawn (VISION 18); it was called a
+**Space page** while both existed, and now that only one does, it is simply the
+page. No comments, no attachments, no access of its own — access is the space's.
+_Avoid_: wiki page, article, node, child page, document, subpage, space page,
+note, knowledge base
 
 ## Keys
 
@@ -251,13 +244,12 @@ of its own.
 _Avoid_: id, number, reference
 
 **Slug**:
-The name that is an address rather than a key: a **Page** within its project,
-`/PLAN/pages/architecture`, a **Space** across the instance, `/spaces/handbuch`,
-and a **Space page** under its parent, where the address carries every slug from
-the space down. Those are what the product does not reach through a key, because
-all of them are named in running text rather than numbered. A slug is
-renameable, and the old one leads nowhere afterwards (ADR 0021, ADR 0027,
-ADR 0028).
+The name that is an address rather than a key: a **Space** across the instance,
+`/spaces/handbuch`, and a **Page** under its parent, where the address carries
+every slug from the space down. Those two are what the product does not reach
+through a key, because both are named in running text rather than numbered. A
+slug is renameable, and the old one leads nowhere afterwards (ADR 0021,
+ADR 0027, ADR 0028).
 _Avoid_: key, name, path, permalink, handle
 
 **Number**:

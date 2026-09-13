@@ -16,9 +16,10 @@ or three commands an agent actually runs.
 
 > Two things will point here rather than repeat it: `pa init`, which prints the
 > block when it wires a repository to an instance, and the end of the
-> installation guide. And when project-wide instructions for agents later live in
-> the instance itself (`VISION.md` 15.3), this text is what they start from —
-> written once on the server instead of once in every repository.
+> installation guide. And the project's instructions are on the instance now
+> (`VISION.md` 15.3) — a field on the project, delivered with every ticket — so
+> this text is what they start from, written once on the server instead of once
+> in every repository.
 
 ---
 
