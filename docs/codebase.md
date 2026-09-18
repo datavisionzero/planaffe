@@ -37,7 +37,12 @@ planaffe/
 │  ├─ operations.md           running, upgrading, the variables, backups
 │  ├─ cli.md                  pa: configuration, exit codes, verbs
 │  ├─ agents-md.md            the AGENTS.md block a user copies into their own repository
+│  ├─ skills.md               installing and using the optional product skills
 │  └─ api/openapi.json        the HTTP contract, checked in
+├─ skills/                    self-contained agent workflows distributed with the CLI
+│  ├─ planaffe-plan-epic/
+│  ├─ planaffe-answer-questions/
+│  └─ planaffe-deliver-epic/
 ├─ deploy/                    the Dockerfile, the Caddyfile, Compose (production and development), and nothing else
 ├─ src/
 │  ├─ Planaffe.Domain/        the rules
