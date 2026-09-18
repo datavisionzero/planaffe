@@ -85,8 +85,9 @@ backup.
 
 ## Agent skills
 
-Three optional [agent skills](docs/skills.md) cover planning an epic into issues,
-answering open questions together with a user, and delivering an epic through
+Four optional [agent skills](docs/skills.md) cover a read-only project overview
+with a next-step recommendation, planning an epic into issues, answering open
+questions together with a user, and delivering an epic through
 implementation, commits and merge. Install them into the agent working on your
 project; the skill folders are versioned here alongside the CLI.
 
