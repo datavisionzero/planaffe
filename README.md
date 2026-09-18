@@ -83,6 +83,13 @@ connects a repository to the instance and `pa issue create` is the fifth minute;
 [`docs/operations.md`](docs/operations.md) every variable, the upgrade and the
 backup.
 
+## Agent skills
+
+Three optional [agent skills](docs/skills.md) cover planning an epic into issues,
+answering open questions together with a user, and delivering an epic through
+implementation, commits and merge. Install them into the agent working on your
+project; the skill folders are versioned here alongside the CLI.
+
 ## Working on it
 
 The .NET 10 SDK and Docker. The integration tests bring up their own Postgres
