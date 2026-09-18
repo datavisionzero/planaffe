@@ -1,12 +1,13 @@
 # Agent skills
 
-planaffe ships three optional skills for agents working in repositories whose
+planaffe ships four optional skills for agents working in repositories whose
 issues live in planaffe. Each is a self-contained folder under [`skills/`](../skills),
 versioned with the CLI. They require `pa` configured for an agent identity and
 the target project. They do not install the CLI or provision credentials.
 
 | Skill | Outcome | Default selection |
 |---|---|---|
+| [`planaffe-project-overview`](../skills/planaffe-project-overview/SKILL.md) | Summarize unfinished work, questions and progress, and recommend a next step without changing anything | Current project, across all epics and repository labels |
 | [`planaffe-plan-epic`](../skills/planaffe-plan-epic/SKILL.md) | Create implementable issues with acceptance criteria and blockers | Oldest open epic with zero issues, counting done and canceled issues too |
 | [`planaffe-answer-questions`](../skills/planaffe-answer-questions/SKILL.md) | Discuss options with the user and save their answers | All open questions in the current project, across all epics |
 | [`planaffe-deliver-epic`](../skills/planaffe-deliver-epic/SKILL.md) | Implement, check, commit, push and merge an epic | Epic of the first workable issue in `pa next` order belonging to an open epic |
@@ -18,11 +19,12 @@ configuration never means permission to process the entire instance.
 
 ## Install
 
-For Codex, ask the built-in skill installer to install the three folders from
+For Codex, ask the built-in skill installer to install the four folders from
 this repository:
 
 ```text
 Use $skill-installer to install these skills from datavisionzero/planaffe:
+skills/planaffe-project-overview
 skills/planaffe-plan-epic
 skills/planaffe-answer-questions
 skills/planaffe-deliver-epic
@@ -30,7 +32,8 @@ skills/planaffe-deliver-epic
 
 Alternatively, copy the desired skill folders from a trusted checkout into the
 agent's skill directory. For repository-scoped Codex use, the resulting paths
-are `.agents/skills/planaffe-plan-epic/SKILL.md`,
+are `.agents/skills/planaffe-project-overview/SKILL.md`,
+`.agents/skills/planaffe-plan-epic/SKILL.md`,
 `.agents/skills/planaffe-answer-questions/SKILL.md` and
 `.agents/skills/planaffe-deliver-epic/SKILL.md`. Copy the folder, not just its
 contents. Other harnesses can use their own supported skill installation path;
@@ -47,12 +50,20 @@ In the repository to work on, invoke a skill by name. These examples use Codex
 syntax; `PROJ-E3` is a placeholder for an actual epic key:
 
 ```text
+$planaffe-project-overview
 $planaffe-plan-epic PROJ-E3
 $planaffe-plan-epic
 $planaffe-answer-questions
 $planaffe-deliver-epic PROJ-E3
 $planaffe-deliver-epic
 ```
+
+The project overview gives a short, read-only snapshot: open epics and their
+purpose, remaining issues, workable issues, open questions and reviews. It
+highlights partly finished epics, empty epics and work outside open epics, then
+recommends a concrete next step with a reason. It covers the whole current
+project, including other repository labels, and does not claim work, answer
+questions, change tickets or start implementation.
 
 Planning asks only for decisions it cannot resolve from the epic and code. It
 creates clear issues as ready and attaches a question to work still waiting on

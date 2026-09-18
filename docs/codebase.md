@@ -40,6 +40,7 @@ planaffe/
 │  ├─ skills.md               installing and using the optional product skills
 │  └─ api/openapi.json        the HTTP contract, checked in
 ├─ skills/                    self-contained agent workflows distributed with the CLI
+│  ├─ planaffe-project-overview/
 │  ├─ planaffe-plan-epic/
 │  ├─ planaffe-answer-questions/
 │  └─ planaffe-deliver-epic/
