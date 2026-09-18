@@ -48,6 +48,7 @@ public static class BrowserNavigation
 
             var asked = context.Request.Path;
             context.Request.Path = "/index.html";
+            SpaFiles.PrepareDocument(context.Response);
 
             try
             {

@@ -48,16 +48,21 @@ export function ProjectSwitcher({
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="sm" className="gap-1.5 px-2 font-medium" aria-label="Switch project" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-w-0 max-w-64 shrink gap-1.5 px-2 font-medium"
+            aria-label="Switch project"
+          />
         }
       >
-        <span className="font-mono text-xs font-medium tracking-wide text-brand">
+        <span className="max-w-16 truncate font-mono text-xs font-medium tracking-wide text-brand">
           {current?.key ?? "—"}
         </span>
-        <span className="hidden sm:inline">{current?.name ?? standing[projects.at]}</span>
+        <span className="hidden min-w-0 flex-1 truncate sm:block">{current?.name ?? standing[projects.at]}</span>
         <ChevronsUpDownIcon className="size-3.5 text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-56">
+      <DropdownMenuContent align="start" className="w-64 min-w-56">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="flex items-center justify-between">
             Projects
@@ -82,8 +87,8 @@ export function ProjectSwitcher({
               void navigate(`/${project.key}/${viewPath}`);
             }}
           >
-            <span className="w-14 font-mono text-xs text-muted-foreground">{project.key}</span>
-            <span className="flex-1 truncate">{project.name}</span>
+            <span className="w-14 shrink-0 truncate font-mono text-xs text-muted-foreground">{project.key}</span>
+            <span className="min-w-0 flex-1 truncate">{project.name}</span>
             {project.key === current?.key && <CheckIcon className="size-3.5" />}
           </DropdownMenuItem>
         ))}

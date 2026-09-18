@@ -59,6 +59,11 @@ export type Problem = Schemas["ProblemDetails"];
  * the server requires both. Bearer callers remain unaffected.
  */
 api.use({ onRequest({ request }) {
+  // Some screen addresses are API addresses too. Naming the representation
+  // keeps the JSON request separate from a cached document response once the
+  // instance's `Vary: Accept` is taken into account.
+  request.headers.set("Accept", "application/json");
+
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && !request.headers.has("Authorization")) {
     request.headers.set("X-Planaffe-CSRF", "1");
   }

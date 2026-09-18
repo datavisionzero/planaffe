@@ -12,8 +12,9 @@ namespace Planaffe.IntegrationTests;
 /// <remarks>
 /// What a navigation gets is the built application, which is not in this
 /// process: a test host has no <c>wwwroot</c> unless somebody built one beside
-/// it. So the assertion is the one that holds either way and is the whole
-/// point — a navigation is never answered with the API's JSON.
+/// it. The assertions therefore cover what holds either way: a navigation is
+/// never answered with the API's JSON, and its response cannot poison the
+/// cached JSON representation of the same address.
 /// </remarks>
 [Collection(nameof(PostgresCollection))]
 public sealed class BrowserNavigationTests(PostgresFixture postgres)
@@ -34,6 +35,8 @@ public sealed class BrowserNavigationTests(PostgresFixture postgres)
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.NotEqual("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("no-cache", response.Headers.CacheControl?.ToString());
+        Assert.Contains("Accept", response.Headers.Vary);
     }
 
     [Fact]
