@@ -187,6 +187,9 @@ background and taken up again the moment it is looked at. Where the instance
 stops answering, the number stays as it last was and the loop tries again with
 a growing pause: a navigation that flickered at every hiccup would be worse
 than one that is a few seconds behind.
+The frame also watches recently updated issues in the project. A changed issue
+wakes ordinary filtered lists and an open issue to reread their content and
+history; text being entered stays in place and an external version is announced.
 
 The overview is a dialog rather than a screen, so that a key can be looked up
 without leaving the list it is about. It is reached three ways — `?`, the

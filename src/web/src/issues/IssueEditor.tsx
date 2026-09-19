@@ -52,7 +52,7 @@ export function NewIssueView() {
   return <><PageHeader title="Create issue" /><IssueForm epic={search.get("epic") ?? undefined} submit="Create issue" saving={saving} refused={refused} onSubmit={save} onCancel={cancel} /></>;
 }
 
-export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSaved: (issue: Issue) => void; onCancel: () => void }) {
+export function EditIssueForm({ issue, onSaved, onCancel, external }: { issue: Issue; onSaved: (issue: Issue) => void; onCancel: () => void; external?: Issue }) {
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<Refusal>();
   // The version the next write is guarded with, and the issue a refusal handed
@@ -73,7 +73,7 @@ export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSa
       onSaved(answer.data);
     } catch { setRefused({ fields: {}, why: "The instance did not answer." }); } finally { setSaving(false); }
   }
-  return <IssueForm initial={issue} submit="Save changes" saving={saving} refused={refused} notice={conflict === undefined ? undefined : <Conflict opened={issue} current={conflict} />} onSubmit={save} onCancel={onCancel} />;
+  return <IssueForm initial={issue} submit="Save changes" saving={saving} refused={refused} notice={conflict === undefined ? undefined : <Conflict opened={issue} current={conflict} />} external={external} onSubmit={save} onCancel={onCancel} />;
 }
 
 /** The fields of the issue a person edits here, in the order the form has them. */
@@ -165,7 +165,7 @@ function startingDraft(initial: Issue | undefined, epic: string | undefined): Is
   return { title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name) ?? [], epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []) ?? [], status: initial?.status === "backlog" ? "backlog" : "todo" };
 }
 
-function IssueForm({ initial, epic, submit, saving, refused, notice, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; notice?: ReactNode; onSubmit: (draft: IssueDraft, completed: () => void) => void; onCancel: () => void }) {
+function IssueForm({ initial, epic, submit, saving, refused, notice, external, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; notice?: ReactNode; external?: Issue; onSubmit: (draft: IssueDraft, completed: () => void) => void; onCancel: () => void }) {
   const [start] = useState(() => startingDraft(initial, epic));
   const { project } = useParams();
   const { value: draft, setValue: setDraft, clear, recovery } = useDraft<IssueDraft>(initial ? `issue:${initial.key}:edit` : `issue:${project}:new:${epic ?? ""}`, start, initial?.updated_at ?? null);
@@ -201,6 +201,11 @@ function IssueForm({ initial, epic, submit, saving, refused, notice, onSubmit, o
     <LabelPicker label="Labels" labels={labels} value={draft.labels} onChange={(names) => set("labels", names)} onCreate={create} error={at.labels} />
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"><EpicPicker epics={epics} value={draft.epic} onChange={(key) => set("epic", key)} error={at.epic} /><IssuePicker label="Parent issue" project={project} exclude={initial ? [initial.key] : []} value={draft.parent === "" ? [] : [draft.parent]} onChange={(keys) => set("parent", keys[0] ?? "")} error={at.parent} /><AssigneePicker project={project} value={draft.assignee} onChange={(name) => set("assignee", name)} error={at.assignee} />{!initial && <IssuePicker label="Blocked by" project={project} multiple value={draft.blockedBy} onChange={(keys) => set("blockedBy", keys)} error={at.blocked_by} />}</div>
     {reopens && <p role="status" className="text-sm text-brand">{reopens}</p>}
+    {external && <div role="status" className="grid gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+      <p>This issue changed elsewhere. Your draft is kept. Saving will first check the server version.</p>
+      <details><summary className="cursor-pointer">Review the latest version</summary><p className="mt-2 font-medium">{external.title}</p><pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap">{external.description}</pre></details>
+      <Button type="button" size="sm" variant="outline" className="w-fit" onClick={leave}>Discard draft and load latest</Button>
+    </div>}
     {/* A conflict says everything the refusal's own sentence says, and says
         what to do about it, so it stands in its place rather than beside it. */}
     {notice ?? (refused?.why && <p role="alert" className="text-sm text-destructive">{refused.why}</p>)}

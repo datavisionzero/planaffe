@@ -27,18 +27,17 @@ const floor = 1_000;
  */
 const inProgressFilter = viewOf("in-progress").filter ?? {};
 
-type Known = { of: string; needsYou: number | null; inProgress: number | null; pulse: number };
+type Known = { of: string; needsYou: number | null; inProgress: number | null; pulse: number; issuesPulse: number };
 
 /**
- * The frame's reads of the two lists the navigation counts, and the wake pulse
- * the screen that lists the same work watches.
+ * The frame's reads of the two lists the navigation counts and the project's
+ * recently updated issues, with wake pulses for the screens that show them.
  *
  * They live once per project, above both the sidebar and the screens, because
  * a screen and the number read the same list and may not each hold a
  * connection for it: under HTTP/1.1 a browser has six per origin, and every
  * held one is a click that has to wait. That is one connection per list and
- * tab — two — and `limit=1` on both, because only `total` is wanted; the items
- * are the screen's.
+ * tab — three — and `limit=1` on each. The screens read their own full pages.
  *
  * Each loop is one read after another: the first plain, so that a list that is
  * empty is known to be empty, then held ones carrying that list's last `ETag`,
@@ -53,11 +52,11 @@ export function useAttentionState(project: string | undefined): Attention {
       return;
     }
 
-    // One controller for both loops: a read for a project that is no longer
+    // One controller for all loops: a read for a project that is no longer
     // open is dropped rather than allowed to answer into the wrong navigation.
     const stop = new AbortController();
 
-    // The two lists have validators of their own and change at their own
+    // The lists have validators of their own and change at their own
     // times, so they wait separately. Neither waits on the other's answer.
     void watch(
       reading((validator, signal) =>
@@ -87,10 +86,29 @@ export function useAttentionState(project: string | undefined): Attention {
           signal,
         }),
       ),
-      // No pulse: nothing else reads this list through the frame. The screen
-      // that lists it has its own read, and giving it a wake impulse is a
-      // question for the epic and not a decision made in passing here.
+      // The recent-issues pulse also refreshes the In progress screen.
       (count) => setKnown((was) => ({ ...carried(was, project), inProgress: count })),
+      stop.signal,
+    );
+
+    // Every issue act touches updated_at. The first row of the project's
+    // recently updated list therefore changes for an act anywhere in it, not
+    // only for an act that happens to affect Needs you or In progress. The
+    // existing held-list API supplies the wake-up and validator.
+    void watch(
+      reading((validator, signal) =>
+        api.GET("/issues", {
+          params: { query: { project, limit: 1, wait: held(validator) } },
+          headers: matching(validator),
+          signal,
+        }),
+      ),
+      (_count, woken) => {
+        if (woken) setKnown((was) => {
+          const now = carried(was, project);
+          return { ...now, issuesPulse: now.issuesPulse + 1 };
+        });
+      },
       stop.signal,
     );
 
@@ -103,6 +121,7 @@ export function useAttentionState(project: string | undefined): Attention {
     needsYou: mine ? known.needsYou : null,
     inProgress: mine ? known.inProgress : null,
     pulse: mine ? known.pulse : 0,
+    issuesPulse: mine ? known.issuesPulse : 0,
   };
 }
 
@@ -119,7 +138,7 @@ export function useAttention(): Attention {
 
 /** What one loop knows so far, or an empty slate when the project just changed. */
 function carried(was: Known | null, project: string): Known {
-  return was !== null && was.of === project ? was : { of: project, needsYou: null, inProgress: null, pulse: 0 };
+  return was !== null && was.of === project ? was : { of: project, needsYou: null, inProgress: null, pulse: 0, issuesPulse: 0 };
 }
 
 /** The first read of a list is a plain one; every one after it is held. */

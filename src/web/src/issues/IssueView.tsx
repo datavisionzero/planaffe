@@ -16,6 +16,7 @@ import { PageHeader } from "@/shared/PageHeader";
 import { useSession } from "@/session/useSession";
 import { stale } from "@/shared/stale";
 import { keyPath, pathKey } from "@/shell/views";
+import { useAttention } from "@/shell/useAttention";
 import { PriorityMark } from "./priority";
 import { StatusDot } from "./status";
 import { MarkdownField } from "@/shared/MarkdownField";
@@ -52,17 +53,61 @@ function refused(problem: Problem | undefined, status: number): IssueLoad {
 export function IssueView() {
   const { project, number } = useParams();
   const key = pathKey(project!, number!);
+  return <IssueContent key={key} issueKey={key} />;
+}
+
+function IssueContent({ issueKey: key }: { issueKey: string }) {
+  const { issuesPulse } = useAttention();
   const [state, setState] = useState<{ key: string; issue: IssueLoad; history: Load<HistoryEntry[]> }>();
   const [editing, setEditing] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [external, setExternal] = useState<Issue>();
+  const [refreshError, setRefreshError] = useState("");
+  const [refreshRevision, setRefreshRevision] = useState(0);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [contentRevision, setContentRevision] = useState(0);
   const [deleted, setDeleted] = useState<{ until: string | null }>();
   const current = state !== undefined && state.key === key ? state : { key, issue: asking, history: asking };
+  const stateRef = useRef(state);
+  const editingRef = useRef(editing);
+  const dirtyRef = useRef(dirty);
+  useEffect(() => { stateRef.current = state; editingRef.current = editing; dirtyRef.current = dirty; }, [state, editing, dirty]);
 
   useEffect(() => {
     let live = true;
-    void api.GET("/issues/{key}", { params: { path: { key } } }).then(({ data, error, response }) => live && setState((old) => ({ key, history: old !== undefined && old.key === key ? old.history : asking, issue: data ? { at: "known", value: data } : refused(error, response.status) })), () => live && setState((old) => ({ key, history: old?.history ?? asking, issue: { at: "failed", why: "The instance did not answer." } })));
-    void api.GET("/issues/{key}/history", { params: { path: { key } } }).then(({ data, error, response }) => live && setState((old) => ({ key, issue: old !== undefined && old.key === key ? old.issue : asking, history: data ? { at: "known", value: data } : { at: "failed", why: describe(error, response.status) } })), () => live && setState((old) => ({ key, issue: old?.issue ?? asking, history: { at: "failed", why: "The instance did not answer." } })));
-    return () => { live = false; };
-  }, [key]);
+    const stop = new AbortController();
+    void api.GET("/issues/{key}", { params: { path: { key } }, signal: stop.signal }).then(({ data, error, response }) => {
+      if (!live) return;
+      const was = stateRef.current;
+      if (data && was?.key === key && was.issue.at === "known") {
+        if (data.updated_at < was.issue.value.updated_at) return;
+        if (data.updated_at !== was.issue.value.updated_at && (editingRef.current || dirtyRef.current)) {
+          setExternal(data);
+          setRefreshError("");
+          return;
+        }
+      }
+      if (!data && was?.key === key && was.issue.at === "known") {
+        setRefreshError(describe(error, response.status));
+        return;
+      }
+      setRefreshError("");
+      setExternal(undefined);
+      setState((old) => ({ key, history: old !== undefined && old.key === key ? old.history : asking, issue: data ? { at: "known", value: data } : refused(error, response.status) }));
+    }, () => {
+      if (!live || stop.signal.aborted) return;
+      if (stateRef.current?.key === key && stateRef.current.issue.at === "known") setRefreshError("The instance did not answer.");
+      else setState((old) => ({ key, history: old?.history ?? asking, issue: { at: "failed", why: "The instance did not answer." } }));
+    });
+    return () => { live = false; stop.abort(); };
+  }, [key, issuesPulse, refreshRevision]);
+
+  useEffect(() => {
+    let live = true;
+    const stop = new AbortController();
+    void api.GET("/issues/{key}/history", { params: { path: { key } }, signal: stop.signal }).then(({ data, error, response }) => live && setState((old) => ({ key, issue: old !== undefined && old.key === key ? old.issue : asking, history: data ? { at: "known", value: data } : { at: "failed", why: describe(error, response.status) } })), () => live && !stop.signal.aborted && setState((old) => ({ key, issue: old?.issue ?? asking, history: { at: "failed", why: "The instance did not answer." } })));
+    return () => { live = false; stop.abort(); };
+  }, [key, issuesPulse, historyRevision]);
 
   const changed = (value: Issue) => {
     // An act that closed an issue which was open a moment ago may have been
@@ -73,7 +118,16 @@ export function IssueView() {
       void celebrateIfCleared(value.project);
     }
     setState((old) => ({ key, issue: { at: "known", value }, history: old?.history ?? asking }));
+    setExternal(undefined);
+    setHistoryRevision((x) => x + 1);
     setEditing(false);
+  };
+  const useLatest = () => {
+    if (external !== undefined) setState((old) => ({ key, issue: { at: "known", value: external }, history: old?.history ?? asking }));
+    setExternal(undefined);
+    setDirty(false);
+    setEditing(false);
+    setContentRevision((value) => value + 1);
   };
   const restored = (value: Issue) => { setDeleted(undefined); changed(value); };
 
@@ -84,9 +138,11 @@ export function IssueView() {
   if (current.issue.at === "gone") return <Gone issueKey={key} until={current.issue.until} onRestored={restored} />;
   if (current.issue.at === "failed") return <><PageHeader title={key} /><p className="p-4 text-sm text-destructive">{current.issue.why}</p></>;
   const issue = current.issue.value;
-  if (editing) return <><PageHeader title={`Edit ${issue.key}`} /><EditIssueForm issue={issue} onSaved={changed} onCancel={() => setEditing(false)} /></>;
+  if (editing) return <><PageHeader title={`Edit ${issue.key}`} /><EditIssueForm issue={issue} external={external} onSaved={changed} onCancel={useLatest} /></>;
 
-  return <DraftGuard><PageHeader className="sticky top-0 z-20 bg-background" title={<span className="flex items-center gap-2"><span className="font-mono text-xs font-normal text-muted-foreground">{issue.key}</span>{issue.title}</span>}><ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} /></PageHeader>
+  return <><PageHeader className="sticky top-0 z-20 bg-background" title={<span className="flex items-center gap-2"><span className="font-mono text-xs font-normal text-muted-foreground">{issue.key}</span>{issue.title}</span>}><ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} /></PageHeader>
+    {refreshError && <div role="alert" className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm text-destructive">Could not refresh: {refreshError}<Button size="sm" variant="outline" onClick={() => setRefreshRevision((x) => x + 1)}>Try again</Button></div>}
+    <DraftGuard key={contentRevision} external={external !== undefined} onDirtyChange={setDirty} onUseLatest={useLatest}>
     <div className="flex flex-1 flex-col md:flex-row">
       <main className="min-w-0 flex-1 p-4 md:p-6">
         <Chips issue={issue} />
@@ -97,7 +153,7 @@ export function IssueView() {
       </main>
       <Metadata issue={issue} />
     </div>
-  </DraftGuard>;
+    </DraftGuard></>;
 }
 
 /**

@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { useState, type ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { aUser, installInstance, renderAt } from "@/shared/testing";
 import { SessionProvider } from "@/session/Session";
+import { AttentionContext } from "@/shell/attention";
 import { IssueView } from "./IssueView";
 
 // The screen lives under the shell, and it asks who is looking: only the
@@ -33,9 +35,36 @@ const issue = {
 /** The same issue, open and free: what the header offers there is Claim. */
 const free = { ...issue, status: "todo", claim: null, result: null, questions: [] };
 
+function WithPulse({ children }: { children: ReactNode }) {
+  const [issuesPulse, setIssuesPulse] = useState(0);
+  return <AttentionContext.Provider value={{ needsYou: null, inProgress: null, pulse: 0, issuesPulse }}>
+    <button onClick={() => setIssuesPulse((value) => value + 1)}>Remote change</button>{children}
+  </AttentionContext.Provider>;
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the human-first issue detail", () => {
+  it("announces remote edits without replacing text or focus in the editor", async () => {
+    let current = free;
+    installInstance({ "GET /issues/PLAN-9": () => current, "GET /issues/PLAN-9/history": [] });
+    renderAt("/PLAN/issues/9", <WithPulse>{routedIssue}</WithPulse>);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const title = screen.getByRole("textbox", { name: "Title" });
+    await user.type(title, " locally");
+    current = { ...free, title: "Changed elsewhere", updated_at: "2026-09-05T10:00:00Z" };
+    await user.click(screen.getByRole("button", { name: "Remote change" }));
+
+    expect(await screen.findByText(/Your draft is kept/)).toBeInTheDocument();
+    expect(title).toHaveValue("Human-first issue locally");
+    await user.click(title);
+    expect(title).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Discard draft and load latest" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(await screen.findByRole("heading", { name: /Changed elsewhere/ })).toBeInTheDocument();
+  });
   it("puts current attention before context and never folds the description away", async () => {
     installInstance({
       "GET /issues/PLAN-9": issue,
@@ -109,7 +138,7 @@ describe("the human-first issue detail", () => {
     await user.click(screen.getByRole("button", { name: "Answer" }));
 
     expect(await screen.findByText("Use the browser path.")).toBeInTheDocument();
-    expect(await instance.calls.at(-1)!.json()).toEqual({ answer: "Use the browser path." });
+    expect(await instance.calls.find((call) => call.url.endsWith("/answer"))!.json()).toEqual({ answer: "Use the browser path." });
   });
 
   // The action used to sit below description, relationships and conversation:
@@ -136,7 +165,7 @@ describe("the human-first issue detail", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Claim" }));
-    expect(await instance.calls.at(-1)!.json()).toEqual({ force: false });
+    expect(await instance.calls.find((call) => call.url.endsWith("/claim"))!.json()).toEqual({ force: false });
 
     await user.click(screen.getByRole("button", { name: "More actions" }));
     const menu = await screen.findByRole("menu");
@@ -261,7 +290,7 @@ describe("the human-first issue detail", () => {
     await user.click(screen.getByRole("button", { name: "Add comment" }));
 
     expect(await screen.findByText("Looked at it.")).toBeInTheDocument();
-    expect(await instance.calls.at(-1)!.json()).toEqual({ body: "Looked at it." });
+    expect(await instance.calls.find((call) => call.url.endsWith("/comments"))!.json()).toEqual({ body: "Looked at it." });
   });
 
   // `GET /issues/{key}` answers 404 `deleted` in the grace period and the view

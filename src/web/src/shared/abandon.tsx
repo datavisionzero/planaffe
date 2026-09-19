@@ -95,7 +95,7 @@ type RegisterDraft = (key: string, changed: boolean, clear: () => void) => () =>
 export const DraftGuardContext = createContext<RegisterDraft | null>(null);
 
 /** One navigation decision covers all text fields open on an issue. */
-export function DraftGuard({ children }: { children: ReactNode }) {
+export function DraftGuard({ children, external, onDirtyChange, onUseLatest }: { children: ReactNode; external?: boolean; onDirtyChange?: (changed: boolean) => void; onUseLatest?: () => void }) {
   const drafts = useRef(new Map<string, () => void>());
   const [changed, setChanged] = useState(false);
   const register = useCallback<RegisterDraft>((key, dirty, clear) => {
@@ -115,5 +115,12 @@ export function DraftGuard({ children }: { children: ReactNode }) {
   const cancel = useCallback(() => undefined, []);
   const { dialog } = useAbandon(changed, cancel, discard, false);
   const value = useMemo(() => register, [register]);
-  return <DraftGuardContext.Provider value={value}>{children}{dialog}</DraftGuardContext.Provider>;
+  useEffect(() => onDirtyChange?.(changed), [changed, onDirtyChange]);
+  return <DraftGuardContext.Provider value={value}>
+    {external && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/40 bg-amber-500/5 px-4 py-2 text-sm">
+      <span>This issue changed elsewhere. Your text is kept.</span>
+      <Button size="sm" variant="outline" onClick={() => { discard(); onUseLatest?.(); }}>Discard drafts and load latest</Button>
+    </div>}
+    {children}{dialog}
+  </DraftGuardContext.Provider>;
 }

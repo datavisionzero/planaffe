@@ -34,6 +34,8 @@ export type Attention = {
    * again" — and a screen that reads the same list watches it to do so.
    */
   pulse: number;
+  /** A changed issue in this project may have moved any ordinary list or open issue. */
+  issuesPulse: number;
 };
 
 export const AttentionContext = createContext<Attention | null>(null);

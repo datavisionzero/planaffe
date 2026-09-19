@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useLabels } from "@/projects/useLabels";
 import { PageHeader } from "@/shared/PageHeader";
 import { is, typing } from "@/shell/shortcuts";
+import { useAttention } from "@/shell/useAttention";
 import { keyPath, type View } from "@/shell/views";
 import { AssigneeFilter, AuthorFilter, EpicFilter } from "./pickers";
 import { PriorityMark } from "./priority";
@@ -41,7 +42,8 @@ export function IssueListView({ view }: { view: View }) {
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [active, setActive] = useState(0);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [selectionNotice, setSelectionNotice] = useState("");
   const searchId = useId();
   const sortId = useId();
   const scrollElement = useRef<HTMLDivElement>(null);
@@ -51,32 +53,56 @@ export function IssueListView({ view }: { view: View }) {
   const narrow = useIsMobile();
   const { labels } = useLabels(project);
   const epics = useEpics(project);
+  const { issuesPulse } = useAttention();
   const query = useMemo(() => readQuery(project, search, view), [project, search, view]);
   const fingerprint = JSON.stringify(query);
   const [loaded, setLoaded] = useState<{ of: string; page: PageState } | null>(null);
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
+  const serial = useRef(0);
+  const loadingMore = useRef<string | null>(null);
   const page: PageState = useMemo(
     () => loaded?.of === fingerprint ? loaded.page : { at: "asking", items: [] },
     [fingerprint, loaded],
   );
 
-  const requestPage = useCallback(async (cursor?: string) => {
-    setLoaded((current) => ({ of: fingerprint, page: { at: "asking", items: current?.of === fingerprint ? current.page.items : [], total: current?.of === fingerprint ? current.page.total : undefined } }));
+  const requestPage = useCallback(async (cursor?: string, signal?: AbortSignal) => {
+    if (cursor !== undefined && loadingMore.current === cursor) return;
+    const request = cursor === undefined ? ++serial.current : serial.current;
+    if (cursor !== undefined) loadingMore.current = cursor;
+    const previous = loadedRef.current;
+    const target = cursor === undefined && previous?.of === fingerprint ? Math.max(pageSize, previous.page.items.length) : pageSize;
+    if (cursor === undefined) setLoaded((current) => ({ of: fingerprint, page: { at: "asking", items: current?.of === fingerprint ? current.page.items : [], total: current?.of === fingerprint ? current.page.total : undefined } }));
     try {
-      const { data, error, response } = await api.GET("/issues", { params: { query: { ...query, status: query.status as never, cursor, limit: pageSize } } });
-      if (data === undefined) {
-        setLoaded((current) => current?.of === fingerprint ? { of: fingerprint, page: { at: "failed", items: current.page.items, total: current.page.total, why: describe(error, response.status) } } : current);
-        return;
-      }
+      const items: IssueSummary[] = [];
+      let next = cursor;
+      let total = 0;
+      do {
+        const { data, error, response } = await api.GET("/issues", { params: { query: { ...query, status: query.status as never, cursor: next, limit: pageSize } }, signal });
+        if (data === undefined) throw new Error(describe(error, response.status));
+        items.push(...data.items);
+        total = data.total;
+        next = data.next_cursor ?? undefined;
+      } while (cursor === undefined && next !== undefined && items.length < target && !signal?.aborted);
+      if (signal?.aborted || request !== serial.current) return;
       setLoaded((current) => {
         if (current?.of !== fingerprint) return current;
-        return { of: fingerprint, page: { at: "known", items: cursor === undefined ? data.items : [...current.page.items, ...data.items], total: data.total, nextCursor: data.next_cursor } };
+        return { of: fingerprint, page: { at: "known", items: cursor === undefined ? items : [...current.page.items, ...items], total, nextCursor: next ?? null } };
       });
-    } catch {
-      setLoaded((current) => current?.of === fingerprint ? { of: fingerprint, page: { at: "failed", items: current.page.items, total: current.page.total, why: "The instance did not answer." } } : current);
+    } catch (reason) {
+      if (signal?.aborted || request !== serial.current) return;
+      const why = reason instanceof Error ? reason.message : "The instance did not answer.";
+      setLoaded((current) => current?.of === fingerprint ? { of: fingerprint, page: { at: "failed", items: current.page.items, total: current.page.total, why } } : current);
+    } finally {
+      if (cursor !== undefined && loadingMore.current === cursor) loadingMore.current = null;
     }
   }, [fingerprint, query]);
 
-  useEffect(() => { void requestPage(); }, [requestPage]);
+  useEffect(() => {
+    const stop = new AbortController();
+    void requestPage(undefined, stop.signal);
+    return () => stop.abort();
+  }, [issuesPulse, requestPage]);
   // `sort=epic` makes the epic the first sort key, so a group is one unbroken
   // run of the list and stays one across page boundaries (`docs/api.md`). The
   // heads are rows of the same virtual window, of a height of their own.
@@ -122,7 +148,14 @@ export function IssueListView({ view }: { view: View }) {
     if (Number.isFinite(offset) && offset > 0) requestAnimationFrame(() => scrollElement.current?.scrollTo({ top: offset }));
   }, [storageKey]);
 
-  useEffect(() => setActive((value) => Math.min(value, Math.max(0, page.items.length - 1))), [page.items.length]);
+  const active = Math.max(0, page.items.findIndex((issue) => issue.key === activeKey));
+  useEffect(() => {
+    if (page.at !== "known" || activeKey === null) return;
+    if (!page.items.some((issue) => issue.key === activeKey)) {
+      setSelectionNotice(`${activeKey} no longer matches this view.`);
+      setActiveKey(page.items[0]?.key ?? null);
+    }
+  }, [activeKey, page]);
   useEffect(() => {
     // The keys of the list, as `shortcuts.ts` binds them and the ? overview
     // shows them. Escape is the exception that also answers while typing: it
@@ -132,8 +165,9 @@ export function IssueListView({ view }: { view: View }) {
       if (is("list:search", event) && !editing) { event.preventDefault(); document.querySelector<HTMLInputElement>("[data-issue-search]")?.focus(); }
       else if (!editing && (is("list:next", event) || is("list:previous", event))) {
         event.preventDefault();
+        if (page.items.length === 0) return;
         const next = Math.max(0, Math.min(page.items.length - 1, active + (is("list:next", event) ? 1 : -1)));
-        setActive(next); virtualizer.scrollToIndex(rows.findIndex((row) => row.index === next), { align: "auto" });
+        setActiveKey(page.items[next]?.key ?? null); setSelectionNotice(""); virtualizer.scrollToIndex(rows.findIndex((row) => row.index === next), { align: "auto" });
       } else if (!editing && is("list:open", event) && page.items[active]) void navigate(keyPath(page.items[active].key));
       // `c` is the frame's, not this list's: it creates in the project from
       // every screen of it.
@@ -164,6 +198,7 @@ export function IssueListView({ view }: { view: View }) {
           along. */}
       <Button size="sm" render={<Link to={`/${project}/issues/new`} />}>New issue</Button>
     </PageHeader>
+    {selectionNotice && <p role="status" className="border-b px-4 py-2 text-xs text-muted-foreground">{selectionNotice}</p>}
     <div className="flex flex-wrap items-center gap-2 border-b p-2">
       <div className="relative min-w-48 flex-1 sm:max-w-sm"><SearchIcon className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" /><Input id={searchId} data-issue-search aria-label="Search issues" placeholder="Search issues…" value={search.get("q") ?? ""} onChange={(event) => change("q", event.target.value)} className="pl-8" /></div>
       <select id={sortId} aria-label="Sort issues" value={search.get("sort") ?? "updated"} onChange={(event) => change("sort", event.target.value === "updated" ? undefined : event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="priority">Priority</option><option value="epic">Epic</option></select>
@@ -191,7 +226,7 @@ export function IssueListView({ view }: { view: View }) {
         const style = { transform: `translateY(${virtual.start}px)`, height: virtual.size };
         return row.index === -1
           ? <GroupHead key={`epic:${row.head ?? "none"}`} epic={row.head} epics={epics} style={style} />
-          : <IssueRow key={page.items[row.index].key} issue={page.items[row.index]} active={row.index === active} onActive={() => setActive(row.index)} style={style} />;
+          : <IssueRow key={page.items[row.index].key} issue={page.items[row.index]} active={row.index === active} onActive={() => { setActiveKey(page.items[row.index].key); setSelectionNotice(""); }} style={style} />;
       })}</div>
       {page.at === "failed" && <p className="border-t p-3 text-center text-xs text-destructive">{page.why} <button className="underline" onClick={() => void requestPage()}>Try again</button></p>}
     </div>}

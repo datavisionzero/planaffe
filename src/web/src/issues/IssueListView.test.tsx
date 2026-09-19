@@ -1,14 +1,23 @@
 import { screen, within } from "@testing-library/react";
+import { useState, type ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { installInstance, renderAt } from "@/shared/testing";
 import { views } from "@/shell/views";
+import { AttentionContext } from "@/shell/attention";
 import { IssueListView } from "./IssueListView";
 
 afterEach(() => vi.unstubAllGlobals());
 
 const all = views.find((view) => view.id === "all")!;
+
+function WithPulse({ children }: { children: ReactNode }) {
+  const [issuesPulse, setIssuesPulse] = useState(0);
+  return <AttentionContext.Provider value={{ needsYou: null, inProgress: null, pulse: 0, issuesPulse }}>
+    <button onClick={() => setIssuesPulse((value) => value + 1)}>Remote change</button>{children}
+  </AttentionContext.Provider>;
+}
 
 function anIssue(key: string, title: string, extra: Record<string, unknown> = {}) {
   return {
@@ -20,6 +29,24 @@ function anIssue(key: string, title: string, extra: Record<string, unknown> = {}
 }
 
 const onePage = { items: [anIssue("PLAN-1", "The first one")], total: 1, has_more: false, next_cursor: null };
+
+it("refreshes a filtered list and its count after a remote change", async () => {
+  let answer = onePage;
+  installInstance({
+    "GET /issues": () => answer,
+    "GET /projects/PLAN/labels": [],
+    "GET /epics": { items: [], total: 0, has_more: false, next_cursor: null },
+  });
+  renderAt("/PLAN/issues?status=todo", <WithPulse><Routes><Route path="/:project/:view" element={<IssueListView view={all} />} /></Routes></WithPulse>);
+  const user = userEvent.setup();
+
+  await screen.findByText("The first one");
+  expect(screen.getByText("1 issue")).toBeInTheDocument();
+  answer = { ...onePage, items: [], total: 0 };
+  await user.click(screen.getByRole("button", { name: "Remote change" }));
+  expect(await screen.findByText("No issues match these filters.")).toBeInTheDocument();
+  expect(screen.getByText("0 issues")).toBeInTheDocument();
+});
 
 const everyStep = {
   items: [0, 1, 2, 3, 4].map((priority) => anIssue(`PLAN-${priority + 1}`, `Step ${priority}`, { priority })),
