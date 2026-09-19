@@ -145,15 +145,22 @@ public sealed class Next(
         var live = (await labels.ListAsync(project.Id, cancellationToken)).ToDictionary(l => l.Name, StringComparer.Ordinal);
 
         Guid? epicId = null;
+        var epicNone = false;
         if (request.Epic is not null)
         {
-            if (!EpicKey.TryParse(request.Epic, out var epicProject, out var number) || epicProject != project.Key)
+            if (request.Epic.Equals("none", StringComparison.OrdinalIgnoreCase))
+            {
+                epicNone = true;
+            }
+            else if (!EpicKey.TryParse(request.Epic, out var epicProject, out var number) || epicProject != project.Key)
             {
                 throw Refusal.Validation("epic", $"{request.Epic} is not an epic key of {project.Key}.");
             }
-
-            epicId = (await epics.FindLiveAsync(project.Id, number, cancellationToken))?.Id
-                ?? throw Refusal.Validation("epic", $"No epic {request.Epic}.");
+            else
+            {
+                epicId = (await epics.FindLiveAsync(project.Id, number, cancellationToken))?.Id
+                    ?? throw Refusal.Validation("epic", $"No epic {request.Epic}.");
+            }
         }
 
         foreach (var name in request.Label ?? [])
@@ -177,6 +184,7 @@ public sealed class Next(
             caller.Id,
             project.TriageRequired || request.Ready is true,
             epicId,
+            epicNone,
             request.Label ?? [],
             request.Repo);
     }

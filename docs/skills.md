@@ -1,6 +1,6 @@
 # Agent skills
 
-planaffe ships four optional skills for agents working in repositories whose
+planaffe ships six optional skills for agents working in repositories whose
 issues live in planaffe. Each is a self-contained folder under [`skills/`](../skills),
 versioned with the CLI. They require `pa` configured for an agent identity and
 the target project. They do not install the CLI or provision credentials.
@@ -11,6 +11,8 @@ the target project. They do not install the CLI or provision credentials.
 | [`planaffe-plan-epic`](../skills/planaffe-plan-epic/SKILL.md) | Create implementable issues with acceptance criteria and blockers | Oldest open epic with zero issues, counting done and canceled issues too |
 | [`planaffe-answer-questions`](../skills/planaffe-answer-questions/SKILL.md) | Discuss options with the user and save their answers | All open questions in the current project, across all epics |
 | [`planaffe-deliver-epic`](../skills/planaffe-deliver-epic/SKILL.md) | Implement, check, commit, push and merge an epic | Epic of the first workable issue in `pa next` order belonging to an open epic |
+| [`planaffe-deliver-next-issue`](../skills/planaffe-deliver-next-issue/SKILL.md) | Deliver exactly one issue as one goal through commit, push and verified merge | First workable issue in the current repository, with or without an epic |
+| [`planaffe-deliver-standalone-issues`](../skills/planaffe-deliver-standalone-issues/SKILL.md) | Deliver ready, workable issues without an epic as one goal, with a commit per implemented issue and a verified merge | Current project's eligible standalone queue in the current repository |
 
 These are product workflows, independent of this repository's own development
 backlog. Their instructions contain no instance addresses, credentials or
@@ -19,7 +21,7 @@ configuration never means permission to process the entire instance.
 
 ## Install
 
-For Codex, ask the built-in skill installer to install the four folders from
+For Codex, ask the built-in skill installer to install the six folders from
 this repository:
 
 ```text
@@ -28,15 +30,19 @@ skills/planaffe-project-overview
 skills/planaffe-plan-epic
 skills/planaffe-answer-questions
 skills/planaffe-deliver-epic
+skills/planaffe-deliver-next-issue
+skills/planaffe-deliver-standalone-issues
 ```
 
 Alternatively, copy the desired skill folders from a trusted checkout into the
 agent's skill directory. For repository-scoped Codex use, the resulting paths
 are `.agents/skills/planaffe-project-overview/SKILL.md`,
 `.agents/skills/planaffe-plan-epic/SKILL.md`,
-`.agents/skills/planaffe-answer-questions/SKILL.md` and
-`.agents/skills/planaffe-deliver-epic/SKILL.md`. Copy the folder, not just its
-contents. Other harnesses can use their own supported skill installation path;
+`.agents/skills/planaffe-answer-questions/SKILL.md`,
+`.agents/skills/planaffe-deliver-epic/SKILL.md`,
+`.agents/skills/planaffe-deliver-next-issue/SKILL.md` and
+`.agents/skills/planaffe-deliver-standalone-issues/SKILL.md`. Copy the folder,
+not just its contents. Other harnesses can use their own supported skill installation path;
 the workflows use the CLI and ordinary Markdown instructions.
 
 Install from the same tag or commit as the CLI when pinning versions. Before
@@ -56,6 +62,8 @@ $planaffe-plan-epic
 $planaffe-answer-questions
 $planaffe-deliver-epic PROJ-E3
 $planaffe-deliver-epic
+$planaffe-deliver-next-issue
+$planaffe-deliver-standalone-issues
 ```
 
 The project overview gives a short, read-only snapshot: open epics and their
@@ -82,9 +90,23 @@ human reviews and repository rules still apply. A project that defines done as
 merged may require incremental merges to unblock dependent issues. Missing
 access or approvals are reported rather than bypassed.
 
-The delivery skill uses the harness's goal facility when available. Without
-one it reports the limitation and tracks progress explicitly; a skill cannot
-add that facility to a harness. An existing unrelated goal is not replaced.
+Standalone issue delivery follows the same publication and verification path
+for the current repository's ready, workable issues without an epic. It uses
+`pa next --ready --epic none` for selection and atomically claims one issue at
+a time. A ticket with an epic never enters this run. The agent makes a focused
+commit for each implemented issue and stops when the scoped queue is empty,
+then verifies the merge and reconciles issue status.
+
+Single-issue delivery calls `pa next --claim` once, without an epic filter, to
+select and claim the highest-ranked workable issue in the current repository.
+The issue may belong to an epic or stand alone. The agent creates one goal for
+that issue and follows its commit and request through actual merge and issue
+acceptance. It does not claim another issue during the run.
+
+The epic and standalone queue skills use the harness's goal facility when
+available; otherwise they report the limitation and track progress explicitly.
+The single-issue skill requires a goal and stops before claiming when the
+harness cannot create one. An existing unrelated goal is never replaced.
 
 Internal issue keys, questions and descriptions are not automatically copied
 into public commits or pull requests. The agent records decisions and results

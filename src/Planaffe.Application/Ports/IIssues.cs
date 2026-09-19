@@ -192,6 +192,7 @@ public sealed record NextQuery(
     Guid CallerId,
     bool RequireReady,
     Guid? EpicId,
+    bool EpicNone,
     IReadOnlyList<string> Labels,
     string? RepoLabel);
 

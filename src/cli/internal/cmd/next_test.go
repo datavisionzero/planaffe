@@ -253,6 +253,34 @@ func TestNextWithoutClaimListsAndSendsLabelsAsQuery(t *testing.T) {
 	}
 }
 
+func TestNextEpicNoneIsSentForPreviewAndClaim(t *testing.T) {
+	f := &fake{t: t, version: "0.0.0-dev", answer: func(r *http.Request) (int, string) {
+		if r.Method == http.MethodGet {
+			return 200, `{"items":[],"total":0,"has_more":false,"reasons":` + reasons + `}`
+		}
+		return 200, `{"issue":null,"reasons":` + reasons + `}`
+	}}
+	server := httptest.NewServer(f.handler())
+	defer server.Close()
+
+	dir := repository(t, "project = PLAN\n")
+	previewCode, _, previewErr := run(t, server, dir, "next", "--ready", "--epic", "none", "--json")
+	claimCode, _, claimErr := run(t, server, dir, "next", "--claim", "--ready", "--epic", "none", "--json")
+	if previewCode != exit.OK || claimCode != exit.Empty || previewErr != "" || claimErr != "" {
+		t.Fatalf("preview: code %d, stderr %q; claim: code %d, stderr %q", previewCode, previewErr, claimCode, claimErr)
+	}
+	if len(f.requests) != 2 || f.requests[0].URL.Query().Get("epic") != "none" || f.requests[0].URL.Query().Get("ready") != "true" {
+		t.Fatalf("preview did not send the standalone ready filter: %v", f.requests)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(f.bodies[1]), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["epic"] != "none" || body["ready"] != true {
+		t.Errorf("claim body = %v", body)
+	}
+}
+
 func TestExitCodesFollowTheProblemDocument(t *testing.T) {
 	cases := []struct {
 		status int

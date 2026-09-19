@@ -102,6 +102,8 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                   and not exists (select 1 from blocker pb join derived pf on pf.id = pb.blocker_id
                                    where pb.blocked_id = p.id and pf.status not in ('done', 'canceled'))))
            and ({3}::uuid is null or d.epic_id = {3}::uuid)
+           and (not {8} or d.epic_id is null)
+           and (not {8} or i.epic_id is null)
            and not exists (select 1 from unnest({4}::text[]) as wanted(name)
                             where not exists (select 1 from issue_label il join label l on l.id = il.label_id
                                                where il.issue_id = d.id and l.name = wanted.name and l.deleted_at is null))
@@ -148,7 +150,11 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     {
         var open = Live().Where(r => r.ProjectId == query.ProjectId && r.Status != IssueStatus.Done && r.Status != IssueStatus.Canceled);
 
-        if (query.EpicId is { } epicId)
+        if (query.EpicNone)
+        {
+            open = open.Where(r => r.EpicId == null);
+        }
+        else if (query.EpicId is { } epicId)
         {
             open = open.Where(r => r.EpicId == epicId);
         }
@@ -510,6 +516,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = query.RepoLabel is null ? DBNull.Value : query.RepoLabel },
         new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = Label.RepoGroup },
         limit,
+        query.EpicNone,
     ];
 
     // Two statements, deliberately. The lock is its own statement, because a

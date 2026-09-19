@@ -159,7 +159,7 @@ cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 
 	cmd.Flags().BoolVar(&claim, "claim", false, "take the highest-ranked workable issue and claim it")
 	cmd.Flags().BoolVar(&ready, "ready", false, "only flagged issues, even where triage is not required")
-	cmd.Flags().StringVar(&epic, "epic", "", "only this epic's issues, e.g. PLAN-E3")
+	cmd.Flags().StringVar(&epic, "epic", "", "only this epic's issues, or none for issues without an epic")
 	cmd.Flags().StringArrayVar(&labels, "label", nil, "only issues carrying this label; repeatable, all must match")
 	cmd.Flags().StringVar(&repo, "repo", "", "the `repo` label of this repository, or `none`; defaults to the .planaffe file")
 	cmd.Flags().IntVar(&wait, "wait", 0, "wait this many seconds for a workable issue; requires --claim")

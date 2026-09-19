@@ -43,7 +43,9 @@ planaffe/
 │  ├─ planaffe-project-overview/
 │  ├─ planaffe-plan-epic/
 │  ├─ planaffe-answer-questions/
-│  └─ planaffe-deliver-epic/
+│  ├─ planaffe-deliver-epic/
+│  ├─ planaffe-deliver-next-issue/
+│  └─ planaffe-deliver-standalone-issues/
 ├─ deploy/                    the Dockerfile, the Caddyfile, Compose (production and development), and nothing else
 ├─ src/
 │  ├─ Planaffe.Domain/        the rules

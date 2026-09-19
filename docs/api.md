@@ -445,7 +445,7 @@ Both take the same filters, as query parameters on `GET` and as a JSON body on
 | filter | meaning |
 |---|---|
 | `ready` | `true`: only flagged issues, whatever the switch says (VISION 6.1) |
-| `epic` | only this epic's issues |
+| `epic` | only this epic's issues, or `none` for issues without an epic |
 | `label` | repeatable; only issues carrying every named label |
 | `repo` | the `.planaffe` file's label: only issues carrying it or carrying no label of the `repo` group at all (VISION 13). A name the project does not have is `unknown-label` |
 
