@@ -412,7 +412,7 @@ describe("the shell (ADR 0006)", () => {
     // Two projects: the overview, which is the one screen that answers across
     // them (ADR 0024).
     expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: /planaffe/ })).toHaveAttribute("href", "/PLAN/needs-you");
+    expect(await within(screen.getByRole("main")).findByRole("link", { name: /planaffe/ })).toHaveAttribute("href", "/PLAN/needs-you");
 
     installInstance({
       "GET /projects": [aProject],

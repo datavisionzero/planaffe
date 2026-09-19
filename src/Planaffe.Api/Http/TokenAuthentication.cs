@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Planaffe.Application.Acts;
 using Planaffe.Application.Ports;
@@ -27,8 +28,13 @@ public static class TokenAuthentication
 
     public static IServiceCollection AddPlanaffeTokenAuthentication(this IServiceCollection services)
     {
-        services
-            .AddAuthentication(Scheme)
+        // AddAuthentication also starts Data Protection's key ring, though this
+        // handler checks opaque browser sessions in Postgres and bearer tokens
+        // without protecting either with a framework key.
+        services.AddAuthenticationCore(options => options.DefaultScheme = Scheme);
+        services.AddWebEncoders();
+        services.TryAddSingleton(TimeProvider.System);
+        new AuthenticationBuilder(services)
             .AddScheme<AuthenticationSchemeOptions, TokenAuthenticationHandler>(Scheme, null);
 
         services.AddAuthorization();
