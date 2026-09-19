@@ -46,6 +46,88 @@ function WithPulse({ children }: { children: ReactNode }) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the human-first issue detail", () => {
+  it("changes priority, labels, and assignee with separate versioned patches", async () => {
+    const initial = { ...free, project_context: { ...free.project_context, labels: [{ name: "feature", group: null, description: null }] } };
+    const versions = [
+      { ...initial, priority: 4, updated_at: "2026-09-05T11:00:00Z" },
+      { ...initial, priority: 4, labels: [...initial.labels, initial.project_context.labels[0]], updated_at: "2026-09-05T12:00:00Z" },
+      { ...initial, priority: 4, labels: [...initial.labels, initial.project_context.labels[0]], assignee: person, updated_at: "2026-09-05T13:00:00Z" },
+      { ...initial, priority: 4, labels: [...initial.labels, initial.project_context.labels[0]], assignee: null, updated_at: "2026-09-05T14:00:00Z" },
+    ];
+    let writes = 0;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": initial,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/users": [person],
+      "PATCH /issues/PLAN-9": () => versions[writes++],
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    const details = await screen.findByLabelText("Issue details");
+
+    await user.selectOptions(within(details).getByRole("combobox", { name: "Priority" }), "4");
+    await waitFor(() => expect(instance.calls.filter((call) => call.method === "PATCH")).toHaveLength(1));
+    await screen.findByText("Priority saved.");
+    await user.click(within(details).getByRole("combobox", { name: "Labels" }));
+    await user.click(screen.getByRole("option", { name: "feature" }));
+    await screen.findByText("Labels saved.");
+    await user.click(within(details).getByRole("combobox", { name: "Assignee" }));
+    await user.click(screen.getByRole("option", { name: /maintainer/ }));
+    await screen.findByText("Assignee saved.");
+    await user.click(within(details).getByRole("button", { name: "Remove maintainer" }));
+    await screen.findByText("Assignee saved.");
+
+    const patches = instance.calls.filter((call) => call.method === "PATCH");
+    expect(patches).toHaveLength(4);
+    expect(await Promise.all(patches.map((call) => call.json()))).toEqual([
+      { priority: 4 }, { labels: ["web", "feature"] }, { assignee: "maintainer" }, { assignee: null },
+    ]);
+    expect(patches.map((call) => call.headers.get("If-Match"))).toEqual([initial.updated_at, ...versions.slice(0, 3).map((next) => next.updated_at)]);
+    expect(within(details).getByRole("combobox", { name: "Assignee" })).toHaveAttribute("placeholder", "Nobody");
+  });
+
+  it("adopts the current version after an inline edit conflicts", async () => {
+    const current = { ...free, priority: 3, updated_at: "2026-09-05T12:00:00Z" };
+    let attempts = 0;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/users": [],
+      "PATCH /issues/PLAN-9": () => ++attempts === 1
+        ? { status: 412, body: { type: "/problems/stale", detail: "Changed elsewhere", current } }
+        : { ...current, priority: 4 },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    const details = await screen.findByLabelText("Issue details");
+    const priority = within(details).getByRole("combobox", { name: "Priority" });
+
+    await user.selectOptions(priority, "4");
+    expect(await within(details).findByRole("alert")).toHaveTextContent("changed elsewhere");
+    expect(priority).toHaveValue("3");
+    await user.selectOptions(priority, "4");
+    await screen.findByText("Priority saved.");
+    const patches = instance.calls.filter((call) => call.method === "PATCH");
+    expect(patches).toHaveLength(2);
+    expect(patches[1].headers.get("If-Match")).toBe(current.updated_at);
+    expect(await patches[1].json()).toEqual({ priority: 4 });
+  });
+
+  it("explains a refused inline change and keeps the saved value", async () => {
+    installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/users": [],
+      "PATCH /issues/PLAN-9": { status: 422, body: { type: "/problems/validation", detail: "Priority cannot be changed here." } },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    const details = await screen.findByLabelText("Issue details");
+    const priority = within(details).getByRole("combobox", { name: "Priority" });
+    await user.selectOptions(priority, "4");
+    expect(await within(details).findByRole("alert")).toHaveTextContent("Priority cannot be changed here.");
+    expect(priority).toHaveValue("2");
+  });
   it("finds cross-project blockers by key and keeps the choice after a cycle refusal", async () => {
     const other = { ...free, key: "OTHER-7", project: "OTHER", title: "External dependency" };
     const linked = { ...free, blocked_by: [...free.blocked_by, { key: "OTHER-7", title: other.title, status: "todo", open: true }], open_blockers: 2, workability: { workable: false, parent_gated: false } };

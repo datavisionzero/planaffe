@@ -6,10 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { LabelPicker } from "@/components/ui/label-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { celebrateIfCleared } from "@/projects/celebrate";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Markdown } from "@/shared/Markdown";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
@@ -25,6 +27,8 @@ import { useDraft } from "@/shared/useDraft";
 import { EditIssueForm } from "./IssueEditor";
 import { IssueWorkability } from "./IssueWorkability";
 import { IssuePicker } from "./pickers";
+import { AssigneePicker } from "./pickers";
+import { priorityLabel } from "./priorityLabel";
 
 type Load<T> = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; value: T };
 /** The issue alone can also be gone: deleted, and restorable until a moment. */
@@ -127,6 +131,7 @@ function NeedsYouFlow({ issueKey, revision, pulse }: { issueKey: string; revisio
 
 function IssueContent({ issueKey: key }: { issueKey: string }) {
   const location = useLocation();
+  const narrow = useIsMobile();
   const fromNeedsYou = new URLSearchParams(location.search).get("from") === "needs-you";
   const { issuesPulse } = useAttention();
   const [state, setState] = useState<{ key: string; issue: IssueLoad; history: Load<HistoryEntry[]> }>();
@@ -223,11 +228,12 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
         <Chips issue={issue} />
         <IssueWorkability issue={issue} onChanged={changed} />
         <Attention issue={issue} onChanged={changed} />
+        {narrow && <Metadata issue={issue} onChanged={changed} />}
         <Section title="Description"><Long>{issue.description}</Long></Section>
         {issue.result !== null && <Section title="Result"><Long>{issue.result}</Long></Section>}
         <Panels issue={issue} history={current.history} onChanged={changed} />
       </main>
-      <Metadata issue={issue} />
+      {!narrow && <Metadata issue={issue} onChanged={changed} />}
     </div>
     </DraftGuard></>;
 }
@@ -542,8 +548,39 @@ function historyText(x: HistoryEntry) {
 }
 function value(x: unknown) { if (x == null) return null; if (typeof x === "object" && "name" in x && typeof x.name === "string") return x.name; return String(x); }
 
-function Metadata({ issue }: { issue: Issue }) {
-  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l"><Field name="Status" className="max-md:hidden"><StatusDot status={issue.status} withLabel /></Field><Field name="Priority" className="max-md:hidden"><PriorityMark priority={issue.priority} withLabel /></Field><Field name="Ready" className="max-md:hidden">{issue.ready ? "yes" : "no"}</Field>{issue.epic && <Field name="Epic" className="max-md:hidden"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}{issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}{issue.assignee && <Field name="Assignee">{issue.assignee.name}</Field>}{issue.labels.length > 0 && <Field name="Labels"><span className="flex flex-wrap gap-1">{issue.labels.map((x) => <Badge key={x.name} variant="secondary" className="font-normal">{x.name}</Badge>)}</span></Field>}<Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field><Field name="Release">{issue.release === null ? <span className="text-muted-foreground">not in a release</span> : issue.release}</Field></aside>;
+function Metadata({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function write(field: string, body: object) {
+    if (busy) return;
+    setBusy(field); setMessage(""); setError("");
+    try {
+      const answer = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: body as never });
+      const current = stale<Issue>(answer);
+      if (current) { onChanged(current); setError(`${field} changed elsewhere. Review the latest value and choose again.`); return; }
+      if (!answer.data) throw new Error(describe(answer.error, answer.response.status));
+      onChanged(answer.data);
+      setMessage(`${field} saved.`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
+    finally { setBusy(""); }
+  }
+
+  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l" aria-label="Issue details">
+    <h2 className="font-medium">Details</h2>
+    <Field name="Status"><StatusDot status={issue.status} withLabel /></Field>
+    <Field name="Priority"><select name="priority" aria-label="Priority" value={issue.priority} disabled={!!busy} onChange={(event) => void write("Priority", { priority: Number(event.target.value) })} className="mt-1 h-8 w-full rounded-lg border bg-background px-2 text-sm">{[0, 1, 2, 3, 4].map((priority) => <option key={priority} value={priority}>{priorityLabel(priority)}</option>)}</select></Field>
+    <Field name="Ready">{issue.ready ? "yes" : "no"}</Field>
+    {issue.epic && <Field name="Epic"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}
+    {issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}
+    <fieldset disabled={!!busy}><AssigneePicker project={issue.project} value={issue.assignee?.name ?? ""} onChange={(name) => void write("Assignee", { assignee: name || null })} /></fieldset>
+    <fieldset disabled={!!busy}><LabelPicker label="Labels" labels={issue.project_context.labels} value={issue.labels.map((label) => label.name)} onChange={(names) => void write("Labels", { labels: names })} /></fieldset>
+    {busy && <p role="status" className="text-xs text-muted-foreground">Saving {busy.toLowerCase()}…</p>}
+    {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
+    {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+    <Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field><Field name="Release">{issue.release === null ? <span className="text-muted-foreground">not in a release</span> : issue.release}</Field>
+  </aside>;
 }
 
 /**

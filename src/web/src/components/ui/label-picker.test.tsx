@@ -44,6 +44,15 @@ it("suggests the project's labels by group, with what each one means", async () 
   ]);
 });
 
+it("closes the list when focus moves to another field", async () => {
+  render(<><Harness /><button>Elsewhere</button></>);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("combobox", { name: "Labels" }));
+  expect(screen.getByRole("listbox", { name: "Labels" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Elsewhere" }));
+  expect(screen.queryByRole("listbox", { name: "Labels" })).not.toBeInTheDocument();
+});
+
 it("chooses with the arrow keys and Enter, and takes the last one back on Backspace", async () => {
   render(<Harness />);
   const user = userEvent.setup();
