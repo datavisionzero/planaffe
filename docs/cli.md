@@ -106,6 +106,7 @@ pa next --claim              # take the highest-ranked workable issue and claim 
 pa next --claim --wait 60    # wait up to 60 seconds for one; exit 8 at the deadline
 pa next --claim --ready      # only flagged issues, even where triage is not required
 pa next --claim --epic PLAN-E3 --label cut-1 --repo none
+pa next --claim --ready --epic none  # only flagged issues without an epic
 pa next --json               # the page, with reasons
 pa needs-you                 # questions, review, unready under triage, then stuck blocker chains
                              # an instance without an agent is said once on stderr, not per ticket

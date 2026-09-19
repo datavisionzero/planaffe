@@ -193,6 +193,40 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Epic_none_selects_only_ready_workable_issues_without_an_epic()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await using (var context = Migrated.ContextFor(instance.ConnectionString))
+        {
+            var project = await context.Projects.SingleAsync(Ct);
+            var user = await context.Users.SingleAsync(Ct);
+            context.Epics.Add(Epic.Create(project.Id, 1, "Theme", user.Id, Migrated.Now));
+            await context.SaveChangesAsync(Ct);
+        }
+
+        await Issues(admin,
+            new { title = "Urgent epic issue", epic = "PLAN-E1", priority = 4, ready = true },
+            new { title = "Standalone ready", priority = 2, ready = true },
+            new { title = "Standalone unready", priority = 4 },
+            new { title = "Standalone parked", status = "backlog", ready = true });
+        using var agent = await Agent(instance, admin, "one");
+
+        var preview = await agent.GetFromJsonAsync<JsonElement>("/projects/PLAN/next?ready=true&epic=none", Ct);
+        Assert.Equal(["PLAN-2"], preview.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()));
+        Assert.Equal(1, preview.GetProperty("total").GetInt32());
+        Assert.Equal(1, preview.GetProperty("reasons").GetProperty("not_ready").GetInt32());
+        Assert.Equal(1, preview.GetProperty("reasons").GetProperty("parked").GetInt32());
+
+        using var taken = await agent.PostAsJsonAsync("/projects/PLAN/next", new { ready = true, epic = "none" }, Ct);
+        Assert.Equal("PLAN-2", (await taken.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("issue").GetProperty("key").GetString());
+
+        var after = await agent.GetFromJsonAsync<JsonElement>("/projects/PLAN/next?ready=true&epic=none", Ct);
+        Assert.Equal(0, after.GetProperty("total").GetInt32());
+        Assert.Equal(1, after.GetProperty("reasons").GetProperty("in_progress").GetInt32());
+    }
+
+    [Fact]
     public async Task Repo_hands_out_issues_carrying_the_label_or_none_of_the_group()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
