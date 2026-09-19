@@ -20,9 +20,9 @@ namespace Planaffe.Api.Http;
 /// What tells the two apart is the browser itself. <c>Sec-Fetch-Dest:
 /// document</c> is what a navigation sends and nothing a client library sends,
 /// and where the header is absent an <c>Accept</c> that asks for HTML says the
-/// same. A path with an extension is never a navigation of this kind — that is
-/// a built asset or <c>/openapi/v1.json</c>, and those belong to whoever
-/// answers them today.
+/// same. A path with an extension is normally a built asset or
+/// <c>/openapi/v1.json</c>. A published release such as <c>0.11.0</c> is the
+/// exception: its dots are part of the screen's address.
 /// </para>
 /// <para>
 /// The path is put back before the answer leaves, so that the request log of
@@ -70,7 +70,7 @@ public static class BrowserNavigation
 
         var path = request.Path.Value ?? "/";
 
-        if (Path.HasExtension(path))
+        if (Path.HasExtension(path) && !IsReleaseScreen(path))
         {
             return false;
         }
@@ -80,5 +80,13 @@ public static class BrowserNavigation
         return destination.Length > 0
             ? destination == "document"
             : request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsReleaseScreen(string path)
+    {
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 3
+            && parts[1].Equals("releases", StringComparison.OrdinalIgnoreCase)
+            && !parts[0].Equals("assets", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -14,6 +14,7 @@ import { OverviewView } from "@/projects/OverviewView";
 import { ProjectsContext } from "@/projects/context";
 import { useProjects, type Projects } from "@/projects/useProjects";
 import { ReleasesView } from "@/releases/ReleasesView";
+import { ReleaseErrorBoundary } from "@/releases/ReleaseErrorBoundary";
 import { SettingsView } from "@/settings/SettingsView";
 import { SpacesContext, TreeContext } from "@/spaces/context";
 import { SpaceSwitcher } from "@/spaces/SpaceSwitcher";
@@ -238,7 +239,7 @@ export function Shell() {
             <Route path="epics/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewEpicView /></Suspense>} />
             <Route path="epics/:number" element={<Suspense fallback={<Busy title="Loading the screen…" />}><EpicView /></Suspense>} />
             <Route path="releases" element={<ReleasesView />} />
-            <Route path="releases/:name" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ReleaseView /></Suspense>} />
+            <Route path="releases/:name" element={<ReleaseErrorBoundary project={projectKey!}><Suspense fallback={<Busy title="Loading the screen…" />}><ReleaseView /></Suspense></ReleaseErrorBoundary>} />
             <Route path="labels" element={<LabelsView />} />
             <Route path="settings/*" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ProjectSettingsView /></Suspense>} />
           </Route>

@@ -23,6 +23,7 @@ public sealed class BrowserNavigationTests(PostgresFixture postgres)
     [InlineData("/spaces")]
     [InlineData("/projects")]
     [InlineData("/admin/projects")]
+    [InlineData("/PLAN/releases/0.11.0")]
     public async Task A_browser_navigation_is_the_applications_and_not_the_instances(string path)
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
