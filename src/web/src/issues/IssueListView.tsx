@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { SearchIcon, SlidersHorizontalIcon } from "lucide-react";
+import { SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
@@ -21,6 +21,7 @@ import { AssigneeFilter, AuthorFilter, EpicFilter } from "./pickers";
 import { PriorityMark } from "./priority";
 import { priorityLabel } from "./priorityLabel";
 import { StatusDot } from "./status";
+import { statusLabel } from "./statusLabel";
 
 type PageState =
   | { at: "asking"; items: IssueSummary[]; total?: number }
@@ -34,6 +35,7 @@ type ListQuery = {
 };
 
 const pageSize = 50;
+const filterNames = new Set(["q", "status", "ready", "priority", "label", "epic", "assignee", "claimed", "author", "blocked", "has_open_question", "deleted"]);
 
 /** The shared, cursor-paginated issue list described by cut three. */
 export function IssueListView({ view }: { view: View }) {
@@ -187,8 +189,26 @@ export function IssueListView({ view }: { view: View }) {
     for (const value of values) next.append(name, value);
     setSearch(next, { replace: true });
   }
-  let explicit = false;
-  search.forEach((_value, key) => { if (!["sort", "order"].includes(key)) explicit = true; });
+  const explicitFilters: Array<[string, string]> = [];
+  search.forEach((value, name) => { if (filterNames.has(name) && value !== "") explicitFilters.push([name, value]); });
+  const explicit = explicitFilters.length > 0;
+  const defaults = viewDefaults(view);
+  function clearExplicit() {
+    const next = new URLSearchParams(search);
+    for (const name of filterNames) next.delete(name);
+    setSearch(next, { replace: true });
+  }
+  function removeExplicit(at: number) {
+    const selected = explicitFilters[at];
+    if (!selected) return;
+    let removed = false;
+    const next = new URLSearchParams();
+    search.forEach((value, name) => {
+      if (!removed && name === selected[0] && value === selected[1]) { removed = true; return; }
+      next.append(name, value);
+    });
+    setSearch(next, { replace: true });
+  }
 
   return <div className="flex min-h-0 flex-1 flex-col">
     <PageHeader title={view.label} meta={page.total === undefined ? "…" : `${page.total} ${page.total === 1 ? "issue" : "issues"}`}>
@@ -204,22 +224,29 @@ export function IssueListView({ view }: { view: View }) {
       <select id={sortId} aria-label="Sort issues" value={search.get("sort") ?? "updated"} onChange={(event) => change("sort", event.target.value === "updated" ? undefined : event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="priority">Priority</option><option value="epic">Epic</option></select>
       <Button variant="ghost" size="sm" onClick={() => change("order", (search.get("order") ?? "desc") === "desc" ? "asc" : undefined)} aria-label="Reverse sort order">{(search.get("order") ?? "desc") === "desc" ? "Descending" : "Ascending"}</Button>
     </div>
+    {(explicit || defaults.length > 0) && <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs" aria-label="Active filters">
+      {defaults.length > 0 && <span className="text-muted-foreground">View defaults: {defaults.join(" · ")}</span>}
+      {explicitFilters.map(([name, value], index) => {
+        const label = filterLabel(name, value, epics);
+        return <button key={`${name}:${value}:${index}`} type="button" className="inline-flex min-h-8 items-center gap-1 rounded-full border bg-secondary px-2.5 text-secondary-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" aria-label={`Remove ${label}`} onClick={() => removeExplicit(index)}>{label}<XIcon aria-hidden className="size-3" /></button>;
+      })}
+    </div>}
     {/* Wide: the bar stays in place above the list. Narrow: the same controls
         arrive as a sheet that dismisses itself and hands the focus back
         (`docs/human-interface.md`, the screen matrix). */}
-    {filtersOpen && !narrow && <FilterBar project={project} search={search} change={change} changeAll={changeAll} labels={labels} epics={epics} clear={() => setSearch(new URLSearchParams(), { replace: true })} />}
+    {filtersOpen && !narrow && <FilterBar project={project} search={search} change={change} changeAll={changeAll} labels={labels} epics={epics} clear={clearExplicit} />}
     {narrow && <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
       <SheetContent side="bottom" finalFocus={filtersButton} className="max-h-[85svh] overflow-y-auto pb-4">
         <SheetHeader className="pb-0">
           <SheetTitle>Filters</SheetTitle>
           <SheetDescription>What you choose is carried by the address of this list.</SheetDescription>
         </SheetHeader>
-        <FilterBar project={project} search={search} change={change} changeAll={changeAll} labels={labels} epics={epics} clear={() => setSearch(new URLSearchParams(), { replace: true })} className="border-b-0 bg-transparent px-4 pt-0" />
+        <FilterBar project={project} search={search} change={change} changeAll={changeAll} labels={labels} epics={epics} clear={clearExplicit} className="border-b-0 bg-transparent px-4 pt-0" />
       </SheetContent>
     </Sheet>}
     {page.at === "asking" && !page.items.length && <Loading />}
     {page.at === "failed" && !page.items.length && <p className="p-4 text-sm text-destructive">{page.why}</p>}
-    {page.at === "known" && !page.items.length && <div className="flex flex-1 flex-col items-center justify-center gap-1 p-8 text-center"><p className="text-sm">{explicit ? "No issues match these filters." : "No issues yet."}</p><p className="text-xs text-muted-foreground">{view.hint}</p></div>}
+    {page.at === "known" && !page.items.length && <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center"><p className="text-sm">{explicit ? "No issues match these filters." : defaults.length > 0 ? "No issues in this view." : "No issues yet."}</p><p className="text-xs text-muted-foreground">{view.hint}</p>{explicit && <Button variant="outline" size="sm" onClick={clearExplicit}>Clear added filters</Button>}</div>}
     {!!page.items.length && <div ref={scrollElement} onScroll={(event) => sessionStorage.setItem(storageKey, String(event.currentTarget.scrollTop))} className="min-h-0 flex-1 overflow-auto" role="listbox" aria-label={`${view.label} issues`} aria-busy={page.at === "asking"}>
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>{visibleItems.map((virtual) => {
         const row = rows[virtual.index];
@@ -292,6 +319,35 @@ function GroupHead({ epic, epics, style }: { epic: string | null; epics: Schemas
 }
 
 function Loading() { return <div className="divide-y" aria-busy>{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex h-11 items-center gap-3 px-4"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 flex-1" /></div>)}</div>; }
+
+function viewDefaults(view: View): string[] {
+  const filter = view.filter;
+  if (!filter) return [];
+  return [
+    ...(filter.status ?? []).map((status) => statusLabel(status as IssueSummary["status"]) ?? status),
+    ...(filter.ready === undefined ? [] : [filter.ready ? "ready" : "not ready"]),
+    ...(filter.claimed === undefined ? [] : [`claim: ${filter.claimed}`]),
+    ...(filter.has_open_question === undefined ? [] : [filter.has_open_question ? "open question" : "no open question"]),
+  ];
+}
+
+function filterLabel(name: string, value: string, epics: Schemas["EpicSummary"][]): string {
+  switch (name) {
+    case "q": return `Search: ${value}`;
+    case "status": return `Status: ${statusLabel(value as IssueSummary["status"]) ?? value}`;
+    case "priority": return `Priority: ${priorityLabel(Number(value))}`;
+    case "label": return `Label: ${value}`;
+    case "epic": return `Epic: ${value === "none" ? "No epic" : [value, epics.find((epic) => epic.key === value)?.title].filter(Boolean).join(" · ")}`;
+    case "assignee": return `Assignee: ${value === "me" ? "Me" : value === "none" ? "Nobody" : value}`;
+    case "author": return `Author: ${value === "me" ? "Me" : value}`;
+    case "claimed": return `Claim: ${value === "true" ? "Claimed" : value === "false" ? "Unclaimed" : value === "me" ? "Mine" : value}`;
+    case "ready": return `Ready: ${value === "true" ? "yes" : "no"}`;
+    case "blocked": return `Blocked: ${value === "true" ? "yes" : "no"}`;
+    case "has_open_question": return `Open question: ${value === "true" ? "yes" : "no"}`;
+    case "deleted": return `Deleted: ${value === "true" ? "yes" : "no"}`;
+    default: return `${name}: ${value}`;
+  }
+}
 
 function readQuery(project: string | undefined, search: URLSearchParams, view: View): ListQuery {
   const bool = (name: string, fallback?: boolean) => search.has(name) ? search.get(name) === "true" : fallback;

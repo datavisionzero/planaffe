@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
@@ -60,7 +60,7 @@ const anAgent = {
   metadata: null, metadata_reported_at: null,
 };
 
-function renderList(routes: Record<string, unknown> = {}) {
+function renderList(routes: Record<string, unknown> = {}, path = `/PLAN/${all.path}`) {
   const instance = installInstance({
     "GET /issues": onePage,
     "GET /projects/PLAN/labels": [],
@@ -70,10 +70,55 @@ function renderList(routes: Record<string, unknown> = {}) {
     ...routes,
   });
 
-  renderAt(`/PLAN/${all.path}`, <Routes><Route path="/:project/:view" element={<IssueListView view={all} />} /></Routes>);
+  renderAt(path, <Routes><Route path="/:project/:view" element={<IssueListView view={all} />} /></Routes>);
 
   return instance;
 }
+
+it("shows explicit filters and removes one label while preserving the rest and sort", async () => {
+  const instance = renderList({}, "/PLAN/issues?label=bug&label=chore&priority=3&sort=created");
+  const user = userEvent.setup();
+  await screen.findByText("The first one");
+
+  const filters = screen.getByLabelText("Active filters");
+  expect(within(filters).getByRole("button", { name: "Remove Label: bug" })).toBeInTheDocument();
+  expect(within(filters).getByRole("button", { name: "Remove Label: chore" })).toBeInTheDocument();
+  expect(within(filters).getByRole("button", { name: "Remove Priority: high" })).toBeInTheDocument();
+  await user.click(within(filters).getByRole("button", { name: "Remove Label: bug" }));
+
+  expect(within(filters).queryByRole("button", { name: "Remove Label: bug" })).not.toBeInTheDocument();
+  expect(within(filters).getByRole("button", { name: "Remove Label: chore" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Sort issues" })).toHaveValue("created");
+  await waitFor(() => {
+    const calls = instance.calls.filter((call) => new URL(call.url).pathname === "/issues");
+    const query = new URL(calls.at(-1)!.url).searchParams;
+    expect(query.getAll("label")).toEqual(["chore"]);
+    expect(query.get("priority_min")).toBe("3");
+    expect(query.get("sort")).toBe("created");
+  });
+});
+
+it("keeps view defaults separate and clears added filters from an empty result", async () => {
+  const ready = views.find((view) => view.id === "ready")!;
+  const empty = { items: [], total: 0, has_more: false, next_cursor: null };
+  const instance = installInstance({ "GET /issues": empty, "GET /projects/PLAN/labels": [], "GET /epics": { items: [], total: 0, has_more: false, next_cursor: null } });
+  renderAt("/PLAN/ready?label=bug&sort=priority", <Routes><Route path="/:project/:view" element={<IssueListView view={ready} />} /></Routes>);
+  const user = userEvent.setup();
+
+  expect(await screen.findByText("No issues match these filters.")).toBeInTheDocument();
+  expect(screen.getByText("View defaults: todo · ready")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Clear added filters" }));
+  expect(await screen.findByText("No issues in this view.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Remove Label: bug" })).not.toBeInTheDocument();
+  await waitFor(() => {
+    const calls = instance.calls.filter((call) => new URL(call.url).pathname === "/issues");
+    const query = new URL(calls.at(-1)!.url).searchParams;
+    expect(query.get("label")).toBeNull();
+    expect(query.get("sort")).toBe("priority");
+    expect(query.get("status")).toBe("todo");
+    expect(query.get("ready")).toBe("true");
+  });
+});
 
 /** The filter bar, open, with the answers of the instance already in it. */
 async function openFilters() {
