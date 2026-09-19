@@ -24,6 +24,7 @@ import { DraftGuard } from "@/shared/abandon";
 import { useDraft } from "@/shared/useDraft";
 import { EditIssueForm } from "./IssueEditor";
 import { IssueWorkability } from "./IssueWorkability";
+import { IssuePicker } from "./pickers";
 
 type Load<T> = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; value: T };
 /** The issue alone can also be gone: deleted, and restorable until a moment. */
@@ -463,10 +464,41 @@ function CommentEntry({ issue, comment, onChanged }: { issue: Issue; comment: Is
 }
 
 function EdgeAction({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
-  const [key, setKey] = useState(""); const [error, setError] = useState<string>();
-  const id = useId();
-  async function add() { const value = key.trim(); if (!value) return; const result = await api.POST("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: value } } }); if (!result.response.ok) { setError(describe(result.error, result.response.status)); return; } const read = await api.GET("/issues/{key}", { params: { path: { key: issue.key } } }); if (read.data) { setKey(""); onChanged(read.data); } }
-  return <div className="grid gap-2 border-t pt-5"><label htmlFor={id} className="text-sm font-medium">Add blocker</label><div className="flex max-w-sm gap-2"><Input id={id} aria-label="Blocker issue key" placeholder="PLAN-42" value={key} onChange={(e) => setKey(e.target.value)} /><Button variant="outline" onClick={() => void add()}>Add</Button></div>{error && <p className="text-sm text-destructive">{error}</p>}<div className="flex flex-wrap gap-2">{issue.blocked_by.filter((x) => x.key !== null).map((x) => <Button key={x.key} size="xs" variant="ghost" onClick={async () => { const result = await api.DELETE("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: x.key! } } }); if (result.response.ok) onChanged({ ...issue, blocked_by: issue.blocked_by.filter((edge) => edge !== x), open_blockers: issue.open_blockers - Number(x.open) }); }}>Remove {x.key}</Button>)}</div></div>;
+  const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<string>();
+  const [error, setError] = useState("");
+
+  async function add() {
+    if (!selected || busy) return;
+    setBusy(true); setError("");
+    try {
+      const result = await api.POST("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: selected } } });
+      if (!result.data) throw new Error(describe(result.error, result.response.status));
+      setSelected("");
+      onChanged(result.data);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(key: string) {
+    if (removing || busy) return;
+    setRemoving(key); setError("");
+    try {
+      const result = await api.DELETE("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: key } } });
+      if (!result.data) throw new Error(describe(result.error, result.response.status));
+      onChanged(result.data);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
+    finally { setRemoving(undefined); }
+  }
+
+  return <div className="grid gap-2 border-t pt-5">
+    <div className="flex max-w-md flex-wrap items-end gap-2">
+      <div className="min-w-56 flex-1"><IssuePicker label="Add blocker" project={issue.project} crossProject exclude={[issue.key, ...issue.blocked_by.flatMap((edge) => edge.key ?? [])]} value={selected ? [selected] : []} onChange={(keys) => { setSelected(keys[0] ?? ""); setError(""); }} error={error || undefined} /></div>
+      <Button variant="outline" disabled={!selected || busy || removing !== undefined} onClick={() => void add()}>{busy ? "Adding…" : "Add"}</Button>
+    </div>
+    <div className="flex flex-wrap gap-2">{issue.blocked_by.filter((edge) => edge.key !== null).map((edge) => <Button key={edge.key} size="xs" variant="ghost" disabled={busy || removing !== undefined} onClick={() => void remove(edge.key!)}>{removing === edge.key ? "Removing…" : `Remove ${edge.key}`}</Button>)}</div>
+  </div>;
 }
 
 type ActPath = "/issues/{key}/claim" | "/issues/{key}/release" | "/issues/{key}/close" | "/issues/{key}/review" | "/issues/{key}/reopen" | "/issues/{key}/restore";

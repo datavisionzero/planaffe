@@ -46,6 +46,38 @@ function WithPulse({ children }: { children: ReactNode }) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the human-first issue detail", () => {
+  it("finds cross-project blockers by key and keeps the choice after a cycle refusal", async () => {
+    const other = { ...free, key: "OTHER-7", project: "OTHER", title: "External dependency" };
+    const linked = { ...free, blocked_by: [...free.blocked_by, { key: "OTHER-7", title: other.title, status: "todo", open: true }], open_blockers: 2, workability: { workable: false, parent_gated: false } };
+    let attempts = 0;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "GET /issues": { items: [free, other], total: 2, has_more: false, next_cursor: null },
+      "GET /issues/OTHER-7": other,
+      "POST /issues/PLAN-9/blocked-by/OTHER-7": () => ++attempts === 1
+        ? { status: 422, body: { type: "/problems/cycle", title: "cycle", detail: "This edge would close a cycle." } }
+        : linked,
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: /Relationships/ }));
+    const picker = await screen.findByRole("combobox", { name: "Add blocker" });
+    await user.type(picker, "OTHER-7");
+    expect(within(screen.getByRole("listbox", { name: "Add blocker" })).queryByText("Human-first issue")).not.toBeInTheDocument();
+    await user.click((await screen.findByText("External dependency")).closest<HTMLElement>("[role=option]")!);
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(await screen.findByText(/close a cycle/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove OTHER-7" })).toBeInTheDocument();
+    const listCall = instance.calls.find((call) => new URL(call.url).pathname === "/issues")!;
+    expect(new URL(listCall.url).searchParams.has("project")).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Relationships 5" })).toBeInTheDocument());
+    expect(screen.getAllByRole("link", { name: /^OTHER-7 ·/ }).some((link) => link.getAttribute("href") === "/OTHER/issues/7")).toBe(true);
+  });
+
   it("separates Ready from Workable and explains simultaneous blockers", async () => {
     const gated = { ...issue, status: "todo", claim: null, ready: false, project_context: { ...issue.project_context, triage_required: true }, workability: { workable: false, parent_gated: true } };
     const instance = installInstance({
