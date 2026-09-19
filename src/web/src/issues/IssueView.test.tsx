@@ -45,6 +45,41 @@ function WithPulse({ children }: { children: ReactNode }) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the human-first issue detail", () => {
+  it("continues from Needs you only after the current issue is clear", async () => {
+    const waiting = { ...free, questions: issue.questions, open_questions: 1 };
+    const next = { ...free, key: "PLAN-10", title: "Next decision", questions: issue.questions, open_questions: 1 };
+    const answered = { ...issue.questions[0], answer: "Use the browser path.", answered_by: person, answered_at: "2026-09-04T11:00:00Z" };
+    let items = [{ issue: waiting, because: "question" }, { issue: next, because: "question" }];
+    installInstance({
+      "GET /issues/PLAN-9": waiting,
+      "GET /issues/PLAN-9/history": [],
+      "GET /issues/PLAN-10": next,
+      "GET /issues/PLAN-10/history": [],
+      "GET /projects/PLAN/needs-you": () => ({ items, total: items.length, next_cursor: null, has_more: false, agents: 1 }),
+      "POST /questions/0199a000-0000-7000-8000-000000000004/answer": () => {
+        items = items.slice(1);
+        return { body: answered };
+      },
+    });
+    renderAt("/PLAN/issues/9?from=needs-you", routedIssue);
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("link", { name: /Back to Needs you/ })).toHaveAttribute("href", "/PLAN/needs-you");
+    expect(screen.queryByRole("button", { name: "Next waiting issue" })).not.toBeInTheDocument();
+    await user.type(await screen.findByLabelText("Answer"), "Use the browser path.");
+    await user.click(screen.getByRole("button", { name: "Answer" }));
+    await user.click(await screen.findByRole("button", { name: "Next waiting issue" }));
+    expect(await screen.findByRole("heading", { name: /Next decision/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Back to Needs you/ })).toBeInTheDocument();
+  });
+
+  it("leaves a direct issue link outside the Needs you workflow", async () => {
+    installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [] });
+    renderAt("/PLAN/issues/9", routedIssue);
+    await screen.findByRole("heading", { name: /Human-first issue/ });
+    expect(screen.queryByRole("link", { name: /Back to Needs you/ })).not.toBeInTheDocument();
+  });
+
   it("announces remote edits without replacing text or focus in the editor", async () => {
     let current = free;
     installInstance({ "GET /issues/PLAN-9": () => current, "GET /issues/PLAN-9/history": [] });

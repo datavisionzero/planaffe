@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/shared/PageHeader";
 import { stale } from "@/shared/stale";
 import { useAttention } from "@/shell/useAttention";
-import { keyPath } from "@/shell/views";
+import { needsYouIssuePath } from "@/shell/views";
 import { StatusDot } from "./status";
 
 type Because = Schemas["NeedsYouBecause"];
@@ -181,7 +181,7 @@ function Row({ item, onResolved }: { item: Item; onResolved: () => void }) {
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
       <StatusDot status={issue.status} />
-      <Link className="font-mono text-xs text-brand hover:underline" to={keyPath(issue.key)}>
+      <Link className="font-mono text-xs text-brand hover:underline" to={needsYouIssuePath(issue.key)}>
         {issue.key}
       </Link>
       <span className="min-w-0 flex-1 basis-40 truncate text-sm">{issue.title}</span>
@@ -192,7 +192,7 @@ function Row({ item, onResolved }: { item: Item; onResolved: () => void }) {
         {item.because === "unready" ? (
           <SetReady issue={issue} onDone={onResolved} />
         ) : (
-          <Button variant="outline" size="sm" render={<Link to={keyPath(issue.key)} />}>
+          <Button variant="outline" size="sm" render={<Link to={needsYouIssuePath(issue.key)} />}>
             {actions[item.because]}
           </Button>
         )}

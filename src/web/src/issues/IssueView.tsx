@@ -1,6 +1,6 @@
 import { MoreHorizontalIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { api, codeOf, describe, type HistoryEntry, type Issue, type Problem } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { ActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
 import { useSession } from "@/session/useSession";
 import { stale } from "@/shared/stale";
-import { keyPath, pathKey } from "@/shell/views";
+import { keyPath, needsYouIssuePath, pathKey, viewOf, viewPath } from "@/shell/views";
 import { useAttention } from "@/shell/useAttention";
 import { PriorityMark } from "./priority";
 import { StatusDot } from "./status";
@@ -56,7 +56,76 @@ export function IssueView() {
   return <IssueContent key={key} issueKey={key} />;
 }
 
+type NextAttention = { at: "current" | "done" } | { at: "next"; key: string };
+type AttentionStep = NextAttention | { at: "checking" } | { at: "failed"; why: string };
+
+/** Resolve the next step against the current server order, not a saved row number. */
+async function nextAttention(issueKey: string, signal: AbortSignal): Promise<NextAttention> {
+  const project = issueKey.slice(0, issueKey.indexOf("-"));
+  const candidates: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const { data, error, response } = await api.GET("/projects/{key}/needs-you", {
+      params: { path: { key: project }, query: { cursor, limit: 50 } }, signal,
+    });
+    if (!data) throw new Error(describe(error, response.status));
+    for (const item of data.items) {
+      if (item.issue.key === issueKey) return { at: "current" };
+      candidates.push(item.issue.key);
+    }
+    cursor = data.next_cursor ?? undefined;
+  } while (cursor !== undefined && !signal.aborted);
+
+  for (const key of candidates) {
+    const { data, error, response } = await api.GET("/issues/{key}", { params: { path: { key } }, signal });
+    if (data) return { at: "next", key };
+    if (response.status !== 403 && response.status !== 404) throw new Error(describe(error, response.status));
+  }
+  return { at: "done" };
+}
+
+/** The source list stays one click away, and a completed act offers the next live item. */
+function NeedsYouFlow({ issueKey, revision, pulse }: { issueKey: string; revision: number; pulse: number }) {
+  const navigate = useNavigate();
+  const project = issueKey.slice(0, issueKey.indexOf("-"));
+  const back = viewPath(project, viewOf("needs-you"));
+  const [step, setStep] = useState<AttentionStep>({ at: "checking" });
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    const stop = new AbortController();
+    void nextAttention(issueKey, stop.signal).then((value) => {
+      if (!stop.signal.aborted) setStep(value);
+    }, (reason) => {
+      if (!stop.signal.aborted) setStep({ at: "failed", why: reason instanceof Error ? reason.message : "The instance did not answer." });
+    });
+    return () => stop.abort();
+  }, [issueKey, revision, pulse, retry]);
+
+  async function advance() {
+    setStep({ at: "checking" });
+    const stop = new AbortController();
+    try {
+      const value = await nextAttention(issueKey, stop.signal);
+      if (value.at === "next") void navigate(needsYouIssuePath(value.key));
+      else setStep(value);
+    } catch (reason) {
+      setStep({ at: "failed", why: reason instanceof Error ? reason.message : "The instance did not answer." });
+    }
+  }
+
+  return <div className="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-4 py-2 text-sm" aria-label="Needs you workflow">
+    <Link className="text-brand hover:underline" to={back}>← Back to Needs you</Link>
+    {step.at === "next" && <Button size="sm" variant="outline" onClick={() => void advance()}>Next waiting issue</Button>}
+    {step.at === "done" && <span role="status">All caught up. Nothing else needs you.</span>}
+    {step.at === "current" && revision > 0 && <span role="status">This issue still needs your attention.</span>}
+    {step.at === "failed" && <span role="alert">Could not find the next issue: {step.why} <button className="underline" onClick={() => setRetry((value) => value + 1)}>Try again</button></span>}
+  </div>;
+}
+
 function IssueContent({ issueKey: key }: { issueKey: string }) {
+  const location = useLocation();
+  const fromNeedsYou = new URLSearchParams(location.search).get("from") === "needs-you";
   const { issuesPulse } = useAttention();
   const [state, setState] = useState<{ key: string; issue: IssueLoad; history: Load<HistoryEntry[]> }>();
   const [editing, setEditing] = useState(false);
@@ -66,6 +135,7 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [historyRevision, setHistoryRevision] = useState(0);
   const [contentRevision, setContentRevision] = useState(0);
+  const [flowRevision, setFlowRevision] = useState(0);
   const [deleted, setDeleted] = useState<{ until: string | null }>();
   const current = state !== undefined && state.key === key ? state : { key, issue: asking, history: asking };
   const stateRef = useRef(state);
@@ -120,6 +190,7 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
     setState((old) => ({ key, issue: { at: "known", value }, history: old?.history ?? asking }));
     setExternal(undefined);
     setHistoryRevision((x) => x + 1);
+    setFlowRevision((x) => x + 1);
     setEditing(false);
   };
   const useLatest = () => {
@@ -130,17 +201,19 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
     setContentRevision((value) => value + 1);
   };
   const restored = (value: Issue) => { setDeleted(undefined); changed(value); };
+  const flow = fromNeedsYou ? <NeedsYouFlow issueKey={key} revision={flowRevision} pulse={issuesPulse} /> : null;
 
   if (current.issue.at === "asking") return <><PageHeader title={<Skeleton className="h-4 w-64" />} /><div className="space-y-3 p-4"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></>;
   // Deleted just now, or deleted long before this browser asked for it: the
   // same screen either way, and the deadline whenever the instance named one.
-  if (deleted !== undefined) return <Gone issueKey={key} until={deleted.until} onRestored={restored} />;
-  if (current.issue.at === "gone") return <Gone issueKey={key} until={current.issue.until} onRestored={restored} />;
-  if (current.issue.at === "failed") return <><PageHeader title={key} /><p className="p-4 text-sm text-destructive">{current.issue.why}</p></>;
+  if (deleted !== undefined) return <>{flow}<Gone issueKey={key} until={deleted.until} onRestored={restored} /></>;
+  if (current.issue.at === "gone") return <>{flow}<Gone issueKey={key} until={current.issue.until} onRestored={restored} /></>;
+  if (current.issue.at === "failed") return <><PageHeader title={key} />{flow}<p className="p-4 text-sm text-destructive">{current.issue.why}</p></>;
   const issue = current.issue.value;
-  if (editing) return <><PageHeader title={`Edit ${issue.key}`} /><EditIssueForm issue={issue} external={external} onSaved={changed} onCancel={useLatest} /></>;
+  if (editing) return <><PageHeader title={`Edit ${issue.key}`} />{flow}<EditIssueForm issue={issue} external={external} onSaved={changed} onCancel={useLatest} /></>;
 
   return <><PageHeader className="sticky top-0 z-20 bg-background" title={<span className="flex items-center gap-2"><span className="font-mono text-xs font-normal text-muted-foreground">{issue.key}</span>{issue.title}</span>}><ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} /></PageHeader>
+    {flow}
     {refreshError && <div role="alert" className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm text-destructive">Could not refresh: {refreshError}<Button size="sm" variant="outline" onClick={() => setRefreshRevision((x) => x + 1)}>Try again</Button></div>}
     <DraftGuard key={contentRevision} external={external !== undefined} onDirtyChange={setDirty} onUseLatest={useLatest}>
     <div className="flex flex-1 flex-col md:flex-row">
