@@ -9,8 +9,8 @@
 // What is measured comes out of the built `index.html`, which is the honest
 // answer to "what does a browser fetch before the shell renders" — the entry
 // module, every chunk preloaded beside it, and the stylesheet. The editor, the
-// Markdown pipeline and the confetti are chunks of their own because all three
-// arrive after the frame rather than in it (ADR 0006), and they are found by
+// Markdown pipeline shared with draft recovery, and the confetti arrive after
+// the frame rather than in it (ADR 0006), and they are found by
 // the module each was cut from rather than by a hash that changes with every
 // build.
 //
@@ -87,7 +87,7 @@ function afterTheFrame(name, cut) {
 const loaded = firstLoad();
 const measured = {
   "first-load": loaded.reduce((total, file) => total + bytes(file), 0),
-  markdown: afterTheFrame("markdown", "MarkdownField"),
+  markdown: afterTheFrame("markdown", "useDraft"),
   editor: afterTheFrame("editor", "Editor"),
   confetti: afterTheFrame("confetti", "confetti\\.module"),
 };
