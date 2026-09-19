@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 
 afterEach(cleanup);
@@ -41,6 +41,8 @@ if (typeof window.localStorage === "undefined" || window.localStorage === null) 
   };
   Object.defineProperty(window, "localStorage", { value: storage, configurable: true });
 }
+
+beforeEach(() => window.localStorage.clear());
 
 /**
  * The Markdown editor stands in for itself here.

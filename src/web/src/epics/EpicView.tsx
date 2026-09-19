@@ -10,6 +10,7 @@ import { MarkdownField } from "@/shared/MarkdownField";
 import { StatusDot } from "@/issues/status";
 import { useLabels } from "@/projects/useLabels";
 import { useAbandon } from "@/shared/abandon";
+import { useDraft } from "@/shared/useDraft";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { Markdown } from "@/shared/Markdown";
 import { PageHeader } from "@/shared/PageHeader";
@@ -402,16 +403,16 @@ function EpicForm({ initial, submit, write, onWritten, onCancel, notice }: {
   /** What stands between the fields and the buttons — the conflict, where there is one. */
   notice?: ReactNode;
 }) {
-  const [title, setTitle] = useState(initial?.title ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [labels, setLabels] = useState(initial?.labels.map((label) => label.name) ?? []);
+  const [start] = useState<Draft>(() => ({ title: initial?.title ?? "", description: initial?.description ?? "", labels: initial?.labels.map((label) => label.name) ?? [] }));
+  const { project } = useParams();
+  const { value: draft, setValue: setDraft, clear, recovery } = useDraft<Draft>(initial ? `epic:${initial.key}:edit` : `epic:${project}:new`, start, initial?.updated_at ?? null);
+  const { title, description, labels } = draft;
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((old) => ({ ...old, [key]: value }));
   const [saving, setSaving] = useState(false);
   const [why, setWhy] = useState<string>();
   const titleId = useId();
-  const { project } = useParams();
   const known = useLabels(project);
-  const start = { title: initial?.title ?? "", description: initial?.description ?? "", labels: initial?.labels.map((label) => label.name) ?? [] };
-  const { leave, dialog } = useAbandon(JSON.stringify({ title, description, labels }) !== JSON.stringify(start), onCancel);
+  const { leave, permit, dialog } = useAbandon(JSON.stringify(draft) !== JSON.stringify(start), onCancel, clear);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -430,7 +431,7 @@ function EpicForm({ initial, submit, write, onWritten, onCancel, notice }: {
         return;
       }
 
-      onWritten(data);
+      clear(); permit(); onWritten(data);
     } catch {
       setWhy("The instance did not answer.");
     } finally {
@@ -440,12 +441,13 @@ function EpicForm({ initial, submit, write, onWritten, onCancel, notice }: {
 
   return (
     <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => void save(event)}>
+      {recovery}
       <label className="grid gap-1 text-sm font-medium">
         Title
-        <Input id={titleId} required autoFocus value={title} onChange={(event) => setTitle(event.target.value)} />
+        <Input id={titleId} required autoFocus value={title} onChange={(event) => set("title", event.target.value)} />
       </label>
-      <MarkdownField label="Description" value={description} onChange={setDescription} />
-      <LabelPicker label="Labels" labels={known.labels} value={labels} onChange={setLabels} onCreate={known.create} />
+      <MarkdownField label="Description" value={description} onChange={(value) => set("description", value)} />
+      <LabelPicker label="Labels" labels={known.labels} value={labels} onChange={(value) => set("labels", value)} onCreate={known.create} />
       {/* A conflict says everything the refusal's own sentence says, and says
           what to do about it, so it stands in its place rather than beside it. */}
       {notice ?? (why !== undefined && <p role="alert" className="text-sm text-destructive">{why}</p>)}

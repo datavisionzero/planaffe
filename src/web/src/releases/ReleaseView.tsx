@@ -16,6 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownField } from "@/shared/MarkdownField";
+import { useAbandon } from "@/shared/abandon";
+import { useDraft } from "@/shared/useDraft";
 import { StatusDot } from "@/issues/status";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { Markdown } from "@/shared/Markdown";
@@ -177,9 +179,17 @@ export function ReleaseView() {
 }
 
 function Notes({ release, onChanged }: { release: Release; onChanged: (release: Release) => void }) {
-  const { project } = useParams();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(release.description);
+  if (editing) return <NotesEditor release={release} onChanged={onChanged} onCancel={() => setEditing(false)} />;
+  return <Section title="Notes" action={<Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit notes</Button>}>
+    {release.description === "" ? <p className="text-sm text-muted-foreground">No notes yet.</p> : <Markdown>{release.description}</Markdown>}
+  </Section>;
+}
+
+function NotesEditor({ release, onChanged, onCancel }: { release: Release; onChanged: (release: Release) => void; onCancel: () => void }) {
+  const { project } = useParams();
+  const { value: draft, setValue: setDraft, clear, recovery } = useDraft(`release:${project}:${release.name}:notes`, release.description, release.description);
+  const { leave, permit, dialog } = useAbandon(draft !== release.description, onCancel, clear);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -199,8 +209,7 @@ function Notes({ release, onChanged }: { release: Release; onChanged: (release: 
         return;
       }
 
-      onChanged(data);
-      setEditing(false);
+      clear(); permit(); onChanged(data); onCancel();
     } catch {
       setError("The instance did not answer.");
     } finally {
@@ -208,49 +217,24 @@ function Notes({ release, onChanged }: { release: Release; onChanged: (release: 
     }
   }
 
-  if (editing) {
-    return (
+  return (
       <Section title="Notes">
         <form className="grid gap-3" onSubmit={(event) => void save(event)}>
+          {recovery}
           <MarkdownField label="Notes" value={draft} onChange={setDraft} />
           {error !== undefined && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setEditing(false)}>
+            <Button type="button" variant="outline" onClick={leave}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>
               {busy ? "Saving…" : "Save notes"}
             </Button>
           </div>
+          {dialog}
         </form>
       </Section>
     );
-  }
-
-  return (
-    <Section
-      title="Notes"
-      action={
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setDraft(release.description);
-            setError(undefined);
-            setEditing(true);
-          }}
-        >
-          Edit notes
-        </Button>
-      }
-    >
-      {release.description === "" ? (
-        <p className="text-sm text-muted-foreground">No notes yet.</p>
-      ) : (
-        <Markdown>{release.description}</Markdown>
-      )}
-    </Section>
-  );
 }
 
 /**
@@ -385,18 +369,17 @@ function CopyAsMarkdown({ release }: { release: Release }) {
 function PublishDialog({ release, onPublished }: { release: Release; onPublished: (release: Release) => void }) {
   const { project } = useParams();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [notes, setNotes] = useState(release.description);
+  const [start] = useState(() => ({ name: "", notes: release.description }));
+  const { value: draft, setValue: setDraft, clear, recovery } = useDraft(`release:${project}:${release.name}:publish`, start, release.description);
+  const { name, notes } = draft;
+  const set = <K extends keyof typeof draft>(key: K, value: typeof draft[K]) => setDraft((old) => ({ ...old, [key]: value }));
+  const { permit, dialog } = useAbandon(open && JSON.stringify(draft) !== JSON.stringify(start), () => setOpen(false), clear, false);
   const nameId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
   function changeOpen(next: boolean) {
     if (busy) return;
-    if (next) {
-      setName("");
-      setNotes(release.description);
-    }
     setError(undefined);
     setOpen(next);
   }
@@ -419,7 +402,7 @@ function PublishDialog({ release, onPublished }: { release: Release; onPublished
         return;
       }
 
-      setOpen(false);
+      clear(); permit(); setOpen(false);
       onPublished(data);
     } catch {
       setError("The instance did not answer.");
@@ -433,6 +416,7 @@ function PublishDialog({ release, onPublished }: { release: Release; onPublished
       <DialogTrigger render={<Button size="sm" />}>Publish…</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form className="grid gap-4" onSubmit={(event) => void publish(event)}>
+          {recovery}
           <DialogHeader>
             <DialogTitle>Publish the open release</DialogTitle>
             <DialogDescription>
@@ -445,13 +429,13 @@ function PublishDialog({ release, onPublished }: { release: Release; onPublished
             <Input
               id={nameId}
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => set("name", event.target.value)}
               placeholder="1.4.0"
               maxLength={100}
               required
             />
           </label>
-          <MarkdownField label="Notes" value={notes} onChange={setNotes} />
+          <MarkdownField label="Notes" value={notes} onChange={(value) => set("notes", value)} />
           <div className="grid gap-1">
             <span className="text-sm font-medium">What ships</span>
             <div className="max-h-48 overflow-y-auto">
@@ -470,6 +454,7 @@ function PublishDialog({ release, onPublished }: { release: Release; onPublished
             </Button>
           </DialogFooter>
         </form>
+        {dialog}
       </DialogContent>
     </Dialog>
   );

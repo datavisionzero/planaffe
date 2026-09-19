@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { useSession } from "@/session/useSession";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { MarkdownField } from "@/shared/MarkdownField";
+import { useAbandon } from "@/shared/abandon";
+import { useDraft } from "@/shared/useDraft";
 import { submitting } from "./forms";
 import { Row, Rows, Said, Section, SettingsShell } from "./SettingsShell";
 
@@ -90,8 +92,6 @@ function General() {
 function Instructions() {
   const { project: key } = useParams();
   const [project, setProject] = useState<Project>();
-  const [instructions, setInstructions] = useState("");
-  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -99,32 +99,45 @@ function Instructions() {
       const { data } = await api.GET("/projects/{key}", { params: { path: { key: key! } } });
       if (!current) return;
       setProject(data);
-      setInstructions(data?.instructions ?? "");
     })();
     return () => { current = false; };
   }, [key]);
-
-  async function save() {
-    setNotice("");
-    const r = await api.PATCH("/projects/{key}", {
-      params: { path: { key: key! } },
-      // Only this field: every property of the change is required in the
-      // contract, and a change that names the others would write them too.
-      body: { instructions } as never,
-    });
-    if (!r.data) { setNotice(describe(r.error, r.response.status)); return; }
-    setProject(r.data);
-    setInstructions(r.data.instructions ?? "");
-    setNotice("Saved.");
-  }
 
   return (
     <Section
       title="Instructions"
       description="Delivered to every agent with every ticket — what holds for all work here, whoever does it and in whichever repository."
     >
-      {project && (
+      {project && <InstructionsEditor project={project} onSaved={setProject} />}
+    </Section>
+  );
+}
+
+function InstructionsEditor({ project, onSaved }: { project: Project; onSaved: (project: Project) => void }) {
+  const { value: instructions, setValue: setInstructions, clear, recovery } = useDraft(`project:${project.key}:instructions`, project.instructions ?? "", project.updated_at);
+  const [notice, setNotice] = useState("");
+  const changed = instructions !== (project.instructions ?? "");
+  const cancel = () => { clear(); setInstructions(project.instructions ?? ""); };
+  const { leave, permit, dialog } = useAbandon(changed, cancel, clear);
+
+  async function save() {
+    setNotice("");
+    const r = await api.PATCH("/projects/{key}", {
+      params: { path: { key: project.key } },
+      // Only this field: every property of the change is required in the
+      // contract, and a change that names the others would write them too.
+      body: { instructions } as never,
+    });
+    if (!r.data) { setNotice(describe(r.error, r.response.status)); return; }
+    clear(); permit(); onSaved(r.data);
+    setInstructions(r.data.instructions ?? "");
+    setNotice("Saved.");
+  }
+
+  return (
+    <>
         <div className="grid max-w-3xl gap-3">
+          {recovery}
           <MarkdownField
             label="Instructions"
             value={instructions}
@@ -132,11 +145,11 @@ function Instructions() {
             onSubmit={() => void save()}
             hint="Markdown. Leave it empty and agents are handed the ticket and nothing else."
           />
-          <Button type="button" className="w-fit" onClick={() => void save()}>Save instructions</Button>
+          <div className="flex gap-2"><Button type="button" onClick={() => void save()}>Save instructions</Button><Button type="button" variant="outline" onClick={leave}>Cancel</Button></div>
         </div>
-      )}
       <Said notice={notice} />
-    </Section>
+      {dialog}
+    </>
   );
 }
 

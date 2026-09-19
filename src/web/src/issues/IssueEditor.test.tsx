@@ -1,12 +1,35 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Route, Routes } from "react-router";
+import { Link, Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { installInstance, renderAt } from "@/shared/testing";
 import type { Issue } from "@/api/client";
 import { EditIssueForm, NewIssueView } from "./IssueEditor";
 
 afterEach(() => vi.unstubAllGlobals());
+
+it("keeps a draft across remounts and asks before leaving a changed form", async () => {
+  installInstance({ "GET /projects/PLAN/labels": [] });
+  const form = <Routes><Route path="/:project/issues/new" element={<><NewIssueView /><Link to="/PLAN/issues">All issues</Link></>} /><Route path="/:project/issues" element={<p>The list</p>} /></Routes>;
+  const first = renderAt("/PLAN/issues/new", form);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Title"), "Keep this title");
+  await user.click(screen.getByRole("link", { name: "All issues" }));
+  expect(await screen.findByRole("dialog", { name: "Discard what you wrote?" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Keep writing" }));
+  expect(screen.getByLabelText("Title")).toHaveValue("Keep this title");
+  first.unmount();
+
+  renderAt("/PLAN/issues/new", form);
+  expect(screen.getByLabelText("Title")).toHaveValue("");
+  expect(screen.getByText("A saved draft is available for this form.")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Restore draft" }));
+  expect(screen.getByLabelText("Title")).toHaveValue("Keep this title");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  await user.click(screen.getByRole("button", { name: "Discard" }));
+  expect(await screen.findByText("The list")).toBeInTheDocument();
+  expect([...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).filter((key) => key?.startsWith("planaffe.draft:"))).toHaveLength(0);
+});
 
 it("creates one issue with its fields and opens it", async () => {
   const instance = installInstance({

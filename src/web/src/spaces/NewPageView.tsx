@@ -7,6 +7,7 @@ import { Choose } from "@/shared/Choose";
 import { MarkdownField } from "@/shared/MarkdownField";
 import { PageHeader } from "@/shared/PageHeader";
 import { useAbandon } from "@/shared/abandon";
+import { useDraft } from "@/shared/useDraft";
 import { pagePath, spacePath } from "@/shell/views";
 import type { PageSummary } from "./context";
 import { takesChildren } from "./tree";
@@ -27,16 +28,16 @@ export function NewPageView() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { tree, reload } = usePageTree();
-  const [parent, setParent] = useState(params.get("parent") ?? "");
-  const [slug, setSlug] = useState("");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const [start] = useState(() => ({ parent: params.get("parent") ?? "", slug: "", title: "", body: "" }));
+  const { value: draft, setValue: setDraft, clear, recovery } = useDraft(`space:${name}:new-page:${start.parent}`, start, null);
+  const { parent, slug, title, body } = draft;
+  const set = <K extends keyof typeof draft>(key: K, value: typeof draft[K]) => setDraft((old) => ({ ...old, [key]: value }));
   const [saving, setSaving] = useState(false);
   const [why, setWhy] = useState<string>();
   const slugId = useId();
   const titleId = useId();
-  const written = slug !== "" || title !== "" || body !== "";
-  const { leave, dialog } = useAbandon(written, () => void navigate(spacePath(name!)));
+  const written = JSON.stringify(draft) !== JSON.stringify(start);
+  const { leave, permit, dialog } = useAbandon(written, () => void navigate(spacePath(name!)), clear);
 
   // Only a page with room below it can be a parent — there is no fourth level
   // (VISION 18). The instance says so too, and its refusal is shown where it
@@ -62,6 +63,7 @@ export function NewPageView() {
       // The frame holds the tree, so the frame is what catches up — before the
       // address it is about to lead to is drawn under a navigation without it.
       await reload();
+      clear(); permit();
       void navigate(pagePath(name!, data.path), { replace: true });
     } catch {
       setWhy("The instance did not answer.");
@@ -74,7 +76,8 @@ export function NewPageView() {
     <>
       <PageHeader title="Create page" />
       <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => void create(event)}>
-        <Choose label="Under" value={parent} onChange={setParent}>
+        {recovery}
+        <Choose label="Under" value={parent} onChange={(value) => set("parent", value)}>
           <option value="">Directly under the space</option>
           {parents.map((page) => (
             <option key={page.path} value={page.path}>{indented(page)}</option>
@@ -82,7 +85,7 @@ export function NewPageView() {
         </Choose>
         <div className="grid gap-1 text-sm font-medium">
           <label htmlFor={slugId}>Slug</label>
-          <Input id={slugId} name="slug" required autoFocus value={slug} onChange={(event) => setSlug(event.target.value)} />
+          <Input id={slugId} name="slug" required autoFocus value={slug} onChange={(event) => set("slug", event.target.value)} />
           <span className="text-xs font-normal text-muted-foreground">
             The last part of the address: lower case letters and digits, hyphens between the words. It is not derived
             from the title, it has to be free under the page above, and renaming it later leaves nothing behind at the
@@ -91,9 +94,9 @@ export function NewPageView() {
         </div>
         <label className="grid gap-1 text-sm font-medium" htmlFor={titleId}>
           Title
-          <Input id={titleId} name="title" required value={title} onChange={(event) => setTitle(event.target.value)} />
+          <Input id={titleId} name="title" required value={title} onChange={(event) => set("title", event.target.value)} />
         </label>
-        <MarkdownField label="Body" value={body} onChange={setBody} />
+        <MarkdownField label="Body" value={body} onChange={(value) => set("body", value)} />
         {why !== undefined && <p role="alert" className="text-sm text-destructive">{why}</p>}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={leave}>Cancel</Button>
