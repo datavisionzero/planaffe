@@ -1,4 +1,4 @@
-import { MoreHorizontalIcon } from "lucide-react";
+import { CopyIcon, LinkIcon, MoreHorizontalIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { api, codeOf, describe, type HistoryEntry, type Issue, type Problem } from "@/api/client";
@@ -26,8 +26,7 @@ import { DraftGuard } from "@/shared/abandon";
 import { useDraft } from "@/shared/useDraft";
 import { EditIssueForm } from "./IssueEditor";
 import { IssueWorkability } from "./IssueWorkability";
-import { IssuePicker } from "./pickers";
-import { AssigneePicker } from "./pickers";
+import { AssigneePicker, IssuePicker } from "./pickers";
 import { priorityLabel } from "./priorityLabel";
 
 type Load<T> = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; value: T };
@@ -136,6 +135,7 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
   const { issuesPulse } = useAttention();
   const [state, setState] = useState<{ key: string; issue: IssueLoad; history: Load<HistoryEntry[]> }>();
   const [editing, setEditing] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<{ text: string; failed: boolean }>();
   const [dirty, setDirty] = useState(false);
   const [external, setExternal] = useState<Issue>();
   const [refreshError, setRefreshError] = useState("");
@@ -219,7 +219,22 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
   const issue = current.issue.value;
   if (editing) return <><PageHeader title={`Edit ${issue.key}`} />{flow}<EditIssueForm issue={issue} external={external} onSaved={changed} onCancel={useLatest} /></>;
 
-  return <><PageHeader className="sticky top-0 z-20 bg-background" title={<span className="flex items-center gap-2"><span className="font-mono text-xs font-normal text-muted-foreground">{issue.key}</span>{issue.title}</span>}><ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} /></PageHeader>
+  async function copy(what: "key" | "link") {
+    setCopyFeedback(undefined);
+    if (!navigator.clipboard?.writeText) {
+      setCopyFeedback({ text: "Clipboard is unavailable in this browser.", failed: true });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(what === "key" ? issue.key : new URL(keyPath(issue.key), window.location.origin).href);
+      setCopyFeedback({ text: what === "key" ? "Issue key copied." : "Issue link copied.", failed: false });
+    } catch {
+      setCopyFeedback({ text: "The browser did not allow copying. Check clipboard permissions and try again.", failed: true });
+    }
+  }
+
+  return <><PageHeader className="sticky top-0 z-20 bg-background" headingLabel={`${issue.key} ${issue.title}`} title={<span className="flex items-center gap-2"><button type="button" aria-label={`Copy issue key ${issue.key}`} title="Copy issue key" onClick={() => void copy("key")} className="inline-flex shrink-0 items-center gap-1 rounded px-1 font-mono text-xs font-normal text-brand hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">{issue.key}<CopyIcon className="size-3" aria-hidden /></button>{issue.title}</span>}><Button size="sm" variant="outline" onClick={() => void copy("link")}><LinkIcon aria-hidden />Copy link</Button><ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} /></PageHeader>
+    {copyFeedback && <p role={copyFeedback.failed ? "alert" : "status"} className={cn("border-b px-4 py-1 text-xs", copyFeedback.failed ? "text-destructive" : "text-muted-foreground")}>{copyFeedback.text}</p>}
     {flow}
     {refreshError && <div role="alert" className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm text-destructive">Could not refresh: {refreshError}<Button size="sm" variant="outline" onClick={() => setRefreshRevision((x) => x + 1)}>Try again</Button></div>}
     <DraftGuard key={contentRevision} external={external !== undefined} onDirtyChange={setDirty} onUseLatest={useLatest}>

@@ -46,6 +46,54 @@ function WithPulse({ children }: { children: ReactNode }) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the human-first issue detail", () => {
+  it("copies the issue key and a clean direct link from the header by keyboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/needs-you": { items: [{ issue: free, because: "question" }], total: 1, next_cursor: null, has_more: false, agents: 0 },
+      "GET /projects/PLAN/users": [],
+    });
+    renderAt("/PLAN/issues/9?from=needs-you&tab=history", routedIssue);
+    const user = userEvent.setup();
+    vi.stubGlobal("navigator", Object.create(navigator, { clipboard: { value: { writeText }, configurable: true } }));
+
+    const key = await screen.findByRole("button", { name: "Copy issue key PLAN-9" });
+    key.focus();
+    await user.keyboard("{Enter}");
+    expect(writeText).toHaveBeenLastCalledWith("PLAN-9");
+    expect(await screen.findByRole("status")).toHaveTextContent("Issue key copied.");
+
+    const link = screen.getByRole("button", { name: "Copy link" });
+    link.focus();
+    await user.keyboard("{Enter}");
+    const copied = new URL(writeText.mock.lastCall![0]);
+    expect(copied.origin).toBe(window.location.origin);
+    expect(copied.pathname).toBe("/PLAN/issues/9");
+    expect(copied.search).toBe("");
+    expect(copied.hash).toBe("");
+    expect(copied.username).toBe("");
+    expect(copied.password).toBe("");
+    expect(await screen.findByRole("status")).toHaveTextContent("Issue link copied.");
+  });
+
+  it("reports unavailable and refused clipboard writes without claiming success", async () => {
+    const clipboard = { writeText: vi.fn().mockRejectedValue(new Error("Denied")) };
+    installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [], "GET /projects/PLAN/users": [] });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    vi.stubGlobal("navigator", Object.create(navigator, { clipboard: { value: clipboard, configurable: true } }));
+
+    await user.click(await screen.findByRole("button", { name: "Copy link" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("did not allow copying");
+    expect(screen.queryByText("Issue link copied.")).not.toBeInTheDocument();
+
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+    await user.click(screen.getByRole("button", { name: "Copy issue key PLAN-9" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Clipboard is unavailable");
+    expect(clipboard.writeText).toHaveBeenCalledTimes(1);
+  });
+
   it("changes priority, labels, and assignee with separate versioned patches", async () => {
     const initial = { ...free, project_context: { ...free.project_context, labels: [{ name: "feature", group: null, description: null }] } };
     const versions = [
