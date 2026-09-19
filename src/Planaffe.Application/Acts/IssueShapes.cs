@@ -77,6 +77,9 @@ public sealed record ProjectContextShape(
     IReadOnlyList<LabelShape> Labels,
     string? Instructions);
 
+/// <summary>The exact <c>next</c> selection result and the parent gate the issue cannot otherwise see.</summary>
+public sealed record WorkabilityShape(bool Workable, bool ParentGated);
+
 /// <summary>
 /// The complete issue — the context package of VISION 15.5: the ticket, its
 /// comments and questions, the epic's description, the project's labels with
@@ -107,6 +110,7 @@ public sealed record IssueShape(
     IReadOnlyList<CommentShape> Comments,
     IReadOnlyList<QuestionShape> Questions,
     ProjectContextShape ProjectContext,
+    WorkabilityShape Workability,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? ClosedAt);

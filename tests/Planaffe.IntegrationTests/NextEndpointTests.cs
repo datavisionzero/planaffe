@@ -18,6 +18,40 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task Issue_workability_matches_next_when_a_question_opens_and_is_answered()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await Issues(admin, new { title = "Due without a ready flag", ready = false });
+
+        async Task<bool> Workable()
+        {
+            var issue = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+            return issue.GetProperty("workability").GetProperty("workable").GetBoolean();
+        }
+
+        async Task<bool> InNext()
+        {
+            var page = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/next", Ct);
+            return page.GetProperty("items").EnumerateArray().Any(item => item.GetProperty("key").GetString() == "PLAN-1");
+        }
+
+        Assert.True(await Workable());
+        Assert.True(await InNext());
+
+        using var asked = await admin.PostAsJsonAsync("/issues/PLAN-1/questions", new { question = "Which route?" }, Ct);
+        Assert.Equal(HttpStatusCode.Created, asked.StatusCode);
+        var id = (await asked.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+        Assert.False(await Workable());
+        Assert.False(await InNext());
+
+        using var answered = await admin.PostAsJsonAsync($"/questions/{id}/answer", new { answer = "The browser route." }, Ct);
+        Assert.Equal(HttpStatusCode.OK, answered.StatusCode);
+        Assert.True(await Workable());
+        Assert.True(await InNext());
+    }
+
+    [Fact]
     public async Task Wait_returns_when_an_issue_becomes_workable_and_the_deadline_returns_the_ordinary_empty_answer()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

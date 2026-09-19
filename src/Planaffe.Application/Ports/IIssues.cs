@@ -237,6 +237,9 @@ public interface IIssues
 
     Task<int> CountWorkableAsync(NextQuery query, CancellationToken cancellationToken);
 
+    /// <summary>Whether this one issue passes the same selection rule as <c>next</c>.</summary>
+    Task<bool> IsWorkableAsync(Guid issueId, NextQuery query, CancellationToken cancellationToken);
+
     /// <summary>
     /// What only a human can resolve: questions, review, unready under triage,
     /// and blocker chains that reach a dead end (VISION 10).

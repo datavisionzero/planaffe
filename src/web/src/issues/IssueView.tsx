@@ -23,6 +23,7 @@ import { MarkdownField } from "@/shared/MarkdownField";
 import { DraftGuard } from "@/shared/abandon";
 import { useDraft } from "@/shared/useDraft";
 import { EditIssueForm } from "./IssueEditor";
+import { IssueWorkability } from "./IssueWorkability";
 
 type Load<T> = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; value: T };
 /** The issue alone can also be gone: deleted, and restorable until a moment. */
@@ -219,6 +220,7 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
     <div className="flex flex-1 flex-col md:flex-row">
       <main className="min-w-0 flex-1 p-4 md:p-6">
         <Chips issue={issue} />
+        <IssueWorkability issue={issue} onChanged={changed} />
         <Attention issue={issue} onChanged={changed} />
         <Section title="Description"><Long>{issue.description}</Long></Section>
         {issue.result !== null && <Section title="Result"><Long>{issue.result}</Long></Section>}
@@ -350,11 +352,11 @@ function Chips({ issue }: { issue: Issue }) {
 
 function Attention({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
   return <div className="mb-6 space-y-3" aria-label="Needs attention">
-    {issue.questions.filter((q) => q.answer === null).map((q) => <aside key={q.id} className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Answer needed</Eyebrow><Markdown className="mt-2">{q.question}</Markdown><Byline name={q.asked_by.name} at={q.asked_at} /><TextAction draftKey={`issue:${issue.key}:answer:${q.id}`} version={issue.updated_at} label="Answer" onRun={async (text) => { const result = await api.POST("/questions/{id}/answer", { params: { path: { id: q.id } }, body: { answer: text } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, questions: issue.questions.map((x) => x.id === q.id ? result.data! : x), open_questions: issue.open_questions - 1 }; }} onChanged={onChanged} /></aside>)}
+    {issue.questions.filter((q) => q.answer === null).map((q) => <aside key={q.id} id={`question-${q.id}`} className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Answer needed</Eyebrow><Markdown className="mt-2">{q.question}</Markdown><Byline name={q.asked_by.name} at={q.asked_at} /><TextAction draftKey={`issue:${issue.key}:answer:${q.id}`} version={issue.updated_at} label="Answer" onRun={async (text) => { const result = await api.POST("/questions/{id}/answer", { params: { path: { id: q.id } }, body: { answer: text } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); const latest = await api.GET("/issues/{key}", { params: { path: { key: issue.key } } }).catch(() => undefined); return latest?.data?.questions.some((answer) => answer.id === q.id && answer.answer !== null) ? latest.data : { ...issue, questions: issue.questions.map((x) => x.id === q.id ? result.data! : x), open_questions: issue.open_questions - 1 }; }} onChanged={onChanged} /></aside>)}
     {/* Accepting is the header's primary in this status, so this box carries
         the result and the two decisions that are not it. */}
     {issue.status === "review" && <aside className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Review needed</Eyebrow><p className="mt-1 text-sm">Decide whether this work is done, canceled, or should return to todo.</p>{issue.result !== null && <Markdown className="mt-3">{issue.result}</Markdown>}<div className="mt-3 flex flex-wrap gap-2"><IssueAction label="Accept as canceled" variant="outline" path="/issues/{key}/close" issue={issue} body={{ status: "canceled", result: issue.result }} onChanged={onChanged} /></div><TextAction draftKey={`issue:${issue.key}:review-return`} version={issue.updated_at} label="Return to todo" placeholder="What needs to change?" onRun={(comment) => issueRequest("/issues/{key}/reopen", issue, { comment })} onChanged={onChanged} /></aside>}
-    {issue.open_blockers > 0 && <aside className="rounded-lg border bg-muted p-4"><Eyebrow>Blocked</Eyebrow><p className="mt-1 text-sm">Waiting for:</p><IssueLinks links={issue.blocked_by.filter((x) => x.open)} /></aside>}
+    {issue.open_blockers > 0 && <aside id="open-blockers" className="rounded-lg border bg-muted p-4"><Eyebrow>Blocked</Eyebrow><p className="mt-1 text-sm">Waiting for:</p><IssueLinks links={issue.blocked_by.filter((x) => x.open)} /></aside>}
     {issue.claim !== null && <aside className="rounded-lg border bg-muted p-4"><Eyebrow>In progress</Eyebrow><p className="mt-1 text-sm"><strong>{issue.claim.holder.name}</strong> claimed this {relativeTime(issue.claim.since)}.</p></aside>}
   </div>;
 }

@@ -29,11 +29,12 @@ const issue = {
   comments: [{ id: "0199a000-0000-7000-8000-000000000003", author: person, body: "A comment.", created_at: "2026-09-04T10:00:00Z" }],
   questions: [{ id: "0199a000-0000-7000-8000-000000000004", question: "Which way?", asked_by: agent, asked_at: "2026-09-04T09:00:00Z", answer: null, answered_by: null, answered_at: null }],
   project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: true, labels: [] },
+  workability: { workable: false, parent_gated: false },
   created_at: "2026-09-03T10:00:00Z", updated_at: "2026-09-04T10:00:00Z", closed_at: null,
 };
 
 /** The same issue, open and free: what the header offers there is Claim. */
-const free = { ...issue, status: "todo", claim: null, result: null, questions: [] };
+const free = { ...issue, status: "todo", claim: null, result: null, questions: [], workability: { workable: true, parent_gated: false } };
 
 function WithPulse({ children }: { children: ReactNode }) {
   const [issuesPulse, setIssuesPulse] = useState(0);
@@ -45,6 +46,35 @@ function WithPulse({ children }: { children: ReactNode }) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the human-first issue detail", () => {
+  it("separates Ready from Workable and explains simultaneous blockers", async () => {
+    const gated = { ...issue, status: "todo", claim: null, ready: false, project_context: { ...issue.project_context, triage_required: true }, workability: { workable: false, parent_gated: true } };
+    const instance = installInstance({
+      "GET /issues/PLAN-9": gated,
+      "GET /issues/PLAN-9/history": [],
+      "PATCH /issues/PLAN-9": { ...gated, ready: true },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    const workability = await screen.findByLabelText("Workability");
+    expect(within(workability).getByText("Workable: no")).toBeInTheDocument();
+    expect(workability).toHaveTextContent("1 open question needs an answer.");
+    expect(workability).toHaveTextContent("1 open blocker must close.");
+    expect(workability).toHaveTextContent("This project requires Ready before next can take it.");
+    expect(workability).toHaveTextContent("Parent");
+    await user.click(within(workability).getByRole("button", { name: "Set ready" }));
+    const patch = instance.calls.find((call) => call.method === "PATCH")!;
+    expect(await patch.json()).toEqual({ ready: true });
+  });
+
+  it("shows a positive selection result even when Ready is unset in a project without triage", async () => {
+    const workable = { ...free, ready: false, open_questions: 0, open_blockers: 0, open_sub_issues: 0, blocked_by: [], sub_issues: [] };
+    installInstance({ "GET /issues/PLAN-9": workable, "GET /issues/PLAN-9/history": [] });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const workability = await screen.findByLabelText("Workability");
+    expect(workability).toHaveTextContent("Workable: yes");
+    expect(workability).toHaveTextContent("Ready: not set. Not required by this project.");
+  });
   it("continues from Needs you only after the current issue is clear", async () => {
     const waiting = { ...free, questions: issue.questions, open_questions: 1 };
     const next = { ...free, key: "PLAN-10", title: "Next decision", questions: issue.questions, open_questions: 1 };

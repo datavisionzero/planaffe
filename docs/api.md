@@ -103,6 +103,7 @@ not change when it starts counting.
   "comments":   [ { "id": "…", "author": {…}, "body": "…", "created_at": "…", "edited_at": null } ],
   "questions":  [ { "id": "…", "question": "…", "asked_by": {…}, "asked_at": "…",
                     "answer": null, "answered_by": null, "answered_at": null } ],
+  "workability": { "workable": false, "parent_gated": false },
   "project_context": { "key": "PLAN", "name": "planaffe", "triage_required": false, "review_required": false,
                        "labels": [ { "name": "bug", "group": "kind", "description": "…" }, … ],
                        "instructions": { "slug": "agents", "title": "…", "body": "…markdown…" } }
@@ -118,6 +119,13 @@ objects here and the key or name in the summary; the two shapes are named apart
 in the contract so a client always knows which it holds. The history is not
 part of it — it can be long and is read for a different reason — and has its
 own endpoint.
+
+`workability.workable` uses the same selection predicate as `next`, without
+taking a claim. An assigned issue is evaluated for its assignee; an unassigned
+issue is evaluated for any identity. `parent_gated` says its parent is parked,
+closed, or blocked. The other reasons appear in the issue's status, claim,
+questions, blockers, open sub-issue count, and project triage switch. `ready`
+is a separate field and only gates workability when triage is required.
 
 `result` stands on `blocked_by` and not on `blocks`: what a predecessor decided
 is what the work starts from, and a successor has decided nothing yet. It is
@@ -1133,4 +1141,3 @@ none; this is the bracket's consequence rather than a field left for later.
 There is no comment endpoint and no history endpoint on a page. Whoever has
 something to do makes a ticket, which is what keeps the discussion in one
 place; the history is written and read from the database, as an epic's is.
-
