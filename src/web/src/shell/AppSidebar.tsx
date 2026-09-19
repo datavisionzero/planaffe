@@ -45,10 +45,10 @@ export function AppSidebar({ area }: { area: Area }) {
   return (
     <Sidebar collapsible="offcanvas">
       <SidebarHeader className="px-3 pt-3">
-        <div className="flex items-center gap-2 px-1 text-sm font-semibold">
+        <NavLink to="/projects" onClick={close} className="flex w-fit items-center gap-2 rounded-sm px-1 text-sm font-semibold hover:text-brand focus-visible:underline focus-visible:underline-offset-4">
           <span aria-hidden className="size-4.5 rounded-sm bg-brand" />
           planaffe
-        </div>
+        </NavLink>
       </SidebarHeader>
 
       <SidebarContent>
