@@ -17,9 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <PackageReference Include="Logaffe.Serilog" />
-    <PackageReference Include="Serilog.AspNetCore" />
-    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Logaffe.Extensions.Logging" />
   </ItemGroup>
 
 </Project>

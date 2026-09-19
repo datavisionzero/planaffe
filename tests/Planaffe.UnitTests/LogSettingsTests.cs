@@ -2,11 +2,11 @@ using Planaffe.Application.Ports;
 
 namespace Planaffe.UnitTests;
 
-/// <summary>The three variables of ADR 0008, and what they refuse.</summary>
+/// <summary>The three variables of ADR 0029, and what they refuse.</summary>
 public sealed class LogSettingsTests
 {
     [Fact]
-    public void Nothing_set_is_the_console_and_a_file_at_information()
+    public void Nothing_set_is_the_console_at_information()
     {
         var settings = LogSettings.FromVariables(null, null, null);
 
@@ -23,6 +23,18 @@ public sealed class LogSettingsTests
         Assert.Equal(new Uri("https://logs.example.org/"), settings.Endpoint);
         Assert.Equal("pa-ingest-token", settings.Token);
         Assert.Equal("Warning", settings.Level);
+    }
+
+    [Theory]
+    [InlineData("Verbose", "Trace")]
+    [InlineData("Fatal", "Critical")]
+    [InlineData("trace", "Trace")]
+    [InlineData("critical", "Critical")]
+    public void Existing_and_framework_level_names_are_accepted(string input, string expected)
+    {
+        var settings = LogSettings.FromVariables(null, null, input);
+
+        Assert.Equal(expected, settings.Level);
     }
 
     [Theory]

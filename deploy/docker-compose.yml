@@ -97,8 +97,8 @@ services:
       # take it (ADR 0013). Per instance, never per project.
       PLANAFFE_CLAIM_EXPIRY_HOURS: "${PLANAFFE_CLAIM_EXPIRY_HOURS:-4}"
       PLANAFFE_DELETION_GRACE_DAYS: "${PLANAFFE_DELETION_GRACE_DAYS:-7}"
-      # Where the log goes (ADR 0008): into a logaffe instance when both are set,
-      # into the console and a rolling file under /app/logs otherwise.
+      # JSON console logs always; logaffe receives them when both are set
+      # (ADR 0029). Without them, docker compose logs is the record.
       PLANAFFE_LOG_ENDPOINT: "${PLANAFFE_LOG_ENDPOINT:-}"
       PLANAFFE_LOG_TOKEN: "${PLANAFFE_LOG_TOKEN:-}"
       PLANAFFE_LOG_LEVEL: "${PLANAFFE_LOG_LEVEL:-Information}"

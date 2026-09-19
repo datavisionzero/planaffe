@@ -50,7 +50,7 @@ planaffe/
 ├─ src/
 │  ├─ Planaffe.Domain/        the rules
 │  ├─ Planaffe.Application/   the use cases and their ports
-│  ├─ Planaffe.Infrastructure/ Postgres, the notifier, the log sinks
+│  ├─ Planaffe.Infrastructure/ Postgres and the notifier
 │  ├─ Planaffe.Api/           HTTP and the composition root
 │  ├─ cli/                    the Go CLI — `pa`
 │  └─ web/                    the single-page application
@@ -117,8 +117,8 @@ soft-deleted row ([ADR 0013](./adr/0013-deleting-is-a-soft-delete-with-a-floor-a
 live here in one place each, because a query that forgets either of them is how
 both decisions fail. Waiting is
 `LISTEN`/`NOTIFY` on its own connection outside any pool, with a deadline as the
-fallback (VISION 13). The two log sinks live here as well
-([ADR 0008](./adr/0008-planaffe-logs-into-logaffe-and-serilog-is-the-way-out.md)).
+fallback (VISION 13). The logging providers are configured by the Api host
+([ADR 0029](./adr/0029-logging-uses-framework-providers.md)).
 
 **`Planaffe.Api` is the adapters and the composition root.** `Http/` holds the
 endpoints, bearer and browser-session authentication that answer the caller port, the version

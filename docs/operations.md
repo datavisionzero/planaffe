@@ -120,9 +120,9 @@ Set in `deploy/.env`; read once, at start.
 | `PLANAFFE_SMTP_FROM_NAME` | no | `planaffe` | sender display name |
 | `PLANAFFE_CLAIM_EXPIRY_HOURS` | no | `4` | how long an agent's claim lives without a write of the holder's (VISION 11); a user's never expires |
 | `PLANAFFE_DELETION_GRACE_DAYS` | no | `7` | how long a deleted issue, epic, label or project can be restored before the purge may take it (ADR 0013); a floor, not a deadline. Every signed-in caller reads it as `deletion_grace_days` on `GET /me`, which is what lets a screen say until when something comes back |
-| `PLANAFFE_LOG_ENDPOINT` | no | | a logaffe instance to log into, scheme and host; set together with the token (ADR 0008) |
+| `PLANAFFE_LOG_ENDPOINT` | no | | a logaffe instance to log into, scheme and host; set together with the token (ADR 0029) |
 | `PLANAFFE_LOG_TOKEN` | no | | the ingest token of the logaffe project the entries belong to |
-| `PLANAFFE_LOG_LEVEL` | no | `Information` | the floor: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal` |
+| `PLANAFFE_LOG_LEVEL` | no | `Information` | the floor: `Trace`, `Debug`, `Information`, `Warning`, `Error`, `Critical`; `Verbose` and `Fatal` remain accepted aliases |
 | `PLANAFFE_SITE_ADDRESS` | no | `:80` | what Caddy answers as, and the whole of the TLS decision: a domain fetches and renews a certificate for itself and redirects port 80; `:80` is plain HTTP for a trial on loopback |
 | `PLANAFFE_HTTP_PORT` | no | `80` | the host port Caddy's HTTP listener is published on; the whole left half, so `127.0.0.1:8080` binds on loopback alone |
 | `PLANAFFE_HTTPS_PORT` | no | `443` | the same for HTTPS, TCP and UDP. Leave both alone where a certificate is to be fetched: the ACME challenge arrives on 80 and 443 |
@@ -159,12 +159,13 @@ lets it say otherwise. The public URL itself is never taken from a header.
 
 ## Logging
 
-The instance logs to the console always — the container's log — and, with
-`PLANAFFE_LOG_ENDPOINT` and `PLANAFFE_LOG_TOKEN` set, into logaffe as well;
-without them, into a rolling file under `/app/logs`, a day per file, seven files
-kept. A logaffe that cannot be reached never becomes an outage: entries queue
-in memory, the oldest are dropped under pressure, and what could not be
-delivered is a line on standard error. No log line carries a request body.
+The instance writes structured JSON to the console always — visible through
+`docker compose logs` — and, with `PLANAFFE_LOG_ENDPOINT` and
+`PLANAFFE_LOG_TOKEN` set, delivers the same entries to logaffe as well. There is
+no file log. A logaffe that cannot be reached never becomes an outage: entries
+queue in memory, the oldest are dropped under pressure, and a delivery failure
+is reported on standard error. Request logs carry method, path, status and
+duration, without query strings or request bodies.
 
 ## Backups
 
