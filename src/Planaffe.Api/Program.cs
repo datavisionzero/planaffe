@@ -1,4 +1,4 @@
-// The composition root. Endpoints, authentication and the log sinks arrive with
+// The composition root. Endpoints, authentication and logging providers arrive with
 // the code they belong to rather than as empty registrations placed here in
 // advance.
 //
@@ -12,23 +12,15 @@ using Planaffe.Api.Http;
 using Planaffe.Application.Acts;
 using Planaffe.Application.Ports;
 using Planaffe.Infrastructure;
-using Serilog;
-
-// Serilog says what is wrong with Serilog here and nowhere else: a sink that
-// cannot deliver writes to SelfLog and carries on, so a logaffe that is down or
-// a file that cannot be opened costs a line on standard error, never a request.
-Serilog.Debugging.SelfLog.Enable(Console.Error);
 
 var builder = WebApplication.CreateBuilder(args);
 
-// The two sinks of ADR 0008, chosen once from three variables (docs/operations.md).
-// `writeToProviders` keeps the providers a host adds beside Serilog — a test
-// host listening for errors — in the loop.
+// Console logs always; logaffe joins when both address and token are configured.
 var logSettings = LogSettings.FromVariables(
     builder.Configuration[LogSettings.EndpointVariable],
     builder.Configuration[LogSettings.TokenVariable],
     builder.Configuration[LogSettings.LevelVariable]);
-builder.Host.UseSerilog((_, configuration) => LogSinks.Configure(configuration, logSettings), writeToProviders: true);
+builder.AddPlanaffeLogging(logSettings);
 
 builder.Services.AddPlanaffeInfrastructure(builder.Configuration);
 
@@ -222,18 +214,18 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+// Outside the exception handler so the request line sees its final status.
+// It records method, path, status and duration, without agent content.
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
 
-// Before anything reads a scheme or an address: the log line, the CSRF origin
-// and the login limit all want the caller's, not the proxy's. Only when an
-// operator has named the proxy — an unnamed one is a client with a header.
+// Before the CSRF origin and login limit read a scheme or address, apply
+// forwarded headers from a named proxy. An unnamed peer is a client with a header.
 if (trustedProxies.Configured)
 {
     app.UseForwardedHeaders(trustedProxies.Options());
 }
 
-// Method, path, status and duration — and nothing an agent wrote (VISION 13).
-app.UseSerilogRequestLogging();
 app.UsePlanaffeVersion();
 
 // Before routing, because this decides whose address a path is: several of the

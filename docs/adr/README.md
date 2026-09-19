@@ -52,3 +52,4 @@ material value to understanding the decision.
 - [0026 – An agent's token is rotated, and revoking is no longer a dead end](./0026-an-agents-token-is-rotated-and-revoking-is-no-longer-a-dead-end.md)
 - [0027 – The knowledge base hangs on a space, not on a project](./0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)
 - [0028 – A page's address carries its tree, and a slug is unique under its parent](./0028-a-pages-address-carries-its-tree-and-a-slug-is-unique-under-its-parent.md)
+- [0029 – Logging uses framework providers](./0029-logging-uses-framework-providers.md)

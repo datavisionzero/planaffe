@@ -34,12 +34,9 @@
          (ADR 0005). Generating it at build time was tried in the sibling and
          dropped: the tooling starts the host, and the host migrates on start. -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
-    <!-- The two log sinks of ADR 0008: logaffe as the intended target when an
-         endpoint and a token are configured, Serilog's console and rolling file
-         otherwise. Serilog is what makes the two paths one structured log. -->
-    <PackageVersion Include="Logaffe.Serilog" Version="0.6.0" />
-    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
+    <!-- ADR 0029: structured console logs and optional logaffe delivery use
+         Microsoft.Extensions.Logging providers. -->
+    <PackageVersion Include="Logaffe.Extensions.Logging" Version="0.5.0" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">

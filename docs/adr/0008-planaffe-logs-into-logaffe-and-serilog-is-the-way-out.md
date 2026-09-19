@@ -1,5 +1,7 @@
 # planaffe Logs Into logaffe, and Serilog Is the Way Out
 
+> Superseded by [ADR 0029](./0029-logging-uses-framework-providers.md).
+
 The application logs through `Microsoft.Extensions.ILogger` and ships with two
 sinks wired from the first commit: **logaffe is the intended target**, enabled as
 soon as an endpoint and a token are configured, and **Serilog to console and a
