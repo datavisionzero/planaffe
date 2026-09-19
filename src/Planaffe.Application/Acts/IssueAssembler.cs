@@ -1,5 +1,6 @@
 using Planaffe.Application.Ports;
 using Planaffe.Domain.Identities;
+using Planaffe.Domain.Issues;
 using Planaffe.Domain.Projects;
 
 namespace Planaffe.Application.Acts;
@@ -85,6 +86,13 @@ public sealed class IssueAssembler(
         var project = await projects.FindByKeyAsync(row.ProjectKey, cancellationToken)
             ?? throw new InvalidOperationException($"Issue {row.Key} has no project row.");
         var projectLabels = await labels.ListAsync(project.Id, cancellationToken);
+        var parentGated = parent is not null &&
+            (parent.Status is IssueStatus.Backlog or IssueStatus.Done or IssueStatus.Canceled
+             || (await issues.BlockersOfAsync([parent.Id], cancellationToken)).Any(edge => !edge.Far.Closed));
+        // `next` decides the positive answer. An assignment restricts who can
+        // take the issue, so evaluate it for that identity where one is set.
+        var query = new NextQuery(project.Id, row.AssigneeId ?? Guid.Empty, project.TriageRequired, null, false, [], null);
+        var workable = await issues.IsWorkableAsync(row.Id, query, cancellationToken);
 
         // The project's instructions travel with the ticket, which is the whole
         // of VISION 15.3: one text, delivered wherever the package is, and
@@ -133,6 +141,7 @@ public sealed class IssueAssembler(
                 project.ReviewRequired,
                 [.. projectLabels.Select(LabelShape.Of)],
                 project.Instructions),
+            new WorkabilityShape(workable, parentGated),
             row.CreatedAt,
             row.UpdatedAt,
             row.ClosedAt);

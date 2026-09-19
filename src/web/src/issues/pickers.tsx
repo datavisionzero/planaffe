@@ -154,6 +154,7 @@ export function IssuePicker({
   label,
   hint,
   project,
+  crossProject = false,
   multiple = false,
   exclude = [],
   value,
@@ -163,6 +164,8 @@ export function IssuePicker({
   label: string;
   hint?: string;
   project: string | undefined;
+  /** Search only projects this caller can read, including other projects. */
+  crossProject?: boolean;
   multiple?: boolean;
   /** Keys this field must not offer — an issue is never its own parent. */
   exclude?: string[];
@@ -171,11 +174,11 @@ export function IssuePicker({
   error?: string;
 }) {
   const [query, setQuery] = useState("");
-  const [found, setFound] = useState<Schemas["IssueSummary"][]>([]);
+  const [found, setFound] = useState<Array<Pick<Schemas["IssueSummary"], "key" | "title" | "status">>>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (project === undefined) return;
+    if (project === undefined && !crossProject) return;
 
     let current = true;
     // A keystroke is not a search. The first, empty question is asked at once
@@ -187,9 +190,12 @@ export function IssuePicker({
 
           try {
             const { data } = await api.GET("/issues", {
-              params: { query: { project, q: query.trim() || undefined, limit: 10 } },
+              params: { query: { project: crossProject ? undefined : project, q: query.trim() || undefined, limit: 20 } },
             });
-            if (current) setFound(data?.items ?? []);
+            const exactKey = /^[A-Z][A-Z0-9]*-\d+$/i.test(query.trim()) ? query.trim().toUpperCase() : null;
+            const exact = exactKey === null ? undefined : await api.GET("/issues/{key}", { params: { path: { key: exactKey } } }).catch(() => undefined);
+            const matching = exact?.data && (crossProject || exact.data.project === project) ? [exact.data] : [];
+            if (current) setFound([...matching, ...(data?.items ?? []).filter((issue) => issue.key !== exactKey)]);
           } catch {
             if (current) setFound([]);
           } finally {
@@ -204,7 +210,7 @@ export function IssuePicker({
       current = false;
       clearTimeout(timer);
     };
-  }, [project, query]);
+  }, [project, crossProject, query]);
 
   const hidden = new Set(exclude);
   const choices: Choice[] = found
@@ -227,7 +233,7 @@ export function IssuePicker({
       hint={hint}
       multiple={multiple}
       placeholder="Key or title…"
-      empty={busy ? "Asking the instance…" : "No issue of this project matches."}
+      empty={busy ? "Asking the instance…" : crossProject ? "No accessible issue matches." : "No issue of this project matches."}
       busy={busy}
       error={error}
       choices={choices}

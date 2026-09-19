@@ -1,25 +1,33 @@
-import { MoreHorizontalIcon } from "lucide-react";
+import { CopyIcon, LinkIcon, MoreHorizontalIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { api, codeOf, describe, type HistoryEntry, type Issue, type Problem } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { LabelPicker } from "@/components/ui/label-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { celebrateIfCleared } from "@/projects/celebrate";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Markdown } from "@/shared/Markdown";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
 import { useSession } from "@/session/useSession";
 import { stale } from "@/shared/stale";
-import { keyPath, pathKey } from "@/shell/views";
+import { keyPath, needsYouIssuePath, pathKey, viewOf, viewPath } from "@/shell/views";
+import { useAttention } from "@/shell/useAttention";
 import { PriorityMark } from "./priority";
 import { StatusDot } from "./status";
 import { MarkdownField } from "@/shared/MarkdownField";
+import { DraftGuard } from "@/shared/abandon";
+import { useDraft } from "@/shared/useDraft";
 import { EditIssueForm } from "./IssueEditor";
+import { IssueWorkability } from "./IssueWorkability";
+import { AssigneePicker, IssuePicker } from "./pickers";
+import { priorityLabel } from "./priorityLabel";
 
 type Load<T> = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; value: T };
 /** The issue alone can also be gone: deleted, and restorable until a moment. */
@@ -50,17 +58,133 @@ function refused(problem: Problem | undefined, status: number): IssueLoad {
 export function IssueView() {
   const { project, number } = useParams();
   const key = pathKey(project!, number!);
+  return <IssueContent key={key} issueKey={key} />;
+}
+
+type NextAttention = { at: "current" | "done" } | { at: "next"; key: string };
+type AttentionStep = NextAttention | { at: "checking" } | { at: "failed"; why: string };
+
+/** Resolve the next step against the current server order, not a saved row number. */
+async function nextAttention(issueKey: string, signal: AbortSignal): Promise<NextAttention> {
+  const project = issueKey.slice(0, issueKey.indexOf("-"));
+  const candidates: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const { data, error, response } = await api.GET("/projects/{key}/needs-you", {
+      params: { path: { key: project }, query: { cursor, limit: 50 } }, signal,
+    });
+    if (!data) throw new Error(describe(error, response.status));
+    for (const item of data.items) {
+      if (item.issue.key === issueKey) return { at: "current" };
+      candidates.push(item.issue.key);
+    }
+    cursor = data.next_cursor ?? undefined;
+  } while (cursor !== undefined && !signal.aborted);
+
+  for (const key of candidates) {
+    const { data, error, response } = await api.GET("/issues/{key}", { params: { path: { key } }, signal });
+    if (data) return { at: "next", key };
+    if (response.status !== 403 && response.status !== 404) throw new Error(describe(error, response.status));
+  }
+  return { at: "done" };
+}
+
+/** The source list stays one click away, and a completed act offers the next live item. */
+function NeedsYouFlow({ issueKey, revision, pulse }: { issueKey: string; revision: number; pulse: number }) {
+  const navigate = useNavigate();
+  const project = issueKey.slice(0, issueKey.indexOf("-"));
+  const back = viewPath(project, viewOf("needs-you"));
+  const [step, setStep] = useState<AttentionStep>({ at: "checking" });
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    const stop = new AbortController();
+    void nextAttention(issueKey, stop.signal).then((value) => {
+      if (!stop.signal.aborted) setStep(value);
+    }, (reason) => {
+      if (!stop.signal.aborted) setStep({ at: "failed", why: reason instanceof Error ? reason.message : "The instance did not answer." });
+    });
+    return () => stop.abort();
+  }, [issueKey, revision, pulse, retry]);
+
+  async function advance() {
+    setStep({ at: "checking" });
+    const stop = new AbortController();
+    try {
+      const value = await nextAttention(issueKey, stop.signal);
+      if (value.at === "next") void navigate(needsYouIssuePath(value.key));
+      else setStep(value);
+    } catch (reason) {
+      setStep({ at: "failed", why: reason instanceof Error ? reason.message : "The instance did not answer." });
+    }
+  }
+
+  return <div className="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-4 py-2 text-sm" aria-label="Needs you workflow">
+    <Link className="text-brand hover:underline" to={back}>← Back to Needs you</Link>
+    {step.at === "next" && <Button size="sm" variant="outline" onClick={() => void advance()}>Next waiting issue</Button>}
+    {step.at === "done" && <span role="status">All caught up. Nothing else needs you.</span>}
+    {step.at === "current" && revision > 0 && <span role="status">This issue still needs your attention.</span>}
+    {step.at === "failed" && <span role="alert">Could not find the next issue: {step.why} <button className="underline" onClick={() => setRetry((value) => value + 1)}>Try again</button></span>}
+  </div>;
+}
+
+function IssueContent({ issueKey: key }: { issueKey: string }) {
+  const location = useLocation();
+  const narrow = useIsMobile();
+  const fromNeedsYou = new URLSearchParams(location.search).get("from") === "needs-you";
+  const { issuesPulse } = useAttention();
   const [state, setState] = useState<{ key: string; issue: IssueLoad; history: Load<HistoryEntry[]> }>();
   const [editing, setEditing] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<{ text: string; failed: boolean }>();
+  const [dirty, setDirty] = useState(false);
+  const [external, setExternal] = useState<Issue>();
+  const [refreshError, setRefreshError] = useState("");
+  const [refreshRevision, setRefreshRevision] = useState(0);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [contentRevision, setContentRevision] = useState(0);
+  const [flowRevision, setFlowRevision] = useState(0);
   const [deleted, setDeleted] = useState<{ until: string | null }>();
   const current = state !== undefined && state.key === key ? state : { key, issue: asking, history: asking };
+  const stateRef = useRef(state);
+  const editingRef = useRef(editing);
+  const dirtyRef = useRef(dirty);
+  useEffect(() => { stateRef.current = state; editingRef.current = editing; dirtyRef.current = dirty; }, [state, editing, dirty]);
 
   useEffect(() => {
     let live = true;
-    void api.GET("/issues/{key}", { params: { path: { key } } }).then(({ data, error, response }) => live && setState((old) => ({ key, history: old !== undefined && old.key === key ? old.history : asking, issue: data ? { at: "known", value: data } : refused(error, response.status) })), () => live && setState((old) => ({ key, history: old?.history ?? asking, issue: { at: "failed", why: "The instance did not answer." } })));
-    void api.GET("/issues/{key}/history", { params: { path: { key } } }).then(({ data, error, response }) => live && setState((old) => ({ key, issue: old !== undefined && old.key === key ? old.issue : asking, history: data ? { at: "known", value: data } : { at: "failed", why: describe(error, response.status) } })), () => live && setState((old) => ({ key, issue: old?.issue ?? asking, history: { at: "failed", why: "The instance did not answer." } })));
-    return () => { live = false; };
-  }, [key]);
+    const stop = new AbortController();
+    void api.GET("/issues/{key}", { params: { path: { key } }, signal: stop.signal }).then(({ data, error, response }) => {
+      if (!live) return;
+      const was = stateRef.current;
+      if (data && was?.key === key && was.issue.at === "known") {
+        if (data.updated_at < was.issue.value.updated_at) return;
+        if (data.updated_at !== was.issue.value.updated_at && (editingRef.current || dirtyRef.current)) {
+          setExternal(data);
+          setRefreshError("");
+          return;
+        }
+      }
+      if (!data && was?.key === key && was.issue.at === "known") {
+        setRefreshError(describe(error, response.status));
+        return;
+      }
+      setRefreshError("");
+      setExternal(undefined);
+      setState((old) => ({ key, history: old !== undefined && old.key === key ? old.history : asking, issue: data ? { at: "known", value: data } : refused(error, response.status) }));
+    }, () => {
+      if (!live || stop.signal.aborted) return;
+      if (stateRef.current?.key === key && stateRef.current.issue.at === "known") setRefreshError("The instance did not answer.");
+      else setState((old) => ({ key, history: old?.history ?? asking, issue: { at: "failed", why: "The instance did not answer." } }));
+    });
+    return () => { live = false; stop.abort(); };
+  }, [key, issuesPulse, refreshRevision]);
+
+  useEffect(() => {
+    let live = true;
+    const stop = new AbortController();
+    void api.GET("/issues/{key}/history", { params: { path: { key } }, signal: stop.signal }).then(({ data, error, response }) => live && setState((old) => ({ key, issue: old !== undefined && old.key === key ? old.issue : asking, history: data ? { at: "known", value: data } : { at: "failed", why: describe(error, response.status) } })), () => live && !stop.signal.aborted && setState((old) => ({ key, issue: old?.issue ?? asking, history: { at: "failed", why: "The instance did not answer." } })));
+    return () => { live = false; stop.abort(); };
+  }, [key, issuesPulse, historyRevision]);
 
   const changed = (value: Issue) => {
     // An act that closed an issue which was open a moment ago may have been
@@ -71,31 +195,62 @@ export function IssueView() {
       void celebrateIfCleared(value.project);
     }
     setState((old) => ({ key, issue: { at: "known", value }, history: old?.history ?? asking }));
+    setExternal(undefined);
+    setHistoryRevision((x) => x + 1);
+    setFlowRevision((x) => x + 1);
     setEditing(false);
   };
+  const useLatest = () => {
+    if (external !== undefined) setState((old) => ({ key, issue: { at: "known", value: external }, history: old?.history ?? asking }));
+    setExternal(undefined);
+    setDirty(false);
+    setEditing(false);
+    setContentRevision((value) => value + 1);
+  };
   const restored = (value: Issue) => { setDeleted(undefined); changed(value); };
+  const flow = fromNeedsYou ? <NeedsYouFlow issueKey={key} revision={flowRevision} pulse={issuesPulse} /> : null;
 
   if (current.issue.at === "asking") return <><PageHeader title={<Skeleton className="h-4 w-64" />} /><div className="space-y-3 p-4"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></>;
   // Deleted just now, or deleted long before this browser asked for it: the
   // same screen either way, and the deadline whenever the instance named one.
-  if (deleted !== undefined) return <Gone issueKey={key} until={deleted.until} onRestored={restored} />;
-  if (current.issue.at === "gone") return <Gone issueKey={key} until={current.issue.until} onRestored={restored} />;
-  if (current.issue.at === "failed") return <><PageHeader title={key} /><p className="p-4 text-sm text-destructive">{current.issue.why}</p></>;
+  if (deleted !== undefined) return <>{flow}<Gone issueKey={key} until={deleted.until} onRestored={restored} /></>;
+  if (current.issue.at === "gone") return <>{flow}<Gone issueKey={key} until={current.issue.until} onRestored={restored} /></>;
+  if (current.issue.at === "failed") return <><PageHeader title={key} />{flow}<p className="p-4 text-sm text-destructive">{current.issue.why}</p></>;
   const issue = current.issue.value;
-  if (editing) return <><PageHeader title={`Edit ${issue.key}`} /><EditIssueForm issue={issue} onSaved={changed} onCancel={() => setEditing(false)} /></>;
+  if (editing) return <><PageHeader title={`Edit ${issue.key}`} />{flow}<EditIssueForm issue={issue} external={external} onSaved={changed} onCancel={useLatest} /></>;
 
-  return <><PageHeader className="sticky top-0 z-20 bg-background" title={<span className="flex items-center gap-2"><span className="font-mono text-xs font-normal text-muted-foreground">{issue.key}</span>{issue.title}</span>}><ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} /></PageHeader>
+  async function copy(what: "key" | "link") {
+    setCopyFeedback(undefined);
+    if (!navigator.clipboard?.writeText) {
+      setCopyFeedback({ text: "Clipboard is unavailable in this browser.", failed: true });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(what === "key" ? issue.key : new URL(keyPath(issue.key), window.location.origin).href);
+      setCopyFeedback({ text: what === "key" ? "Issue key copied." : "Issue link copied.", failed: false });
+    } catch {
+      setCopyFeedback({ text: "The browser did not allow copying. Check clipboard permissions and try again.", failed: true });
+    }
+  }
+
+  return <><PageHeader className="sticky top-0 z-20 bg-background" headingLabel={`${issue.key} ${issue.title}`} title={<span className="flex items-center gap-2"><button type="button" aria-label={`Copy issue key ${issue.key}`} title="Copy issue key" onClick={() => void copy("key")} className="inline-flex shrink-0 items-center gap-1 rounded px-1 font-mono text-xs font-normal text-brand hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">{issue.key}<CopyIcon className="size-3" aria-hidden /></button>{issue.title}</span>}><Button size="sm" variant="outline" onClick={() => void copy("link")}><LinkIcon aria-hidden />Copy link</Button><ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} /></PageHeader>
+    {copyFeedback && <p role={copyFeedback.failed ? "alert" : "status"} className={cn("border-b px-4 py-1 text-xs", copyFeedback.failed ? "text-destructive" : "text-muted-foreground")}>{copyFeedback.text}</p>}
+    {flow}
+    {refreshError && <div role="alert" className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm text-destructive">Could not refresh: {refreshError}<Button size="sm" variant="outline" onClick={() => setRefreshRevision((x) => x + 1)}>Try again</Button></div>}
+    <DraftGuard key={contentRevision} external={external !== undefined} onDirtyChange={setDirty} onUseLatest={useLatest}>
     <div className="flex flex-1 flex-col md:flex-row">
       <main className="min-w-0 flex-1 p-4 md:p-6">
         <Chips issue={issue} />
+        <IssueWorkability issue={issue} onChanged={changed} />
         <Attention issue={issue} onChanged={changed} />
+        {narrow && <Metadata issue={issue} onChanged={changed} />}
         <Section title="Description"><Long>{issue.description}</Long></Section>
         {issue.result !== null && <Section title="Result"><Long>{issue.result}</Long></Section>}
         <Panels issue={issue} history={current.history} onChanged={changed} />
       </main>
-      <Metadata issue={issue} />
+      {!narrow && <Metadata issue={issue} onChanged={changed} />}
     </div>
-  </>;
+    </DraftGuard></>;
 }
 
 /**
@@ -219,11 +374,11 @@ function Chips({ issue }: { issue: Issue }) {
 
 function Attention({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
   return <div className="mb-6 space-y-3" aria-label="Needs attention">
-    {issue.questions.filter((q) => q.answer === null).map((q) => <aside key={q.id} className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Answer needed</Eyebrow><Markdown className="mt-2">{q.question}</Markdown><Byline name={q.asked_by.name} at={q.asked_at} /><TextAction label="Answer" onRun={async (text) => { const result = await api.POST("/questions/{id}/answer", { params: { path: { id: q.id } }, body: { answer: text } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, questions: issue.questions.map((x) => x.id === q.id ? result.data! : x), open_questions: issue.open_questions - 1 }; }} onChanged={onChanged} /></aside>)}
+    {issue.questions.filter((q) => q.answer === null).map((q) => <aside key={q.id} id={`question-${q.id}`} className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Answer needed</Eyebrow><Markdown className="mt-2">{q.question}</Markdown><Byline name={q.asked_by.name} at={q.asked_at} /><TextAction draftKey={`issue:${issue.key}:answer:${q.id}`} version={issue.updated_at} label="Answer" onRun={async (text) => { const result = await api.POST("/questions/{id}/answer", { params: { path: { id: q.id } }, body: { answer: text } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); const latest = await api.GET("/issues/{key}", { params: { path: { key: issue.key } } }).catch(() => undefined); return latest?.data?.questions.some((answer) => answer.id === q.id && answer.answer !== null) ? latest.data : { ...issue, questions: issue.questions.map((x) => x.id === q.id ? result.data! : x), open_questions: issue.open_questions - 1 }; }} onChanged={onChanged} /></aside>)}
     {/* Accepting is the header's primary in this status, so this box carries
         the result and the two decisions that are not it. */}
-    {issue.status === "review" && <aside className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Review needed</Eyebrow><p className="mt-1 text-sm">Decide whether this work is done, canceled, or should return to todo.</p>{issue.result !== null && <Markdown className="mt-3">{issue.result}</Markdown>}<div className="mt-3 flex flex-wrap gap-2"><IssueAction label="Accept as canceled" variant="outline" path="/issues/{key}/close" issue={issue} body={{ status: "canceled", result: issue.result }} onChanged={onChanged} /></div><TextAction label="Return to todo" placeholder="What needs to change?" onRun={(comment) => issueRequest("/issues/{key}/reopen", issue, { comment })} onChanged={onChanged} /></aside>}
-    {issue.open_blockers > 0 && <aside className="rounded-lg border bg-muted p-4"><Eyebrow>Blocked</Eyebrow><p className="mt-1 text-sm">Waiting for:</p><IssueLinks links={issue.blocked_by.filter((x) => x.open)} /></aside>}
+    {issue.status === "review" && <aside className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Review needed</Eyebrow><p className="mt-1 text-sm">Decide whether this work is done, canceled, or should return to todo.</p>{issue.result !== null && <Markdown className="mt-3">{issue.result}</Markdown>}<div className="mt-3 flex flex-wrap gap-2"><IssueAction label="Accept as canceled" variant="outline" path="/issues/{key}/close" issue={issue} body={{ status: "canceled", result: issue.result }} onChanged={onChanged} /></div><TextAction draftKey={`issue:${issue.key}:review-return`} version={issue.updated_at} label="Return to todo" placeholder="What needs to change?" onRun={(comment) => issueRequest("/issues/{key}/reopen", issue, { comment })} onChanged={onChanged} /></aside>}
+    {issue.open_blockers > 0 && <aside id="open-blockers" className="rounded-lg border bg-muted p-4"><Eyebrow>Blocked</Eyebrow><p className="mt-1 text-sm">Waiting for:</p><IssueLinks links={issue.blocked_by.filter((x) => x.open)} /></aside>}
     {issue.claim !== null && <aside className="rounded-lg border bg-muted p-4"><Eyebrow>In progress</Eyebrow><p className="mt-1 text-sm"><strong>{issue.claim.holder.name}</strong> claimed this {relativeTime(issue.claim.since)}.</p></aside>}
   </div>;
 }
@@ -279,8 +434,8 @@ function Conversation({ issue, onChanged }: { issue: Issue; onChanged: (issue: I
   return <div className="space-y-5">
     {entries.length === 0 ? <p className="text-sm text-muted-foreground">Nothing has been said on this issue yet.</p> : entries.map((entry) => entry.kind === "comment" ? <CommentEntry key={entry.value.id} issue={issue} comment={entry.value} onChanged={onChanged} /> : <article key={entry.value.id}><Eyebrow>{entry.value.answer === null ? "Open question" : "Question"}</Eyebrow><Markdown className="mt-1">{entry.value.question}</Markdown><Byline name={entry.value.asked_by.name} at={entry.value.asked_at} />{entry.value.answer !== null && <div className="mt-3 border-l-2 pl-3"><Markdown>{entry.value.answer}</Markdown><Byline name={entry.value.answered_by?.name ?? "Unknown"} at={entry.value.answered_at!} /></div>}</article>)}
     {writing === undefined && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => setWriting("comment")}>Add comment</Button><Button variant="outline" size="sm" onClick={() => setWriting("question")}>Ask question</Button></div>}
-    {writing === "comment" && <TextAction label="Add comment" multiline onCancel={() => setWriting(undefined)} onRun={async (body) => { const result = await api.POST("/issues/{key}/comments", { params: { path: { key: issue.key } }, body: { body } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, comments: [...issue.comments, result.data] }; }} onChanged={added} />}
-    {writing === "question" && <TextAction label="Ask question" multiline onCancel={() => setWriting(undefined)} onRun={async (question) => { const result = await api.POST("/issues/{key}/questions", { params: { path: { key: issue.key } }, body: { question } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, questions: [...issue.questions, result.data], open_questions: issue.open_questions + 1 }; }} onChanged={added} />}
+    {writing === "comment" && <TextAction draftKey={`issue:${issue.key}:new-comment`} version={issue.updated_at} label="Add comment" multiline onCancel={() => setWriting(undefined)} onRun={async (body) => { const result = await api.POST("/issues/{key}/comments", { params: { path: { key: issue.key } }, body: { body } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, comments: [...issue.comments, result.data] }; }} onChanged={added} />}
+    {writing === "question" && <TextAction draftKey={`issue:${issue.key}:new-question`} version={issue.updated_at} label="Ask question" multiline onCancel={() => setWriting(undefined)} onRun={async (question) => { const result = await api.POST("/issues/{key}/questions", { params: { path: { key: issue.key } }, body: { question } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, questions: [...issue.questions, result.data], open_questions: issue.open_questions + 1 }; }} onChanged={added} />}
   </div>;
 }
 
@@ -315,7 +470,7 @@ function CommentEntry({ issue, comment, onChanged }: { issue: Issue; comment: Is
       </DropdownMenu>}
     </div>
     {editing
-      ? <TextAction label="Save comment" multiline initial={comment.body} onCancel={() => setEditing(false)} onRun={async (body) => {
+      ? <TextAction draftKey={`issue:${issue.key}:comment:${comment.id}`} version={comment.edited_at ?? comment.created_at} label="Save comment" multiline initial={comment.body} onCancel={() => setEditing(false)} onRun={async (body) => {
           const result = await api.PATCH("/comments/{id}", { params: { path: { id: comment.id } }, body: { body } });
           if (!result.data) throw new Error(describe(result.error, result.response.status));
           return { ...issue, comments: issue.comments.map((x) => x.id === comment.id ? result.data! : x) };
@@ -330,10 +485,41 @@ function CommentEntry({ issue, comment, onChanged }: { issue: Issue; comment: Is
 }
 
 function EdgeAction({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
-  const [key, setKey] = useState(""); const [error, setError] = useState<string>();
-  const id = useId();
-  async function add() { const value = key.trim(); if (!value) return; const result = await api.POST("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: value } } }); if (!result.response.ok) { setError(describe(result.error, result.response.status)); return; } const read = await api.GET("/issues/{key}", { params: { path: { key: issue.key } } }); if (read.data) { setKey(""); onChanged(read.data); } }
-  return <div className="grid gap-2 border-t pt-5"><label htmlFor={id} className="text-sm font-medium">Add blocker</label><div className="flex max-w-sm gap-2"><Input id={id} aria-label="Blocker issue key" placeholder="PLAN-42" value={key} onChange={(e) => setKey(e.target.value)} /><Button variant="outline" onClick={() => void add()}>Add</Button></div>{error && <p className="text-sm text-destructive">{error}</p>}<div className="flex flex-wrap gap-2">{issue.blocked_by.filter((x) => x.key !== null).map((x) => <Button key={x.key} size="xs" variant="ghost" onClick={async () => { const result = await api.DELETE("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: x.key! } } }); if (result.response.ok) onChanged({ ...issue, blocked_by: issue.blocked_by.filter((edge) => edge !== x), open_blockers: issue.open_blockers - Number(x.open) }); }}>Remove {x.key}</Button>)}</div></div>;
+  const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<string>();
+  const [error, setError] = useState("");
+
+  async function add() {
+    if (!selected || busy) return;
+    setBusy(true); setError("");
+    try {
+      const result = await api.POST("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: selected } } });
+      if (!result.data) throw new Error(describe(result.error, result.response.status));
+      setSelected("");
+      onChanged(result.data);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(key: string) {
+    if (removing || busy) return;
+    setRemoving(key); setError("");
+    try {
+      const result = await api.DELETE("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: key } } });
+      if (!result.data) throw new Error(describe(result.error, result.response.status));
+      onChanged(result.data);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
+    finally { setRemoving(undefined); }
+  }
+
+  return <div className="grid gap-2 border-t pt-5">
+    <div className="flex max-w-md flex-wrap items-end gap-2">
+      <div className="min-w-56 flex-1"><IssuePicker label="Add blocker" project={issue.project} crossProject exclude={[issue.key, ...issue.blocked_by.flatMap((edge) => edge.key ?? [])]} value={selected ? [selected] : []} onChange={(keys) => { setSelected(keys[0] ?? ""); setError(""); }} error={error || undefined} /></div>
+      <Button variant="outline" disabled={!selected || busy || removing !== undefined} onClick={() => void add()}>{busy ? "Adding…" : "Add"}</Button>
+    </div>
+    <div className="flex flex-wrap gap-2">{issue.blocked_by.filter((edge) => edge.key !== null).map((edge) => <Button key={edge.key} size="xs" variant="ghost" disabled={busy || removing !== undefined} onClick={() => void remove(edge.key!)}>{removing === edge.key ? "Removing…" : `Remove ${edge.key}`}</Button>)}</div>
+  </div>;
 }
 
 type ActPath = "/issues/{key}/claim" | "/issues/{key}/release" | "/issues/{key}/close" | "/issues/{key}/review" | "/issues/{key}/reopen" | "/issues/{key}/restore";
@@ -349,13 +535,15 @@ function IssueAction({ label, path, issue, body, onChanged, variant = "default" 
   return <span><Button variant={variant} disabled={busy} onClick={() => void run()}>{busy ? "Working…" : label}</Button>{error && <span role="alert" className="ml-2 text-xs text-destructive">{error}</span>}</span>;
 }
 
-function TextAction({ label, placeholder, multiline, initial, onRun, onChanged, onCancel }: { label: string; placeholder?: string; multiline?: boolean; initial?: string; onRun: (text: string) => Promise<Issue>; onChanged: (issue: Issue) => void; onCancel?: () => void }) {
+function TextAction({ draftKey, version, label, placeholder, multiline, initial, onRun, onChanged, onCancel }: { draftKey: string; version: string; label: string; placeholder?: string; multiline?: boolean; initial?: string; onRun: (text: string) => Promise<Issue>; onChanged: (issue: Issue) => void; onCancel?: () => void }) {
   // A correction opens in the text it is correcting, in the same field it was
   // written in — not in an empty box that makes the author type it again.
-  const [text, setText] = useState(initial ?? ""); const [busy, setBusy] = useState(false); const [error, setError] = useState<string>();
+  const { value: text, setValue: setText, clear, recovery } = useDraft(draftKey, initial ?? "", version);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState<string>(); const [discarding, setDiscarding] = useState(false);
   const id = useId();
-  async function run() { if (!text.trim()) return; setBusy(true); setError(undefined); try { onChanged(await onRun(text)); setText(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); } finally { setBusy(false); } }
-  return <div className="mt-3 grid max-w-xl gap-2">{multiline ? <MarkdownField label={label} value={text} onChange={setText} size="compact" hint={placeholder} onSubmit={() => void run()} /> : <label className="grid gap-1 text-sm font-medium">{label}<Input id={id} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} /></label>}<div className="flex gap-2"><Button size="sm" disabled={busy || !text.trim()} onClick={() => void run()}>{busy ? "Saving…" : label}</Button>{onCancel && <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>}</div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}</div>;
+  async function run() { if (!text.trim()) return; setBusy(true); setError(undefined); try { const next = await onRun(text); clear(); onChanged(next); setText(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); } finally { setBusy(false); } }
+  const cancel = () => { if (text !== (initial ?? "")) setDiscarding(true); else onCancel?.(); };
+  return <div className="mt-3 grid max-w-xl gap-2">{recovery}{multiline ? <MarkdownField label={label} value={text} onChange={setText} size="compact" hint={placeholder} onSubmit={() => void run()} /> : <label className="grid gap-1 text-sm font-medium">{label}<Input id={id} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} /></label>}<div className="flex gap-2"><Button size="sm" disabled={busy || !text.trim()} onClick={() => void run()}>{busy ? "Saving…" : label}</Button>{onCancel && <Button size="sm" variant="ghost" disabled={busy} onClick={cancel}>Cancel</Button>}</div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<ActionDialog open={discarding} onOpenChange={setDiscarding} title="Discard what you wrote?" description="Your changes have not been saved." confirmLabel="Discard" onConfirm={async () => { clear(); onCancel?.(); }} /></div>;
 }
 
 function History({ loaded }: { loaded: Load<HistoryEntry[]> }) {
@@ -375,8 +563,39 @@ function historyText(x: HistoryEntry) {
 }
 function value(x: unknown) { if (x == null) return null; if (typeof x === "object" && "name" in x && typeof x.name === "string") return x.name; return String(x); }
 
-function Metadata({ issue }: { issue: Issue }) {
-  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l"><Field name="Status" className="max-md:hidden"><StatusDot status={issue.status} withLabel /></Field><Field name="Priority" className="max-md:hidden"><PriorityMark priority={issue.priority} withLabel /></Field><Field name="Ready" className="max-md:hidden">{issue.ready ? "yes" : "no"}</Field>{issue.epic && <Field name="Epic" className="max-md:hidden"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}{issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}{issue.assignee && <Field name="Assignee">{issue.assignee.name}</Field>}{issue.labels.length > 0 && <Field name="Labels"><span className="flex flex-wrap gap-1">{issue.labels.map((x) => <Badge key={x.name} variant="secondary" className="font-normal">{x.name}</Badge>)}</span></Field>}<Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field><Field name="Release">{issue.release === null ? <span className="text-muted-foreground">not in a release</span> : issue.release}</Field></aside>;
+function Metadata({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function write(field: string, body: object) {
+    if (busy) return;
+    setBusy(field); setMessage(""); setError("");
+    try {
+      const answer = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: body as never });
+      const current = stale<Issue>(answer);
+      if (current) { onChanged(current); setError(`${field} changed elsewhere. Review the latest value and choose again.`); return; }
+      if (!answer.data) throw new Error(describe(answer.error, answer.response.status));
+      onChanged(answer.data);
+      setMessage(`${field} saved.`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
+    finally { setBusy(""); }
+  }
+
+  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l" aria-label="Issue details">
+    <h2 className="font-medium">Details</h2>
+    <Field name="Status"><StatusDot status={issue.status} withLabel /></Field>
+    <Field name="Priority"><select name="priority" aria-label="Priority" value={issue.priority} disabled={!!busy} onChange={(event) => void write("Priority", { priority: Number(event.target.value) })} className="mt-1 h-8 w-full rounded-lg border bg-background px-2 text-sm">{[0, 1, 2, 3, 4].map((priority) => <option key={priority} value={priority}>{priorityLabel(priority)}</option>)}</select></Field>
+    <Field name="Ready">{issue.ready ? "yes" : "no"}</Field>
+    {issue.epic && <Field name="Epic"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}
+    {issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}
+    <fieldset disabled={!!busy}><AssigneePicker project={issue.project} value={issue.assignee?.name ?? ""} onChange={(name) => void write("Assignee", { assignee: name || null })} /></fieldset>
+    <fieldset disabled={!!busy}><LabelPicker label="Labels" labels={issue.project_context.labels} value={issue.labels.map((label) => label.name)} onChange={(names) => void write("Labels", { labels: names })} /></fieldset>
+    {busy && <p role="status" className="text-xs text-muted-foreground">Saving {busy.toLowerCase()}…</p>}
+    {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
+    {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+    <Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field><Field name="Release">{issue.release === null ? <span className="text-muted-foreground">not in a release</span> : issue.release}</Field>
+  </aside>;
 }
 
 /**

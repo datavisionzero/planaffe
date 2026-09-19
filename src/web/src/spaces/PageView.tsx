@@ -10,6 +10,7 @@ import { Markdown } from "@/shared/Markdown";
 import { MarkdownField } from "@/shared/MarkdownField";
 import { PageHeader } from "@/shared/PageHeader";
 import { useAbandon } from "@/shared/abandon";
+import { useDraft } from "@/shared/useDraft";
 import { stale } from "@/shared/stale";
 import { pagePath, spacePath } from "@/shell/views";
 import type { Page } from "./context";
@@ -426,15 +427,17 @@ function EditForm({ name, page, onSaved, onCancel }: {
   onSaved: (page: Page) => void;
   onCancel: () => void;
 }) {
-  const [title, setTitle] = useState(page.title);
-  const [body, setBody] = useState(page.body);
+  const [start] = useState(() => ({ title: page.title, body: page.body }));
+  const { value: draft, setValue: setDraft, clear, recovery } = useDraft(`space:${name}:page:${page.path}:edit`, start, page.updated_at);
+  const { title, body } = draft;
+  const set = <K extends keyof typeof draft>(key: K, value: typeof draft[K]) => setDraft((old) => ({ ...old, [key]: value }));
   const [version, setVersion] = useState(page.updated_at);
   const [conflict, setConflict] = useState<Page>();
   const [saving, setSaving] = useState(false);
   const [why, setWhy] = useState<string>();
   const titleId = useId();
-  const changed = title !== page.title || body !== page.body;
-  const { leave, dialog } = useAbandon(changed, onCancel);
+  const changed = JSON.stringify(draft) !== JSON.stringify(start);
+  const { leave, permit, dialog } = useAbandon(changed, onCancel, clear);
 
   async function save(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -463,7 +466,7 @@ function EditForm({ name, page, onSaved, onCancel }: {
         return;
       }
 
-      onSaved(answer.data);
+      clear(); permit(); onSaved(answer.data);
     } catch {
       setWhy("The instance did not answer.");
     } finally {
@@ -473,11 +476,12 @@ function EditForm({ name, page, onSaved, onCancel }: {
 
   return (
     <form className="mx-auto grid w-full max-w-3xl gap-4 p-4 md:p-6" onSubmit={(event) => void save(event)}>
+      {recovery}
       <label className="grid gap-1 text-sm font-medium" htmlFor={titleId}>
         Title
-        <Input id={titleId} name="title" required value={title} onChange={(event) => setTitle(event.target.value)} />
+        <Input id={titleId} name="title" required value={title} onChange={(event) => set("title", event.target.value)} />
       </label>
-      <MarkdownField label="Body" value={body} onChange={setBody} onSubmit={() => void save()} />
+      <MarkdownField label="Body" value={body} onChange={(value) => set("body", value)} onSubmit={() => void save()} />
       {conflict === undefined
         ? why !== undefined && <p role="alert" className="text-sm text-destructive">{why}</p>
         : <Conflict page={conflict} />}

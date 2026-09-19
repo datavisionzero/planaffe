@@ -45,7 +45,7 @@ function renderNeedsYou() {
     woken = setPulse;
 
     return (
-      <AttentionContext.Provider value={{ needsYou: null, inProgress: null, pulse }}>
+      <AttentionContext.Provider value={{ needsYou: null, inProgress: null, pulse, issuesPulse: 0 }}>
         <Routes><Route path="/:project/needs-you" element={<NeedsYouView />} /></Routes>
       </AttentionContext.Provider>
     );
@@ -70,15 +70,15 @@ it("shows the four groups, why each row is there, and the action that resolves i
 
   const question = screen.getByText("Asked something").closest("li")!;
   expect(question).toHaveTextContent("An open question waits for an answer.");
-  expect(within(question).getByRole("link", { name: "Answer" })).toHaveAttribute("href", "/PLAN/issues/1");
+  expect(within(question).getByRole("link", { name: "Answer" })).toHaveAttribute("href", "/PLAN/issues/1?from=needs-you");
 
   const review = screen.getByText("Handed in").closest("li")!;
   expect(review).toHaveTextContent("The result is handed in and waits for a decision.");
-  expect(within(review).getByRole("link", { name: "Review" })).toHaveAttribute("href", "/PLAN/issues/2");
+  expect(within(review).getByRole("link", { name: "Review" })).toHaveAttribute("href", "/PLAN/issues/2?from=needs-you");
 
   const stuck = screen.getByText("Behind a parked blocker").closest("li")!;
   expect(stuck).toHaveTextContent("Its chain of blockers ends where no agent can go on.");
-  expect(within(stuck).getByRole("link", { name: "See blockers" })).toHaveAttribute("href", "/PLAN/issues/4");
+  expect(within(stuck).getByRole("link", { name: "See blockers" })).toHaveAttribute("href", "/PLAN/issues/4?from=needs-you");
 });
 
 it("sets ready in place and reads the list again", async () => {

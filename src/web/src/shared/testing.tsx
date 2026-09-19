@@ -1,10 +1,12 @@
 import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { MemoryRouter } from "react-router";
+import { createMemoryRouter, RouterProvider } from "react-router";
 import { vi } from "vitest";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { forgetLabels } from "@/projects/useLabels";
+import { SessionProvider } from "@/session/Session";
+import { AttentionContext } from "@/shell/attention";
 
 /**
  * An instance to stand in front of the generated client: a route table of
@@ -59,10 +61,15 @@ export function problem(status: number, detail: string): Response {
 }
 
 export function renderAt(path: string, element: ReactElement) {
+  const router = createMemoryRouter([{ path: "*", element }], { initialEntries: [path] });
   return render(
     <ThemeProvider storageKey="test.theme">
       <TooltipProvider>
-        <MemoryRouter initialEntries={[path]}>{element}</MemoryRouter>
+        <SessionProvider value={{ me: aUser, signOut: () => undefined }}>
+          <AttentionContext.Provider value={{ needsYou: null, inProgress: null, pulse: 0, issuesPulse: 0 }}>
+            <RouterProvider router={router} />
+          </AttentionContext.Provider>
+        </SessionProvider>
       </TooltipProvider>
     </ThemeProvider>,
   );

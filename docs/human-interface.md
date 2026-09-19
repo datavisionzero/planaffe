@@ -187,6 +187,9 @@ background and taken up again the moment it is looked at. Where the instance
 stops answering, the number stays as it last was and the loop tries again with
 a growing pause: a navigation that flickered at every hiccup would be worse
 than one that is a few seconds behind.
+The frame also watches recently updated issues in the project. A changed issue
+wakes ordinary filtered lists and an open issue to reread their content and
+history; text being entered stays in place and an external version is announced.
 
 The overview is a dialog rather than a screen, so that a key can be looked up
 without leaving the list it is about. It is reached three ways — `?`, the
@@ -543,10 +546,11 @@ desktop layout.
 
 The shell renders before project data, navigation does not remount it, list rows
 are virtualized, and three things arrive after the frame rather than in it: the
-Markdown pipeline with the first screen that renders Markdown, the editor
-with the first screen that writes it, and the confetti when something is
-actually celebrated — which for most readers on most days is never. The editor weighs about three and a half
-times what the pipeline does, which is why it is fetched when a field is first
+shared Markdown and draft helper chunk with the first screen that renders
+Markdown, the editor with the first screen that writes it, and the confetti
+when something is actually celebrated — which for most readers on most days is
+never. The editor weighs about three times what the shared chunk does, which is
+why it is fetched when a field is first
 put on a screen and why the field is a quiet placeholder for that moment rather
 than a plainer text area that would be swapped out from under somebody who had
 started typing. Fenced code is not highlighted; it
@@ -560,7 +564,7 @@ that names none is never exceeded — it is only not kept, and nobody notices:
 | budget | limit | what is weighed |
 |---|---:|---|
 | `first-load` | 780 kB | the entry module, every chunk preloaded beside it and the stylesheet — everything the built `index.html` asks for before the shell renders |
-| `markdown` | 200 kB | the Markdown pipeline's own chunk, fetched with the first screen that renders Markdown |
+| `markdown` | 200 kB | the shared Markdown and draft helper chunk, fetched with the first screen that renders Markdown |
 | `editor` | 620 kB | the editor's own chunk, fetched when a field is first put on a screen |
 | `confetti` | 20 kB | the celebration's own chunk, fetched the first time a project reaches `clear` |
 

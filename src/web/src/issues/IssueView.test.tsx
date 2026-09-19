@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { useState, type ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { aUser, installInstance, renderAt } from "@/shared/testing";
 import { SessionProvider } from "@/session/Session";
+import { AttentionContext } from "@/shell/attention";
 import { IssueView } from "./IssueView";
 
 // The screen lives under the shell, and it asks who is looking: only the
@@ -27,15 +29,269 @@ const issue = {
   comments: [{ id: "0199a000-0000-7000-8000-000000000003", author: person, body: "A comment.", created_at: "2026-09-04T10:00:00Z" }],
   questions: [{ id: "0199a000-0000-7000-8000-000000000004", question: "Which way?", asked_by: agent, asked_at: "2026-09-04T09:00:00Z", answer: null, answered_by: null, answered_at: null }],
   project_context: { key: "PLAN", name: "planaffe", triage_required: false, review_required: true, labels: [] },
+  workability: { workable: false, parent_gated: false },
   created_at: "2026-09-03T10:00:00Z", updated_at: "2026-09-04T10:00:00Z", closed_at: null,
 };
 
 /** The same issue, open and free: what the header offers there is Claim. */
-const free = { ...issue, status: "todo", claim: null, result: null, questions: [] };
+const free = { ...issue, status: "todo", claim: null, result: null, questions: [], workability: { workable: true, parent_gated: false } };
+
+function WithPulse({ children }: { children: ReactNode }) {
+  const [issuesPulse, setIssuesPulse] = useState(0);
+  return <AttentionContext.Provider value={{ needsYou: null, inProgress: null, pulse: 0, issuesPulse }}>
+    <button onClick={() => setIssuesPulse((value) => value + 1)}>Remote change</button>{children}
+  </AttentionContext.Provider>;
+}
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the human-first issue detail", () => {
+  it("copies the issue key and a clean direct link from the header by keyboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/needs-you": { items: [{ issue: free, because: "question" }], total: 1, next_cursor: null, has_more: false, agents: 0 },
+      "GET /projects/PLAN/users": [],
+    });
+    renderAt("/PLAN/issues/9?from=needs-you&tab=history", routedIssue);
+    const user = userEvent.setup();
+    vi.stubGlobal("navigator", Object.create(navigator, { clipboard: { value: { writeText }, configurable: true } }));
+
+    const key = await screen.findByRole("button", { name: "Copy issue key PLAN-9" });
+    key.focus();
+    await user.keyboard("{Enter}");
+    expect(writeText).toHaveBeenLastCalledWith("PLAN-9");
+    expect(await screen.findByRole("status")).toHaveTextContent("Issue key copied.");
+
+    const link = screen.getByRole("button", { name: "Copy link" });
+    link.focus();
+    await user.keyboard("{Enter}");
+    const copied = new URL(writeText.mock.lastCall![0]);
+    expect(copied.origin).toBe(window.location.origin);
+    expect(copied.pathname).toBe("/PLAN/issues/9");
+    expect(copied.search).toBe("");
+    expect(copied.hash).toBe("");
+    expect(copied.username).toBe("");
+    expect(copied.password).toBe("");
+    expect(await screen.findByRole("status")).toHaveTextContent("Issue link copied.");
+  });
+
+  it("reports unavailable and refused clipboard writes without claiming success", async () => {
+    const clipboard = { writeText: vi.fn().mockRejectedValue(new Error("Denied")) };
+    installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [], "GET /projects/PLAN/users": [] });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    vi.stubGlobal("navigator", Object.create(navigator, { clipboard: { value: clipboard, configurable: true } }));
+
+    await user.click(await screen.findByRole("button", { name: "Copy link" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("did not allow copying");
+    expect(screen.queryByText("Issue link copied.")).not.toBeInTheDocument();
+
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+    await user.click(screen.getByRole("button", { name: "Copy issue key PLAN-9" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Clipboard is unavailable");
+    expect(clipboard.writeText).toHaveBeenCalledTimes(1);
+  });
+
+  it("changes priority, labels, and assignee with separate versioned patches", async () => {
+    const initial = { ...free, project_context: { ...free.project_context, labels: [{ name: "feature", group: null, description: null }] } };
+    const versions = [
+      { ...initial, priority: 4, updated_at: "2026-09-05T11:00:00Z" },
+      { ...initial, priority: 4, labels: [...initial.labels, initial.project_context.labels[0]], updated_at: "2026-09-05T12:00:00Z" },
+      { ...initial, priority: 4, labels: [...initial.labels, initial.project_context.labels[0]], assignee: person, updated_at: "2026-09-05T13:00:00Z" },
+      { ...initial, priority: 4, labels: [...initial.labels, initial.project_context.labels[0]], assignee: null, updated_at: "2026-09-05T14:00:00Z" },
+    ];
+    let writes = 0;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": initial,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/users": [person],
+      "PATCH /issues/PLAN-9": () => versions[writes++],
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    const details = await screen.findByLabelText("Issue details");
+
+    await user.selectOptions(within(details).getByRole("combobox", { name: "Priority" }), "4");
+    await waitFor(() => expect(instance.calls.filter((call) => call.method === "PATCH")).toHaveLength(1));
+    await screen.findByText("Priority saved.");
+    await user.click(within(details).getByRole("combobox", { name: "Labels" }));
+    await user.click(screen.getByRole("option", { name: "feature" }));
+    await screen.findByText("Labels saved.");
+    await user.click(within(details).getByRole("combobox", { name: "Assignee" }));
+    await user.click(screen.getByRole("option", { name: /maintainer/ }));
+    await screen.findByText("Assignee saved.");
+    await user.click(within(details).getByRole("button", { name: "Remove maintainer" }));
+    await screen.findByText("Assignee saved.");
+
+    const patches = instance.calls.filter((call) => call.method === "PATCH");
+    expect(patches).toHaveLength(4);
+    expect(await Promise.all(patches.map((call) => call.json()))).toEqual([
+      { priority: 4 }, { labels: ["web", "feature"] }, { assignee: "maintainer" }, { assignee: null },
+    ]);
+    expect(patches.map((call) => call.headers.get("If-Match"))).toEqual([initial.updated_at, ...versions.slice(0, 3).map((next) => next.updated_at)]);
+    expect(within(details).getByRole("combobox", { name: "Assignee" })).toHaveAttribute("placeholder", "Nobody");
+  });
+
+  it("adopts the current version after an inline edit conflicts", async () => {
+    const current = { ...free, priority: 3, updated_at: "2026-09-05T12:00:00Z" };
+    let attempts = 0;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/users": [],
+      "PATCH /issues/PLAN-9": () => ++attempts === 1
+        ? { status: 412, body: { type: "/problems/stale", detail: "Changed elsewhere", current } }
+        : { ...current, priority: 4 },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    const details = await screen.findByLabelText("Issue details");
+    const priority = within(details).getByRole("combobox", { name: "Priority" });
+
+    await user.selectOptions(priority, "4");
+    expect(await within(details).findByRole("alert")).toHaveTextContent("changed elsewhere");
+    expect(priority).toHaveValue("3");
+    await user.selectOptions(priority, "4");
+    await screen.findByText("Priority saved.");
+    const patches = instance.calls.filter((call) => call.method === "PATCH");
+    expect(patches).toHaveLength(2);
+    expect(patches[1].headers.get("If-Match")).toBe(current.updated_at);
+    expect(await patches[1].json()).toEqual({ priority: 4 });
+  });
+
+  it("explains a refused inline change and keeps the saved value", async () => {
+    installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/users": [],
+      "PATCH /issues/PLAN-9": { status: 422, body: { type: "/problems/validation", detail: "Priority cannot be changed here." } },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    const details = await screen.findByLabelText("Issue details");
+    const priority = within(details).getByRole("combobox", { name: "Priority" });
+    await user.selectOptions(priority, "4");
+    expect(await within(details).findByRole("alert")).toHaveTextContent("Priority cannot be changed here.");
+    expect(priority).toHaveValue("2");
+  });
+  it("finds cross-project blockers by key and keeps the choice after a cycle refusal", async () => {
+    const other = { ...free, key: "OTHER-7", project: "OTHER", title: "External dependency" };
+    const linked = { ...free, blocked_by: [...free.blocked_by, { key: "OTHER-7", title: other.title, status: "todo", open: true }], open_blockers: 2, workability: { workable: false, parent_gated: false } };
+    let attempts = 0;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9/history": [],
+      "GET /issues": { items: [free, other], total: 2, has_more: false, next_cursor: null },
+      "GET /issues/OTHER-7": other,
+      "POST /issues/PLAN-9/blocked-by/OTHER-7": () => ++attempts === 1
+        ? { status: 422, body: { type: "/problems/cycle", title: "cycle", detail: "This edge would close a cycle." } }
+        : linked,
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: /Relationships/ }));
+    const picker = await screen.findByRole("combobox", { name: "Add blocker" });
+    await user.type(picker, "OTHER-7");
+    expect(within(screen.getByRole("listbox", { name: "Add blocker" })).queryByText("Human-first issue")).not.toBeInTheDocument();
+    await user.click((await screen.findByText("External dependency")).closest<HTMLElement>("[role=option]")!);
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(await screen.findByText(/close a cycle/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove OTHER-7" })).toBeInTheDocument();
+    const listCall = instance.calls.find((call) => new URL(call.url).pathname === "/issues")!;
+    expect(new URL(listCall.url).searchParams.has("project")).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Relationships 5" })).toBeInTheDocument());
+    expect(screen.getAllByRole("link", { name: /^OTHER-7 ·/ }).some((link) => link.getAttribute("href") === "/OTHER/issues/7")).toBe(true);
+  });
+
+  it("separates Ready from Workable and explains simultaneous blockers", async () => {
+    const gated = { ...issue, status: "todo", claim: null, ready: false, project_context: { ...issue.project_context, triage_required: true }, workability: { workable: false, parent_gated: true } };
+    const instance = installInstance({
+      "GET /issues/PLAN-9": gated,
+      "GET /issues/PLAN-9/history": [],
+      "PATCH /issues/PLAN-9": { ...gated, ready: true },
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    const workability = await screen.findByLabelText("Workability");
+    expect(within(workability).getByText("Workable: no")).toBeInTheDocument();
+    expect(workability).toHaveTextContent("1 open question needs an answer.");
+    expect(workability).toHaveTextContent("1 open blocker must close.");
+    expect(workability).toHaveTextContent("This project requires Ready before next can take it.");
+    expect(workability).toHaveTextContent("Parent");
+    await user.click(within(workability).getByRole("button", { name: "Set ready" }));
+    const patch = instance.calls.find((call) => call.method === "PATCH")!;
+    expect(await patch.json()).toEqual({ ready: true });
+  });
+
+  it("shows a positive selection result even when Ready is unset in a project without triage", async () => {
+    const workable = { ...free, ready: false, open_questions: 0, open_blockers: 0, open_sub_issues: 0, blocked_by: [], sub_issues: [] };
+    installInstance({ "GET /issues/PLAN-9": workable, "GET /issues/PLAN-9/history": [] });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const workability = await screen.findByLabelText("Workability");
+    expect(workability).toHaveTextContent("Workable: yes");
+    expect(workability).toHaveTextContent("Ready: not set. Not required by this project.");
+  });
+  it("continues from Needs you only after the current issue is clear", async () => {
+    const waiting = { ...free, questions: issue.questions, open_questions: 1 };
+    const next = { ...free, key: "PLAN-10", title: "Next decision", questions: issue.questions, open_questions: 1 };
+    const answered = { ...issue.questions[0], answer: "Use the browser path.", answered_by: person, answered_at: "2026-09-04T11:00:00Z" };
+    let items = [{ issue: waiting, because: "question" }, { issue: next, because: "question" }];
+    installInstance({
+      "GET /issues/PLAN-9": waiting,
+      "GET /issues/PLAN-9/history": [],
+      "GET /issues/PLAN-10": next,
+      "GET /issues/PLAN-10/history": [],
+      "GET /projects/PLAN/needs-you": () => ({ items, total: items.length, next_cursor: null, has_more: false, agents: 1 }),
+      "POST /questions/0199a000-0000-7000-8000-000000000004/answer": () => {
+        items = items.slice(1);
+        return { body: answered };
+      },
+    });
+    renderAt("/PLAN/issues/9?from=needs-you", routedIssue);
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("link", { name: /Back to Needs you/ })).toHaveAttribute("href", "/PLAN/needs-you");
+    expect(screen.queryByRole("button", { name: "Next waiting issue" })).not.toBeInTheDocument();
+    await user.type(await screen.findByLabelText("Answer"), "Use the browser path.");
+    await user.click(screen.getByRole("button", { name: "Answer" }));
+    await user.click(await screen.findByRole("button", { name: "Next waiting issue" }));
+    expect(await screen.findByRole("heading", { name: /Next decision/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Back to Needs you/ })).toBeInTheDocument();
+  });
+
+  it("leaves a direct issue link outside the Needs you workflow", async () => {
+    installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [] });
+    renderAt("/PLAN/issues/9", routedIssue);
+    await screen.findByRole("heading", { name: /Human-first issue/ });
+    expect(screen.queryByRole("link", { name: /Back to Needs you/ })).not.toBeInTheDocument();
+  });
+
+  it("announces remote edits without replacing text or focus in the editor", async () => {
+    let current = free;
+    installInstance({ "GET /issues/PLAN-9": () => current, "GET /issues/PLAN-9/history": [] });
+    renderAt("/PLAN/issues/9", <WithPulse>{routedIssue}</WithPulse>);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const title = screen.getByRole("textbox", { name: "Title" });
+    await user.type(title, " locally");
+    current = { ...free, title: "Changed elsewhere", updated_at: "2026-09-05T10:00:00Z" };
+    await user.click(screen.getByRole("button", { name: "Remote change" }));
+
+    expect(await screen.findByText(/Your draft is kept/)).toBeInTheDocument();
+    expect(title).toHaveValue("Human-first issue locally");
+    await user.click(title);
+    expect(title).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Discard draft and load latest" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(await screen.findByRole("heading", { name: /Changed elsewhere/ })).toBeInTheDocument();
+  });
   it("puts current attention before context and never folds the description away", async () => {
     installInstance({
       "GET /issues/PLAN-9": issue,
@@ -109,7 +365,7 @@ describe("the human-first issue detail", () => {
     await user.click(screen.getByRole("button", { name: "Answer" }));
 
     expect(await screen.findByText("Use the browser path.")).toBeInTheDocument();
-    expect(await instance.calls.at(-1)!.json()).toEqual({ answer: "Use the browser path." });
+    expect(await instance.calls.find((call) => call.url.endsWith("/answer"))!.json()).toEqual({ answer: "Use the browser path." });
   });
 
   // The action used to sit below description, relationships and conversation:
@@ -136,7 +392,7 @@ describe("the human-first issue detail", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Claim" }));
-    expect(await instance.calls.at(-1)!.json()).toEqual({ force: false });
+    expect(await instance.calls.find((call) => call.url.endsWith("/claim"))!.json()).toEqual({ force: false });
 
     await user.click(screen.getByRole("button", { name: "More actions" }));
     const menu = await screen.findByRole("menu");
@@ -261,7 +517,7 @@ describe("the human-first issue detail", () => {
     await user.click(screen.getByRole("button", { name: "Add comment" }));
 
     expect(await screen.findByText("Looked at it.")).toBeInTheDocument();
-    expect(await instance.calls.at(-1)!.json()).toEqual({ body: "Looked at it." });
+    expect(await instance.calls.find((call) => call.url.endsWith("/comments"))!.json()).toEqual({ body: "Looked at it." });
   });
 
   // `GET /issues/{key}` answers 404 `deleted` in the grace period and the view

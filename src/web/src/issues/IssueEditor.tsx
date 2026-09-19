@@ -8,6 +8,7 @@ import { useEpics } from "@/epics/useEpics";
 import { useLabels } from "@/projects/useLabels";
 import { MarkdownField } from "@/shared/MarkdownField";
 import { useAbandon } from "@/shared/abandon";
+import { useDraft } from "@/shared/useDraft";
 import { PageHeader } from "@/shared/PageHeader";
 import { stale } from "@/shared/stale";
 import { keyPath } from "@/shell/views";
@@ -27,12 +28,13 @@ export function NewIssueView() {
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<Refusal>();
 
-  async function save(draft: IssueDraft) {
+  async function save(draft: IssueDraft, completed: () => void) {
     setSaving(true); setRefused(undefined);
     try {
       const item: NewIssue = { ref: null, title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: draft.labels, epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), blocked_by: draft.blockedBy, blocks: [], status: draft.status };
       const { data, error: problem, response } = await api.POST("/issues", { body: { project: project!, issues: [item] } });
       if (!data) { setRefused(refusal(problem, response.status)); return; }
+      completed();
       void navigate(keyPath(data.items[0].key), { replace: true });
     } catch { setRefused({ fields: {} , why: "The instance did not answer." }); } finally { setSaving(false); }
   }
@@ -50,7 +52,7 @@ export function NewIssueView() {
   return <><PageHeader title="Create issue" /><IssueForm epic={search.get("epic") ?? undefined} submit="Create issue" saving={saving} refused={refused} onSubmit={save} onCancel={cancel} /></>;
 }
 
-export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSaved: (issue: Issue) => void; onCancel: () => void }) {
+export function EditIssueForm({ issue, onSaved, onCancel, external }: { issue: Issue; onSaved: (issue: Issue) => void; onCancel: () => void; external?: Issue }) {
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<Refusal>();
   // The version the next write is guarded with, and the issue a refusal handed
@@ -59,7 +61,7 @@ export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSa
   // only way out was to throw away what had been typed.
   const [version, setVersion] = useState(issue.updated_at);
   const [conflict, setConflict] = useState<Issue>();
-  async function save(draft: IssueDraft) {
+  async function save(draft: IssueDraft, completed: () => void) {
     setSaving(true); setRefused(undefined); setConflict(undefined);
     const body = { title: draft.title, description: draft.description, priority: draft.priority, ready: draft.ready, labels: draft.labels, epic: blank(draft.epic), parent: blank(draft.parent), assignee: blank(draft.assignee), ...(parkable(issue) && draft.status !== issue.status ? { status: draft.status } : {}) };
     try {
@@ -67,10 +69,11 @@ export function EditIssueForm({ issue, onSaved, onCancel }: { issue: Issue; onSa
       const current = stale<Issue>(answer);
       if (current !== undefined) { setConflict(current); setVersion(current.updated_at); return; }
       if (!answer.data) { setRefused(refusal(answer.error, answer.response.status)); return; }
+      completed();
       onSaved(answer.data);
     } catch { setRefused({ fields: {}, why: "The instance did not answer." }); } finally { setSaving(false); }
   }
-  return <IssueForm initial={issue} submit="Save changes" saving={saving} refused={refused} notice={conflict === undefined ? undefined : <Conflict opened={issue} current={conflict} />} onSubmit={save} onCancel={onCancel} />;
+  return <IssueForm initial={issue} submit="Save changes" saving={saving} refused={refused} notice={conflict === undefined ? undefined : <Conflict opened={issue} current={conflict} />} external={external} onSubmit={save} onCancel={onCancel} />;
 }
 
 /** The fields of the issue a person edits here, in the order the form has them. */
@@ -162,14 +165,15 @@ function startingDraft(initial: Issue | undefined, epic: string | undefined): Is
   return { title: initial?.title ?? "", description: initial?.description ?? "", priority: initial?.priority ?? 2, ready: initial?.ready ?? false, labels: initial?.labels.map((x) => x.name) ?? [], epic: initial?.epic?.key ?? epic ?? "", parent: initial?.parent?.key ?? "", assignee: initial?.assignee?.name ?? "", blockedBy: initial?.blocked_by.flatMap((x) => x.key ?? []) ?? [], status: initial?.status === "backlog" ? "backlog" : "todo" };
 }
 
-function IssueForm({ initial, epic, submit, saving, refused, notice, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; notice?: ReactNode; onSubmit: (draft: IssueDraft) => void; onCancel: () => void }) {
+function IssueForm({ initial, epic, submit, saving, refused, notice, external, onSubmit, onCancel }: { initial?: Issue; epic?: string; submit: string; saving: boolean; refused?: Refusal; notice?: ReactNode; external?: Issue; onSubmit: (draft: IssueDraft, completed: () => void) => void; onCancel: () => void }) {
   const [start] = useState(() => startingDraft(initial, epic));
-  const [draft, setDraft] = useState<IssueDraft>(start);
-  const { leave, dialog } = useAbandon(JSON.stringify(draft) !== JSON.stringify(start), onCancel);
+  const { project } = useParams();
+  const { value: draft, setValue: setDraft, clear, recovery } = useDraft<IssueDraft>(initial ? `issue:${initial.key}:edit` : `issue:${project}:new:${epic ?? ""}`, start, initial?.updated_at ?? null);
+  const { leave, permit, dialog } = useAbandon(JSON.stringify(draft) !== JSON.stringify(start), onCancel, clear);
+  const completed = () => { clear(); permit(); };
   const titleId = useId();
   const readyId = useId();
   const set = <K extends keyof IssueDraft>(key: K, value: IssueDraft[K]) => setDraft((old) => ({ ...old, [key]: value }));
-  const { project } = useParams();
   const { labels, create } = useLabels(project);
   const epics = useEpics(project);
   const at = refused?.fields ?? {};
@@ -186,7 +190,8 @@ function IssueForm({ initial, epic, submit, saving, refused, notice, onSubmit, o
   // Two columns where there is room: what is written stays wide, and the eight
   // controls around it stand beside it rather than crowding in above and below
   // (`docs/human-interface.md`). One column on a phone, in the order below.
-  return <form className="mx-auto grid w-full max-w-6xl gap-4 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6" onSubmit={(event) => { event.preventDefault(); void onSubmit(draft); }}>
+  return <form className="mx-auto grid w-full max-w-6xl gap-4 p-4 md:p-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6" onSubmit={(event) => { event.preventDefault(); void onSubmit(draft, completed); }}>
+    {recovery && <div className="lg:col-span-2">{recovery}</div>}
     <div className="grid content-start gap-4">
     <label className="grid gap-1 text-sm font-medium">Title<Input id={titleId} required autoFocus value={draft.title} onChange={(e) => set("title", e.target.value)} /></label>
     <MarkdownField label="Description" value={draft.description} onChange={(value) => set("description", value)} hint="What has to be true when this is done?" />
@@ -196,6 +201,11 @@ function IssueForm({ initial, epic, submit, saving, refused, notice, onSubmit, o
     <LabelPicker label="Labels" labels={labels} value={draft.labels} onChange={(names) => set("labels", names)} onCreate={create} error={at.labels} />
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"><EpicPicker epics={epics} value={draft.epic} onChange={(key) => set("epic", key)} error={at.epic} /><IssuePicker label="Parent issue" project={project} exclude={initial ? [initial.key] : []} value={draft.parent === "" ? [] : [draft.parent]} onChange={(keys) => set("parent", keys[0] ?? "")} error={at.parent} /><AssigneePicker project={project} value={draft.assignee} onChange={(name) => set("assignee", name)} error={at.assignee} />{!initial && <IssuePicker label="Blocked by" project={project} multiple value={draft.blockedBy} onChange={(keys) => set("blockedBy", keys)} error={at.blocked_by} />}</div>
     {reopens && <p role="status" className="text-sm text-brand">{reopens}</p>}
+    {external && <div role="status" className="grid gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+      <p>This issue changed elsewhere. Your draft is kept. Saving will first check the server version.</p>
+      <details><summary className="cursor-pointer">Review the latest version</summary><p className="mt-2 font-medium">{external.title}</p><pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap">{external.description}</pre></details>
+      <Button type="button" size="sm" variant="outline" className="w-fit" onClick={leave}>Discard draft and load latest</Button>
+    </div>}
     {/* A conflict says everything the refusal's own sentence says, and says
         what to do about it, so it stands in its place rather than beside it. */}
     {notice ?? (refused?.why && <p role="alert" className="text-sm text-destructive">{refused.why}</p>)}

@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { SearchIcon, SlidersHorizontalIcon } from "lucide-react";
+import { SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
@@ -15,11 +15,13 @@ import { cn } from "@/lib/utils";
 import { useLabels } from "@/projects/useLabels";
 import { PageHeader } from "@/shared/PageHeader";
 import { is, typing } from "@/shell/shortcuts";
+import { useAttention } from "@/shell/useAttention";
 import { keyPath, type View } from "@/shell/views";
 import { AssigneeFilter, AuthorFilter, EpicFilter } from "./pickers";
 import { PriorityMark } from "./priority";
 import { priorityLabel } from "./priorityLabel";
 import { StatusDot } from "./status";
+import { statusLabel } from "./statusLabel";
 
 type PageState =
   | { at: "asking"; items: IssueSummary[]; total?: number }
@@ -33,6 +35,7 @@ type ListQuery = {
 };
 
 const pageSize = 50;
+const filterNames = new Set(["q", "status", "ready", "priority", "label", "epic", "assignee", "claimed", "author", "blocked", "has_open_question", "deleted"]);
 
 /** The shared, cursor-paginated issue list described by cut three. */
 export function IssueListView({ view }: { view: View }) {
@@ -41,7 +44,8 @@ export function IssueListView({ view }: { view: View }) {
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [active, setActive] = useState(0);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [selectionNotice, setSelectionNotice] = useState("");
   const searchId = useId();
   const sortId = useId();
   const scrollElement = useRef<HTMLDivElement>(null);
@@ -51,32 +55,56 @@ export function IssueListView({ view }: { view: View }) {
   const narrow = useIsMobile();
   const { labels } = useLabels(project);
   const epics = useEpics(project);
+  const { issuesPulse } = useAttention();
   const query = useMemo(() => readQuery(project, search, view), [project, search, view]);
   const fingerprint = JSON.stringify(query);
   const [loaded, setLoaded] = useState<{ of: string; page: PageState } | null>(null);
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
+  const serial = useRef(0);
+  const loadingMore = useRef<string | null>(null);
   const page: PageState = useMemo(
     () => loaded?.of === fingerprint ? loaded.page : { at: "asking", items: [] },
     [fingerprint, loaded],
   );
 
-  const requestPage = useCallback(async (cursor?: string) => {
-    setLoaded((current) => ({ of: fingerprint, page: { at: "asking", items: current?.of === fingerprint ? current.page.items : [], total: current?.of === fingerprint ? current.page.total : undefined } }));
+  const requestPage = useCallback(async (cursor?: string, signal?: AbortSignal) => {
+    if (cursor !== undefined && loadingMore.current === cursor) return;
+    const request = cursor === undefined ? ++serial.current : serial.current;
+    if (cursor !== undefined) loadingMore.current = cursor;
+    const previous = loadedRef.current;
+    const target = cursor === undefined && previous?.of === fingerprint ? Math.max(pageSize, previous.page.items.length) : pageSize;
+    if (cursor === undefined) setLoaded((current) => ({ of: fingerprint, page: { at: "asking", items: current?.of === fingerprint ? current.page.items : [], total: current?.of === fingerprint ? current.page.total : undefined } }));
     try {
-      const { data, error, response } = await api.GET("/issues", { params: { query: { ...query, status: query.status as never, cursor, limit: pageSize } } });
-      if (data === undefined) {
-        setLoaded((current) => current?.of === fingerprint ? { of: fingerprint, page: { at: "failed", items: current.page.items, total: current.page.total, why: describe(error, response.status) } } : current);
-        return;
-      }
+      const items: IssueSummary[] = [];
+      let next = cursor;
+      let total = 0;
+      do {
+        const { data, error, response } = await api.GET("/issues", { params: { query: { ...query, status: query.status as never, cursor: next, limit: pageSize } }, signal });
+        if (data === undefined) throw new Error(describe(error, response.status));
+        items.push(...data.items);
+        total = data.total;
+        next = data.next_cursor ?? undefined;
+      } while (cursor === undefined && next !== undefined && items.length < target && !signal?.aborted);
+      if (signal?.aborted || request !== serial.current) return;
       setLoaded((current) => {
         if (current?.of !== fingerprint) return current;
-        return { of: fingerprint, page: { at: "known", items: cursor === undefined ? data.items : [...current.page.items, ...data.items], total: data.total, nextCursor: data.next_cursor } };
+        return { of: fingerprint, page: { at: "known", items: cursor === undefined ? items : [...current.page.items, ...items], total, nextCursor: next ?? null } };
       });
-    } catch {
-      setLoaded((current) => current?.of === fingerprint ? { of: fingerprint, page: { at: "failed", items: current.page.items, total: current.page.total, why: "The instance did not answer." } } : current);
+    } catch (reason) {
+      if (signal?.aborted || request !== serial.current) return;
+      const why = reason instanceof Error ? reason.message : "The instance did not answer.";
+      setLoaded((current) => current?.of === fingerprint ? { of: fingerprint, page: { at: "failed", items: current.page.items, total: current.page.total, why } } : current);
+    } finally {
+      if (cursor !== undefined && loadingMore.current === cursor) loadingMore.current = null;
     }
   }, [fingerprint, query]);
 
-  useEffect(() => { void requestPage(); }, [requestPage]);
+  useEffect(() => {
+    const stop = new AbortController();
+    void requestPage(undefined, stop.signal);
+    return () => stop.abort();
+  }, [issuesPulse, requestPage]);
   // `sort=epic` makes the epic the first sort key, so a group is one unbroken
   // run of the list and stays one across page boundaries (`docs/api.md`). The
   // heads are rows of the same virtual window, of a height of their own.
@@ -122,7 +150,14 @@ export function IssueListView({ view }: { view: View }) {
     if (Number.isFinite(offset) && offset > 0) requestAnimationFrame(() => scrollElement.current?.scrollTo({ top: offset }));
   }, [storageKey]);
 
-  useEffect(() => setActive((value) => Math.min(value, Math.max(0, page.items.length - 1))), [page.items.length]);
+  const active = Math.max(0, page.items.findIndex((issue) => issue.key === activeKey));
+  useEffect(() => {
+    if (page.at !== "known" || activeKey === null) return;
+    if (!page.items.some((issue) => issue.key === activeKey)) {
+      setSelectionNotice(`${activeKey} no longer matches this view.`);
+      setActiveKey(page.items[0]?.key ?? null);
+    }
+  }, [activeKey, page]);
   useEffect(() => {
     // The keys of the list, as `shortcuts.ts` binds them and the ? overview
     // shows them. Escape is the exception that also answers while typing: it
@@ -132,8 +167,9 @@ export function IssueListView({ view }: { view: View }) {
       if (is("list:search", event) && !editing) { event.preventDefault(); document.querySelector<HTMLInputElement>("[data-issue-search]")?.focus(); }
       else if (!editing && (is("list:next", event) || is("list:previous", event))) {
         event.preventDefault();
+        if (page.items.length === 0) return;
         const next = Math.max(0, Math.min(page.items.length - 1, active + (is("list:next", event) ? 1 : -1)));
-        setActive(next); virtualizer.scrollToIndex(rows.findIndex((row) => row.index === next), { align: "auto" });
+        setActiveKey(page.items[next]?.key ?? null); setSelectionNotice(""); virtualizer.scrollToIndex(rows.findIndex((row) => row.index === next), { align: "auto" });
       } else if (!editing && is("list:open", event) && page.items[active]) void navigate(keyPath(page.items[active].key));
       // `c` is the frame's, not this list's: it creates in the project from
       // every screen of it.
@@ -153,8 +189,26 @@ export function IssueListView({ view }: { view: View }) {
     for (const value of values) next.append(name, value);
     setSearch(next, { replace: true });
   }
-  let explicit = false;
-  search.forEach((_value, key) => { if (!["sort", "order"].includes(key)) explicit = true; });
+  const explicitFilters: Array<[string, string]> = [];
+  search.forEach((value, name) => { if (filterNames.has(name) && value !== "") explicitFilters.push([name, value]); });
+  const explicit = explicitFilters.length > 0;
+  const defaults = viewDefaults(view);
+  function clearExplicit() {
+    const next = new URLSearchParams(search);
+    for (const name of filterNames) next.delete(name);
+    setSearch(next, { replace: true });
+  }
+  function removeExplicit(at: number) {
+    const selected = explicitFilters[at];
+    if (!selected) return;
+    let removed = false;
+    const next = new URLSearchParams();
+    search.forEach((value, name) => {
+      if (!removed && name === selected[0] && value === selected[1]) { removed = true; return; }
+      next.append(name, value);
+    });
+    setSearch(next, { replace: true });
+  }
 
   return <div className="flex min-h-0 flex-1 flex-col">
     <PageHeader title={view.label} meta={page.total === undefined ? "…" : `${page.total} ${page.total === 1 ? "issue" : "issues"}`}>
@@ -164,34 +218,42 @@ export function IssueListView({ view }: { view: View }) {
           along. */}
       <Button size="sm" render={<Link to={`/${project}/issues/new`} />}>New issue</Button>
     </PageHeader>
+    {selectionNotice && <p role="status" className="border-b px-4 py-2 text-xs text-muted-foreground">{selectionNotice}</p>}
     <div className="flex flex-wrap items-center gap-2 border-b p-2">
       <div className="relative min-w-48 flex-1 sm:max-w-sm"><SearchIcon className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" /><Input id={searchId} data-issue-search aria-label="Search issues" placeholder="Search issues…" value={search.get("q") ?? ""} onChange={(event) => change("q", event.target.value)} className="pl-8" /></div>
       <select id={sortId} aria-label="Sort issues" value={search.get("sort") ?? "updated"} onChange={(event) => change("sort", event.target.value === "updated" ? undefined : event.target.value)} className="h-8 rounded-lg border bg-background px-2 text-sm"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="priority">Priority</option><option value="epic">Epic</option></select>
       <Button variant="ghost" size="sm" onClick={() => change("order", (search.get("order") ?? "desc") === "desc" ? "asc" : undefined)} aria-label="Reverse sort order">{(search.get("order") ?? "desc") === "desc" ? "Descending" : "Ascending"}</Button>
     </div>
+    {(explicit || defaults.length > 0) && <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs" aria-label="Active filters">
+      {defaults.length > 0 && <span className="text-muted-foreground">View defaults: {defaults.join(" · ")}</span>}
+      {explicitFilters.map(([name, value], index) => {
+        const label = filterLabel(name, value, epics);
+        return <button key={`${name}:${value}:${index}`} type="button" className="inline-flex min-h-8 items-center gap-1 rounded-full border bg-secondary px-2.5 text-secondary-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" aria-label={`Remove ${label}`} onClick={() => removeExplicit(index)}>{label}<XIcon aria-hidden className="size-3" /></button>;
+      })}
+    </div>}
     {/* Wide: the bar stays in place above the list. Narrow: the same controls
         arrive as a sheet that dismisses itself and hands the focus back
         (`docs/human-interface.md`, the screen matrix). */}
-    {filtersOpen && !narrow && <FilterBar project={project} search={search} change={change} changeAll={changeAll} labels={labels} epics={epics} clear={() => setSearch(new URLSearchParams(), { replace: true })} />}
+    {filtersOpen && !narrow && <FilterBar project={project} search={search} change={change} changeAll={changeAll} labels={labels} epics={epics} clear={clearExplicit} />}
     {narrow && <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
       <SheetContent side="bottom" finalFocus={filtersButton} className="max-h-[85svh] overflow-y-auto pb-4">
         <SheetHeader className="pb-0">
           <SheetTitle>Filters</SheetTitle>
           <SheetDescription>What you choose is carried by the address of this list.</SheetDescription>
         </SheetHeader>
-        <FilterBar project={project} search={search} change={change} changeAll={changeAll} labels={labels} epics={epics} clear={() => setSearch(new URLSearchParams(), { replace: true })} className="border-b-0 bg-transparent px-4 pt-0" />
+        <FilterBar project={project} search={search} change={change} changeAll={changeAll} labels={labels} epics={epics} clear={clearExplicit} className="border-b-0 bg-transparent px-4 pt-0" />
       </SheetContent>
     </Sheet>}
     {page.at === "asking" && !page.items.length && <Loading />}
     {page.at === "failed" && !page.items.length && <p className="p-4 text-sm text-destructive">{page.why}</p>}
-    {page.at === "known" && !page.items.length && <div className="flex flex-1 flex-col items-center justify-center gap-1 p-8 text-center"><p className="text-sm">{explicit ? "No issues match these filters." : "No issues yet."}</p><p className="text-xs text-muted-foreground">{view.hint}</p></div>}
+    {page.at === "known" && !page.items.length && <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center"><p className="text-sm">{explicit ? "No issues match these filters." : defaults.length > 0 ? "No issues in this view." : "No issues yet."}</p><p className="text-xs text-muted-foreground">{view.hint}</p>{explicit && <Button variant="outline" size="sm" onClick={clearExplicit}>Clear added filters</Button>}</div>}
     {!!page.items.length && <div ref={scrollElement} onScroll={(event) => sessionStorage.setItem(storageKey, String(event.currentTarget.scrollTop))} className="min-h-0 flex-1 overflow-auto" role="listbox" aria-label={`${view.label} issues`} aria-busy={page.at === "asking"}>
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>{visibleItems.map((virtual) => {
         const row = rows[virtual.index];
         const style = { transform: `translateY(${virtual.start}px)`, height: virtual.size };
         return row.index === -1
           ? <GroupHead key={`epic:${row.head ?? "none"}`} epic={row.head} epics={epics} style={style} />
-          : <IssueRow key={page.items[row.index].key} issue={page.items[row.index]} active={row.index === active} onActive={() => setActive(row.index)} style={style} />;
+          : <IssueRow key={page.items[row.index].key} issue={page.items[row.index]} active={row.index === active} onActive={() => { setActiveKey(page.items[row.index].key); setSelectionNotice(""); }} style={style} />;
       })}</div>
       {page.at === "failed" && <p className="border-t p-3 text-center text-xs text-destructive">{page.why} <button className="underline" onClick={() => void requestPage()}>Try again</button></p>}
     </div>}
@@ -257,6 +319,35 @@ function GroupHead({ epic, epics, style }: { epic: string | null; epics: Schemas
 }
 
 function Loading() { return <div className="divide-y" aria-busy>{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex h-11 items-center gap-3 px-4"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 flex-1" /></div>)}</div>; }
+
+function viewDefaults(view: View): string[] {
+  const filter = view.filter;
+  if (!filter) return [];
+  return [
+    ...(filter.status ?? []).map((status) => statusLabel(status as IssueSummary["status"]) ?? status),
+    ...(filter.ready === undefined ? [] : [filter.ready ? "ready" : "not ready"]),
+    ...(filter.claimed === undefined ? [] : [`claim: ${filter.claimed}`]),
+    ...(filter.has_open_question === undefined ? [] : [filter.has_open_question ? "open question" : "no open question"]),
+  ];
+}
+
+function filterLabel(name: string, value: string, epics: Schemas["EpicSummary"][]): string {
+  switch (name) {
+    case "q": return `Search: ${value}`;
+    case "status": return `Status: ${statusLabel(value as IssueSummary["status"]) ?? value}`;
+    case "priority": return `Priority: ${priorityLabel(Number(value))}`;
+    case "label": return `Label: ${value}`;
+    case "epic": return `Epic: ${value === "none" ? "No epic" : [value, epics.find((epic) => epic.key === value)?.title].filter(Boolean).join(" · ")}`;
+    case "assignee": return `Assignee: ${value === "me" ? "Me" : value === "none" ? "Nobody" : value}`;
+    case "author": return `Author: ${value === "me" ? "Me" : value}`;
+    case "claimed": return `Claim: ${value === "true" ? "Claimed" : value === "false" ? "Unclaimed" : value === "me" ? "Mine" : value}`;
+    case "ready": return `Ready: ${value === "true" ? "yes" : "no"}`;
+    case "blocked": return `Blocked: ${value === "true" ? "yes" : "no"}`;
+    case "has_open_question": return `Open question: ${value === "true" ? "yes" : "no"}`;
+    case "deleted": return `Deleted: ${value === "true" ? "yes" : "no"}`;
+    default: return `${name}: ${value}`;
+  }
+}
 
 function readQuery(project: string | undefined, search: URLSearchParams, view: View): ListQuery {
   const bool = (name: string, fallback?: boolean) => search.has(name) ? search.get(name) === "true" : fallback;

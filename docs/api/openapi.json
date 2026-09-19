@@ -8541,6 +8541,7 @@
           "comments",
           "questions",
           "project_context",
+          "workability",
           "created_at",
           "updated_at",
           "closed_at"
@@ -8673,6 +8674,9 @@
           },
           "project_context": {
             "$ref": "#/components/schemas/ProjectContext"
+          },
+          "workability": {
+            "$ref": "#/components/schemas/Workability"
           },
           "created_at": {
             "type": "string",
@@ -10408,6 +10412,21 @@
         "properties": {
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "Workability": {
+        "required": [
+          "workable",
+          "parent_gated"
+        ],
+        "type": "object",
+        "properties": {
+          "workable": {
+            "type": "boolean"
+          },
+          "parent_gated": {
+            "type": "boolean"
           }
         }
       }

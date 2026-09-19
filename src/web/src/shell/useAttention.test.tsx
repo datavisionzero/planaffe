@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useAttentionState } from "./useAttention";
 
 /**
- * The frame's held reads of "Needs you" and "In progress". The instance is
+ * The frame's held reads of "Needs you", "In progress", and recent issues. The instance is
  * driven by hand here rather than answering at once, because what these loops
  * are for is the time between a question and its answer: the connections they
  * hold, when they let go of them, and what the navigation says while it has
@@ -11,8 +11,8 @@ import { useAttentionState } from "./useAttention";
  */
 type Round = { request: Request; answer: (response: Response) => void; refuse: () => void };
 
-/** Which list a round belongs to — the two loops run side by side. */
-type List = "needs-you" | "in-progress";
+/** Which list a round belongs to — the three loops run side by side. */
+type List = "needs-you" | "in-progress" | "issues";
 
 const rounds: Round[] = [];
 
@@ -42,9 +42,9 @@ function page(total: number, etag: string): Response {
 
 /** What the navigation would draw, and how often it was told to look again. */
 function Probe({ project }: { project: string | undefined }) {
-  const { needsYou, inProgress, pulse } = useAttentionState(project);
+  const { needsYou, inProgress, pulse, issuesPulse } = useAttentionState(project);
 
-  return <p>{`${drawn(needsYou)} · ${drawn(inProgress)} · ${pulse}`}</p>;
+  return <><p>{`${drawn(needsYou)} · ${drawn(inProgress)} · ${pulse}`}</p><output data-testid="issues-pulse">{issuesPulse}</output></>;
 }
 
 function drawn(count: number | null): string {
@@ -56,7 +56,8 @@ function shown(): string {
 }
 
 function of(request: Request): List {
-  return new URL(request.url).pathname.endsWith("/needs-you") ? "needs-you" : "in-progress";
+  const url = new URL(request.url);
+  return url.pathname.endsWith("/needs-you") ? "needs-you" : url.searchParams.has("status") ? "in-progress" : "issues";
 }
 
 function all(list: List): Round[] {
@@ -158,15 +159,20 @@ it("holds one connection per list and neither waits on the other", async () => {
 
   await act(async () => (await round("needs-you", 0)).answer(page(1, '"a"')));
   await act(async () => (await round("in-progress", 0)).answer(page(7, '"p"')));
+  await act(async () => (await round("issues", 0)).answer(page(8, '"i"')));
 
   await round("needs-you", 1);
   await round("in-progress", 1);
+  await round("issues", 1);
 
-  // Two lists, two held reads, and not one more: under HTTP/1.1 the browser
+  // Three lists, three held reads, and not one more: under HTTP/1.1 the browser
   // has six connections per origin and the clicks need the rest.
   expect(all("needs-you")).toHaveLength(2);
   expect(all("in-progress")).toHaveLength(2);
+  expect(all("issues")).toHaveLength(2);
   expect(shown()).toBe("1 · 7 · 0");
+  await act(async () => (await round("issues", 1)).answer(page(8, '"j"')));
+  expect(screen.getByTestId("issues-pulse")).toHaveTextContent("1");
 });
 
 it("keeps the number it last knew when the instance stops answering", async () => {
@@ -189,8 +195,10 @@ it("holds nothing while nobody is looking, and reads at once on coming back", as
 
   await act(async () => (await round("needs-you", 0)).answer(page(1, '"a"')));
   await act(async () => (await round("in-progress", 0)).answer(page(2, '"p"')));
+  await act(async () => (await round("issues", 0)).answer(page(3, '"i"')));
   const waiting = await round("needs-you", 1);
   const other = await round("in-progress", 1);
+  const recent = await round("issues", 1);
 
   look(true);
 
@@ -198,13 +206,15 @@ it("holds nothing while nobody is looking, and reads at once on coming back", as
   // looking at may not spend one of them on a number nobody can see.
   await waitFor(() => expect(waiting.request.signal.aborted).toBe(true));
   await waitFor(() => expect(other.request.signal.aborted).toBe(true));
-  expect(rounds).toHaveLength(4);
+  await waitFor(() => expect(recent.request.signal.aborted).toBe(true));
+  expect(rounds).toHaveLength(6);
 
   look(false);
 
   const back = await round("needs-you", 2);
   expect(back.request.headers.get("If-None-Match")).toBe('"a"');
   expect((await round("in-progress", 2)).request.headers.get("If-None-Match")).toBe('"p"');
+  expect((await round("issues", 2)).request.headers.get("If-None-Match")).toBe('"i"');
   expect(shown()).toBe("1 · 2 · 0");
 });
 
@@ -214,8 +224,10 @@ it("drops the reads of a project that is no longer open", async () => {
 
   const first = await round("needs-you", 0);
   const second = await round("in-progress", 0);
+  const third = await round("issues", 0);
   unmount();
 
   await waitFor(() => expect(first.request.signal.aborted).toBe(true));
   await waitFor(() => expect(second.request.signal.aborted).toBe(true));
+  await waitFor(() => expect(third.request.signal.aborted).toBe(true));
 });

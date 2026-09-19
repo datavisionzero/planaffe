@@ -125,6 +125,11 @@ export function keyPath(key: string): string {
   return number.startsWith("E") ? `/${project}/epics/${number}` : `/${project}/issues/${number}`;
 }
 
+/** Preserve the Needs you workflow when a row opens an issue. */
+export function needsYouIssuePath(key: string): string {
+  return `${keyPath(key)}?from=needs-you`;
+}
+
 /**
  * The address of a release. A release is named by whoever published it — a
  * version string rather than a key — so the name is escaped into the path, and

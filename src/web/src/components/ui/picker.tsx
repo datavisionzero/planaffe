@@ -1,5 +1,5 @@
 import { XIcon } from "lucide-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /** One row of a picker, and what choosing it writes back. */
@@ -77,12 +77,20 @@ export function Picker({
   empty?: string;
 }) {
   const id = useId();
+  const root = useRef<HTMLDivElement>(null);
   const listId = `${id}-list`;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [creating, setCreating] = useState(false);
   const [why, setWhy] = useState<string>();
+
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [open]);
 
   const byId = useMemo(() => new Map(choices.map((choice) => [choice.id, choice] as const)), [choices]);
   const chosen = value.map((id) => byId.get(id) ?? { id, name: id });
@@ -188,6 +196,7 @@ export function Picker({
 
   return (
     <div
+      ref={root}
       className={cn("grid min-w-0 gap-1 text-sm font-medium", className)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {

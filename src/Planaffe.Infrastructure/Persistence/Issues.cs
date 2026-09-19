@@ -146,6 +146,13 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         return (await context.Database.SqlQueryRaw<int>(sql, Parameters(query, 0)).ToListAsync(cancellationToken))[0];
     }
 
+    public async Task<bool> IsWorkableAsync(Guid issueId, NextQuery query, CancellationToken cancellationToken)
+    {
+        var sql = "select exists (" + Workable + " and d.id = {9}) as \"Value\"";
+        var parameters = Parameters(query, 0).Append(issueId).ToArray();
+        return (await context.Database.SqlQueryRaw<bool>(sql, parameters).ToListAsync(cancellationToken))[0];
+    }
+
     public async Task<Reasons> ReasonsAsync(NextQuery query, CancellationToken cancellationToken)
     {
         var open = Live().Where(r => r.ProjectId == query.ProjectId && r.Status != IssueStatus.Done && r.Status != IssueStatus.Canceled);

@@ -199,7 +199,9 @@ navigation and the screen that lists the same work are readers of one state,
 not requests asking the same question twice. That state holds the long poll of
 `docs/api.md`, Waiting — one connection per list and tab, given up while the
 tab is hidden — and hands the screen the wake pulse instead of a second
-connection. Neither count writes its filter down again: `shell/views.ts` is
+connection. A third held read of recently updated issues wakes ordinary lists
+and open issues after another actor changes them. Neither count writes its
+filter down again: `shell/views.ts` is
 where a view says what it shows, and `viewOf` is how the number beside a link
 asks the question the link leads to.
 Everything written in the application goes through
