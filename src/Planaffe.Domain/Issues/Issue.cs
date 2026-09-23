@@ -184,6 +184,43 @@ public sealed class Issue
     }
 
     /// <summary>
+    /// The claim as it stands at <paramref name="at"/>: an expired one is no
+    /// claim (VISION 11), though the row still names its holder until the next
+    /// write clears it.
+    /// </summary>
+    public Claim? ClaimAt(DateTimeOffset at) => Claim is { } claim && !claim.ExpiredAt(at) ? claim : null;
+
+    /// <summary>
+    /// The status as it reads at <paramref name="at"/>: <c>in_progress</c> under
+    /// a lapsed claim is <c>todo</c>, which is what the <c>issue_read</c> view
+    /// says and what every reader was shown. The acts decide on this one, not
+    /// on the stored column.
+    /// </summary>
+    public IssueStatus StatusAt(DateTimeOffset at) =>
+        Status is IssueStatus.InProgress && ClaimAt(at) is null ? IssueStatus.Todo : Status;
+
+    /// <summary>
+    /// The line every act on a claimed issue runs through (<c>docs/api.md</c>,
+    /// The acts on an issue): a user acts over any claim, and so does the
+    /// holder; an agent that is not the holder of a live claim is refused. It
+    /// runs under the row's lock, against the claim as it stands then, so that
+    /// a successor who took a lapsed claim in the meantime is never undone.
+    /// </summary>
+    /// <exception cref="Refusal"><c>claim-held</c>, the holder's id under <c>holder</c>.</exception>
+    private void RefuseIfHeldByAnother(Guid by, Identities.IdentityKind byKind, DateTimeOffset at)
+    {
+        if (byKind is Identities.IdentityKind.User || ClaimAt(at) is not { } claim || claim.HolderId == by)
+        {
+            return;
+        }
+
+        throw new Refusal(
+            RefusalCode.ClaimHeld,
+            "The issue is held by somebody else.",
+            new Dictionary<string, object?> { ["holder"] = claim.HolderId });
+    }
+
+    /// <summary>
     /// The act the product exists for (VISION 11): claim this issue for
     /// <paramref name="holder"/>. Unclaimed or expired: taken. Held by the
     /// caller: extended. Held by somebody else: <c>claim-held</c> — unless
@@ -254,19 +291,20 @@ public sealed class Issue
 
     /// <summary>
     /// Let go: the claim is cleared and the status is <c>todo</c>, wherever the
-    /// claim started (VISION 11). The caller has been checked to be the holder
-    /// or a user; here the issue only has to be held.
+    /// claim started (VISION 11). Only the holder, or a user.
     /// </summary>
     /// <returns>The holder that let go.</returns>
-    /// <exception cref="Refusal"><c>transition</c> when nobody holds it.</exception>
-    public Guid Release(DateTimeOffset at)
+    /// <exception cref="Refusal"><c>transition</c> when nobody holds it; <c>claim-held</c>.</exception>
+    public Guid Release(Guid by, Identities.IdentityKind byKind, DateTimeOffset at)
     {
-        if (Claim is null || Claim.ExpiredAt(at) || Status is not IssueStatus.InProgress)
+        if (ClaimAt(at) is not { } claim || Status is not IssueStatus.InProgress)
         {
             throw new Refusal(RefusalCode.Transition, "Nobody holds this issue.");
         }
 
-        var holder = Claim.HolderId;
+        RefuseIfHeldByAnother(by, byKind, at);
+
+        var holder = claim.HolderId;
         Claim = null;
         Status = IssueStatus.Todo;
         UpdatedAt = at;
@@ -282,8 +320,9 @@ public sealed class Issue
     /// <c>closed_at</c> on a real close.
     /// </summary>
     /// <returns>Where it landed.</returns>
-    /// <exception cref="Refusal"><c>validation</c> on a target that is not a close; <c>transition</c>.</exception>
-    public IssueStatus Close(IssueStatus target, string? result, Identities.IdentityKind by, bool reviewRequired, DateTimeOffset at)
+    /// <exception cref="Refusal"><c>validation</c> on a target that is not a close; <c>transition</c>; <c>claim-held</c>.</exception>
+    public IssueStatus Close(
+        IssueStatus target, string? result, Guid by, Identities.IdentityKind byKind, bool reviewRequired, DateTimeOffset at)
     {
         if (target is not (IssueStatus.Done or IssueStatus.Canceled))
         {
@@ -295,7 +334,9 @@ public sealed class Issue
             throw new Refusal(RefusalCode.Transition, "The issue is closed already; reopen it first.");
         }
 
-        var agentUnderReview = by is Identities.IdentityKind.Agent && reviewRequired;
+        RefuseIfHeldByAnother(by, byKind, at);
+
+        var agentUnderReview = byKind is Identities.IdentityKind.Agent && reviewRequired;
 
         if (Status is IssueStatus.Review && agentUnderReview)
         {
@@ -328,13 +369,15 @@ public sealed class Issue
     /// Hand in explicitly, whatever the switch says: from any open status but
     /// <c>review</c>. Clears the claim, no <c>closed_at</c> (VISION 9).
     /// </summary>
-    /// <exception cref="Refusal"><c>transition</c>.</exception>
-    public void HandIn(string? result, DateTimeOffset at)
+    /// <exception cref="Refusal"><c>transition</c>; <c>claim-held</c>.</exception>
+    public void HandIn(string? result, Guid by, Identities.IdentityKind byKind, DateTimeOffset at)
     {
         if (Closed || Status is IssueStatus.Review)
         {
             throw new Refusal(RefusalCode.Transition, Closed ? "A closed issue is not handed in; reopen it first." : "The issue is in review already.");
         }
+
+        RefuseIfHeldByAnother(by, byKind, at);
 
         if (result is not null)
         {
@@ -367,18 +410,23 @@ public sealed class Issue
 
     /// <summary>
     /// Park, or unpark: the one status move that is a field write (ADR 0016),
-    /// <c>todo</c> to <c>backlog</c> and back, on an open, unclaimed issue.
+    /// <c>todo</c> to <c>backlog</c> and back, on an open, unclaimed issue. An
+    /// issue whose claim has lapsed is unclaimed and in <c>todo</c>, whatever
+    /// the row still says (<see cref="StatusAt"/>).
     /// </summary>
-    /// <exception cref="Refusal"><c>transition</c> for every other cell of the table.</exception>
-    public void MoveTo(IssueStatus target, DateTimeOffset at)
+    /// <exception cref="Refusal"><c>claim-held</c>; <c>transition</c> for every other cell of the table.</exception>
+    public void MoveTo(IssueStatus target, Guid by, Identities.IdentityKind byKind, DateTimeOffset at)
     {
-        var allowed = (Status, target) is (IssueStatus.Todo, IssueStatus.Backlog) or (IssueStatus.Backlog, IssueStatus.Todo);
-        if (!allowed || (Claim is { } claim && !claim.ExpiredAt(at)))
+        RefuseIfHeldByAnother(by, byKind, at);
+
+        var status = StatusAt(at);
+        var allowed = (status, target) is (IssueStatus.Todo, IssueStatus.Backlog) or (IssueStatus.Backlog, IssueStatus.Todo);
+        if (!allowed || ClaimAt(at) is not null)
         {
             throw new Refusal(
                 RefusalCode.Transition,
                 target is IssueStatus.Backlog or IssueStatus.Todo
-                    ? $"Parking moves todo to backlog and back, on an open, unclaimed issue; this one is {Status.ToString().ToLowerInvariant()}."
+                    ? $"Parking moves todo to backlog and back, on an open, unclaimed issue; this one is {status.Name()}."
                     : "The status is changed through the acts — claim, release, close, review, reopen — not through PATCH.");
         }
 

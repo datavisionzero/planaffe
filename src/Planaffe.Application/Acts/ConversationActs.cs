@@ -225,15 +225,15 @@ public sealed class AskQuestion(
         var row = await issues.LiveAsync(key, settings, cancellationToken);
         await scope.RequireAsync(row.ProjectId, cancellationToken);
 
-        if (row.Closed)
-        {
-            throw new Refusal(RefusalCode.Transition, $"{row.Key} is closed; a question waits on an open issue.");
-        }
-
         var question = await transactions.RunAsync(async () =>
         {
             var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)
                 ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
+
+            if (issue.Closed)
+            {
+                throw new Refusal(RefusalCode.Transition, $"{row.Key} is closed; a question waits on an open issue.");
+            }
 
             var now = clock.GetUtcNow();
             var asked = Validated.Field("question", () => Question.Ask(issue.ProjectId, issue.Id, text!, caller.Id, now));

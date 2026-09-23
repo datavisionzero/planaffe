@@ -577,6 +577,12 @@ issue has been handed over; whoever wants it sends it back to `todo` first
 (VISION 11). "Yes" in `in_progress` means with the claim: the holder, or a
 user over an agent's hold.
 
+The row an act looks at is the one it holds the lock on, not the one the
+caller last read. An issue whose agent's claim has expired is in `todo` for
+every act, exactly as every read shows it — it is parked like any other — and
+the holder check runs under that lock: an agent whose claim lapsed and was
+taken in the meantime is told `claim-lost`, and the successor's claim stays.
+
 **Closing out of `review`** is the reviewer's act: a user's close lands in
 `done` or `canceled`. An agent's close from `review` goes through only where
 review is not required — there the agent's word is what closes issues anyway;

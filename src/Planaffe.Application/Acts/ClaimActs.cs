@@ -98,7 +98,7 @@ internal static class ClaimHistory
         }
     }
 
-    public static string SnakeCase(IssueStatus status) => System.Text.Json.JsonNamingPolicy.SnakeCaseLower.ConvertName(status.ToString());
+    public static string SnakeCase(IssueStatus status) => status.Name();
 }
 
 /// <summary>
@@ -124,24 +124,28 @@ public sealed class ReleaseIssue(
         var row = await issues.LiveAsync(key, settings, cancellationToken);
         await scope.RequireAsync(row.ProjectId, cancellationToken);
 
-        await ClaimGate.RefuseIfHeldByAnotherAsync(row, caller, history, identities, cancellationToken);
-
-        await transactions.RunAsync(async () =>
+        try
         {
-            var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)
-                ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
+            await transactions.RunAsync(async () =>
+            {
+                var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)
+                    ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
 
-            var now = clock.GetUtcNow();
-            var released = issue.Release(now);
+                var now = clock.GetUtcNow();
+                var released = issue.Release(caller.Id, caller.Kind, now);
 
-            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Claim, released.ToString(), null));
-            history.Add(HistoryEntry.OnIssue(
-                issue.Id, caller.Id, now, HistoryField.Status,
-                ClaimIssue.SnakeCase(IssueStatus.InProgress), ClaimIssue.SnakeCase(IssueStatus.Todo)));
+                history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Claim, released.ToString(), null));
+                history.Add(HistoryEntry.OnIssue(
+                    issue.Id, caller.Id, now, HistoryField.Status, IssueStatus.InProgress.Name(), IssueStatus.Todo.Name()));
 
-            await issues.SaveAsync(cancellationToken);
-            return true;
-        }, cancellationToken);
+                await issues.SaveAsync(cancellationToken);
+                return true;
+            }, cancellationToken);
+        }
+        catch (Refusal refusal) when (ClaimGate.Names(refusal))
+        {
+            throw await ClaimGate.ExplainAsync(refusal, row.Key, row.Id, caller, history, identities, cancellationToken);
+        }
 
         return await assembler.CompleteAsync(
             await issues.FindLiveAsync(row.ProjectKey, row.Number, cancellationToken)

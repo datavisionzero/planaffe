@@ -104,10 +104,6 @@ public sealed class ChangeIssue(
         var before = await issues.LiveAsync(key, settings, cancellationToken);
         await scope.RequireAsync(before.ProjectId, cancellationToken);
 
-        if (parking is not null)
-        {
-            await ClaimGate.RefuseIfHeldByAnotherAsync(before, caller, history, identities, cancellationToken);
-        }
         var project = await projects.FindByIdAsync(before.ProjectId, cancellationToken)
             ?? throw new InvalidOperationException($"Issue {before.Key} has no project row.");
 
@@ -170,9 +166,19 @@ public sealed class ChangeIssue(
 
         if (parking is { } target)
         {
-            var from = issue.Status;
-            issue.MoveTo(target, now);
-            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, ClaimHistory.SnakeCase(from), ClaimHistory.SnakeCase(target)));
+            // Decided on the row under the lock, where a claim that lapsed is
+            // no claim and its in_progress reads todo, as every reader saw it.
+            var from = issue.StatusAt(now);
+            try
+            {
+                issue.MoveTo(target, caller.Id, caller.Kind, now);
+            }
+            catch (Refusal refusal) when (ClaimGate.Names(refusal))
+            {
+                throw await ClaimGate.ExplainAsync(refusal, before.Key, issue.Id, caller, history, identities, cancellationToken);
+            }
+
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, from.Name(), target.Name()));
         }
 
         if (changes.Title is not null && changes.Title != issue.Title)

@@ -81,8 +81,8 @@ public sealed class DeleteIssue(
         }
 
         var now = clock.GetUtcNow();
-        var holder = issue.Claim?.HolderId;
-        var before = issue.Status;
+        var holder = issue.ClaimAt(now)?.HolderId;
+        var before = issue.StatusAt(now);
         issue.Delete(caller.Id, now);
 
         if (holder is { } released)
