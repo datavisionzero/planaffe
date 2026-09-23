@@ -130,11 +130,8 @@ the .planaffe file is added unless --repo none says otherwise.`,
 				}
 			}
 
-			resp, err := c.CreateIssuesWithResponse(cmd.Context(), body)
+			resp, err := client.Checked(c.CreateIssuesWithResponse(cmd.Context(), body))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 
@@ -242,11 +239,8 @@ func newIssueList(g *globals) *cobra.Command {
 				params.Limit = &v
 			}
 
-			resp, err := c.ListIssuesWithResponse(cmd.Context(), params, repeated("status", statuses), repeated("label", labels))
+			resp, err := client.Checked(c.ListIssuesWithResponse(cmd.Context(), params, repeated("status", statuses), repeated("label", labels)))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 
@@ -311,11 +305,8 @@ func newIssueView(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReadIssueWithResponse(cmd.Context(), args[0])
+			resp, err := client.Checked(c.ReadIssueWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printIssue(g, cmd, *resp.JSON200)
@@ -416,28 +407,22 @@ func newIssueEdit(g *globals) *cobra.Command {
 
 			if len(args) == 1 {
 				body, _ := json.Marshal(changes)
-				resp, err := c.ChangeIssueWithBodyWithResponse(cmd.Context(), args[0], "application/json", bytes.NewReader(body),
+				resp, err := client.Checked(c.ChangeIssueWithBodyWithResponse(cmd.Context(), args[0], "application/json", bytes.NewReader(body),
 					func(_ context.Context, req *http.Request) error {
 						if ifMatch != "" {
 							req.Header.Set("If-Match", `"`+strings.Trim(ifMatch, `"`)+`"`)
 						}
 						return nil
-					})
+					}))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 				return printIssue(g, cmd, *resp.JSON200)
 			}
 
 			body, _ := json.Marshal(map[string]any{"keys": args, "changes": changes})
-			resp, err := c.ChangeIssuesWithBodyWithResponse(cmd.Context(), "application/json", bytes.NewReader(body))
+			resp, err := client.Checked(c.ChangeIssuesWithBodyWithResponse(cmd.Context(), "application/json", bytes.NewReader(body)))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -481,19 +466,13 @@ func newIssueDelete(g *globals) *cobra.Command {
 				return err
 			}
 			if len(args) == 1 {
-				resp, err := c.DeleteIssueWithResponse(cmd.Context(), args[0])
+				_, err := client.Checked(c.DeleteIssueWithResponse(cmd.Context(), args[0]))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 			} else {
-				resp, err := c.DeleteIssuesWithResponse(cmd.Context(), api.DeleteIssuesRequest{Keys: &args})
+				_, err := client.Checked(c.DeleteIssuesWithResponse(cmd.Context(), api.DeleteIssuesRequest{Keys: &args}))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 			}
@@ -529,11 +508,8 @@ func newIssueRestore(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RestoreIssueWithResponse(cmd.Context(), args[0])
+			resp, err := client.Checked(c.RestoreIssueWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printIssue(g, cmd, *resp.JSON200)
@@ -553,11 +529,8 @@ func newIssueHistory(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReadHistoryWithResponse(cmd.Context(), args[0])
+			resp, err := client.Checked(c.ReadHistoryWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -581,11 +554,8 @@ func newIssueLabel(g *globals) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				resp, err := c.AddIssueLabelWithResponse(cmd.Context(), args[0], args[1])
+				resp, err := client.Checked(c.AddIssueLabelWithResponse(cmd.Context(), args[0], args[1]))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 				return printIssue(g, cmd, *resp.JSON200)
@@ -598,11 +568,8 @@ func newIssueLabel(g *globals) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				resp, err := c.RemoveIssueLabelWithResponse(cmd.Context(), args[0], args[1])
+				resp, err := client.Checked(c.RemoveIssueLabelWithResponse(cmd.Context(), args[0], args[1]))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 				return printIssue(g, cmd, *resp.JSON200)
@@ -625,11 +592,8 @@ func newIssueBlock(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.AddBlockerWithResponse(cmd.Context(), args[0], by)
+			resp, err := client.Checked(c.AddBlockerWithResponse(cmd.Context(), args[0], by))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printIssue(g, cmd, *resp.JSON200)
@@ -653,11 +617,8 @@ func newIssueUnblock(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RemoveBlockerWithResponse(cmd.Context(), args[0], by)
+			resp, err := client.Checked(c.RemoveBlockerWithResponse(cmd.Context(), args[0], by))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printIssue(g, cmd, *resp.JSON200)

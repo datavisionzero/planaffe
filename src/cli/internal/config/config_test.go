@@ -208,3 +208,68 @@ func TestSettingsPathFollowsXdgThenHome(t *testing.T) {
 		t.Fatalf("unexpected path %q", path)
 	}
 }
+
+func TestWritingATokenFileTightensOneThatWasThereWithALooseMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(path, []byte("an old token\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// os.WriteFile would have kept 0644 and written the new token into it.
+	if err := WriteTokenFile(path, "the new token"); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("the token file is mode %04o", mode)
+	}
+	if token, err := ReadTokenFile(path); err != nil || token != "the new token" {
+		t.Fatalf("read back %q, %v", token, err)
+	}
+
+	// Nothing of the write is left lying beside it.
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected the token file alone, found %d entries", len(entries))
+	}
+}
+
+func TestWritingATokenFileRefusesWhatIsNotARegularFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	var usage *UsageError
+	if err := WriteTokenFile(path, "a token"); !errors.As(err, &usage) || !strings.Contains(usage.Message, "not a regular file") {
+		t.Fatalf("expected a usage error, got %v", err)
+	}
+}
+
+func TestAbsolutePathExpandsTheHomeAndReadsTheRestAgainstTheDirectory(t *testing.T) {
+	cases := []struct{ path, want string }{
+		{"token", "/work/repo/token"},
+		{"../token", "/work/token"},
+		{"~/.config/planaffe/token", "/home/somebody/.config/planaffe/token"},
+		{"/etc/planaffe/token", "/etc/planaffe/token"},
+		// Only a leading `~/` is the home; `~other` is left alone.
+		{"~other/token", "/work/repo/~other/token"},
+	}
+	for _, c := range cases {
+		got, err := AbsolutePath(c.path, "/work/repo", "/home/somebody")
+		if err != nil || got != filepath.FromSlash(c.want) {
+			t.Errorf("AbsolutePath(%q) = %q, %v; want %q", c.path, got, err, c.want)
+		}
+	}
+
+	if _, err := AbsolutePath("~/token", "/work/repo", ""); err == nil {
+		t.Error("expected a usage error without a home directory")
+	}
+}

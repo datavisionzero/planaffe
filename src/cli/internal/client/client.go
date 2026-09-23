@@ -170,9 +170,18 @@ func Check(resp *http.Response, body []byte) error {
 // a nil pointer instead of saying what was wrong. Ninety-nine of those
 // dereferences: the guard belongs here rather than at each of them.
 func notJSON(resp *http.Response, body []byte) error {
-	// A 204 and anything else that answers with nothing is a fine success.
+	// A 204 and a 202 are the contract's answers with nothing in them. Every
+	// other success promises a body, and one that arrives empty — a proxy
+	// answering 200 for an instance behind it — would leave the same nil
+	// pointer as the HTML.
 	if len(body) == 0 {
-		return nil
+		if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusAccepted {
+			return nil
+		}
+		return &Failure{
+			Code:    exit.Unexpected,
+			Message: fmt.Sprintf("the instance answered %s%s with no body, where the contract promises one", resp.Status, requested(resp)),
+		}
 	}
 
 	kind, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
@@ -180,17 +189,20 @@ func notJSON(resp *http.Response, body []byte) error {
 		return nil
 	}
 
-	where := ""
-	if resp.Request != nil && resp.Request.URL != nil {
-		where = " for " + resp.Request.URL.Path
-	}
-
 	return &Failure{
 		Code: exit.Unexpected,
 		Message: fmt.Sprintf(
 			"the instance answered %s%s with %s, not JSON — most likely it does not have this endpoint yet; `pa version` says what it is",
-			resp.Status, where, described(kind)),
+			resp.Status, requested(resp), described(kind)),
 	}
+}
+
+// requested is " for <path>", where the response knows its request.
+func requested(resp *http.Response) string {
+	if resp.Request != nil && resp.Request.URL != nil {
+		return " for " + resp.Request.URL.Path
+	}
+	return ""
 }
 
 func described(kind string) string {
@@ -210,6 +222,12 @@ func Transport(err error) error {
 	var failure *Failure
 	if errors.As(err, &failure) {
 		return failure
+	}
+
+	// Ctrl-C arrives as a canceled context wrapped in a *url.Error, and it is
+	// not the instance's fault.
+	if errors.Is(err, context.Canceled) {
+		return &Failure{Code: exit.Interrupted, Message: "interrupted"}
 	}
 
 	var urlErr *url.Error

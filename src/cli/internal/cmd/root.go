@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -38,10 +39,29 @@ type Env struct {
 
 // Run executes args and returns the exit code. Nothing here is ever
 // interactive: pa reads stdin only where a flag says so, and never prompts.
-func Run(ctx context.Context, args []string, env Env) int {
+//
+// A panic is a bug in pa, and the table says a bug is exit 1. Left alone the
+// runtime would end the process with 2, the code a script reads as "you called
+// it wrong".
+func Run(ctx context.Context, args []string, env Env) (code int) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			stderr := env.Stderr
+			if stderr == nil {
+				stderr = os.Stderr
+			}
+			fmt.Fprintf(stderr, "pa: this is a bug in pa, please report it: %v\n", recovered)
+			code = exit.Unexpected
+		}
+	}()
+
 	root := newRoot(env)
 	root.SetArgs(args)
-	root.SetIn(env.Stdin)
+	in := env.Stdin
+	if in == nil {
+		in = os.Stdin
+	}
+	root.SetIn(&stdin{Reader: in})
 	root.SetOut(env.Stdout)
 	root.SetErr(env.Stderr)
 
@@ -59,6 +79,11 @@ func report(stderr io.Writer, err error) int {
 	case errors.As(err, &empty):
 		// Not an error: the reasons went to stdout, and the code says it.
 		return exit.Empty
+	case errors.Is(err, context.Canceled):
+		// Ctrl-C while pa waited on something of its own, such as the next
+		// poll of a login; a request in flight comes through Transport.
+		fmt.Fprintln(stderr, "pa: interrupted")
+		return exit.Interrupted
 	case errors.As(err, &failure):
 		fmt.Fprintln(stderr, "pa:", failure.Message)
 		return failure.Code
@@ -165,6 +190,19 @@ func (g *globals) getenv(name string) string {
 		return g.env.Getenv(name)
 	}
 	return os.Getenv(name)
+}
+
+// home is the home directory of this invocation — the test's HOME, where it
+// supplied an environment.
+func (g *globals) home() string {
+	if home := strings.TrimSpace(g.getenv("HOME")); home != "" {
+		return home
+	}
+	if g.env.Getenv != nil {
+		return ""
+	}
+	home, _ := os.UserHomeDir()
+	return home
 }
 
 // requireProject is the one thing a command in a repository never has to say.

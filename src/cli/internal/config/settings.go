@@ -139,11 +139,82 @@ func ReadTokenFile(path string) (string, error) {
 }
 
 // WriteTokenFile writes one, readable by its owner and nobody else.
+//
+// The mode of os.WriteFile applies only to a file it creates: over an existing
+// 0644 file it would have left the token readable by everybody, and the next
+// command would have refused the file it had just been told was private. So
+// the token goes into a fresh file beside the old one — created 0600, chmod-ed
+// once more against an odd umask — and is renamed over it, which also means no
+// reader ever sees half a token. A path that is there and is not a regular
+// file is refused rather than replaced.
 func WriteTokenFile(path, token string) error {
-	if dir := filepath.Dir(path); dir != "" {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return &UsageError{fmt.Sprintf("%s could not be created: %v", dir, err)}
-		}
+	if err := CanHoldToken(path); err != nil {
+		return err
 	}
-	return os.WriteFile(path, []byte(token+"\n"), 0o600)
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return &UsageError{fmt.Sprintf("%s could not be created: %v", dir, err)}
+	}
+
+	file, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*")
+	if err != nil {
+		return &UsageError{fmt.Sprintf("%s could not be written: %v", path, err)}
+	}
+	temp := file.Name()
+	written := false
+	defer func() {
+		if !written {
+			_ = os.Remove(temp)
+		}
+	}()
+
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return &UsageError{fmt.Sprintf("%s could not be written: %v", path, err)}
+	}
+	if _, err := file.WriteString(token + "\n"); err != nil {
+		file.Close()
+		return &UsageError{fmt.Sprintf("%s could not be written: %v", path, err)}
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return &UsageError{fmt.Sprintf("%s could not be written: %v", path, err)}
+	}
+	if err := file.Close(); err != nil {
+		return &UsageError{fmt.Sprintf("%s could not be written: %v", path, err)}
+	}
+	if err := os.Rename(temp, path); err != nil {
+		return &UsageError{fmt.Sprintf("%s could not be written: %v", path, err)}
+	}
+	written = true
+	return nil
+}
+
+// CanHoldToken refuses a path that is there and is not a regular file — a
+// directory, a device, a symbolic link the rename would silently replace.
+// Nothing there yet is fine: WriteTokenFile creates it.
+func CanHoldToken(path string) error {
+	if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
+		return &UsageError{fmt.Sprintf("%s is not a regular file; pa writes a token only to one.", path)}
+	}
+	return nil
+}
+
+// AbsolutePath makes a path the user typed into the one it means wherever the
+// next command runs: a leading `~/` is the home directory — a shell leaves it
+// alone inside quotes or after `=` — and a relative path is read against dir,
+// the directory it was typed in. Stored as typed, it would have been read
+// against whatever directory the next command happened to start in.
+func AbsolutePath(path, dir, home string) (string, error) {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		if home == "" {
+			return "", &UsageError{fmt.Sprintf("%s starts with ~, and pa could not find the home directory: set HOME.", path)}
+		}
+		path = filepath.Join(home, strings.TrimPrefix(path, "~"))
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	return filepath.Clean(path), nil
 }

@@ -49,11 +49,19 @@ func (g *globals) login(ctx context.Context, address, tokenFile string) error {
 	if err != nil {
 		return err
 	}
-	if address != "" {
-		settings.Instance = address
+
+	// Where the token goes is settled before anybody is sent to a browser: a
+	// path that cannot be one should fail here, not after the confirmation.
+	if tokenFile != "" {
+		if tokenFile, err = config.AbsolutePath(tokenFile, g.dir(), g.home()); err != nil {
+			return err
+		}
+		if err := config.CanHoldToken(tokenFile); err != nil {
+			return err
+		}
 	}
 
-	resolved, c, err := g.anonymous(settings)
+	resolved, c, err := g.anonymous(settings, address)
 	if err != nil {
 		return err
 	}
@@ -61,19 +69,13 @@ func (g *globals) login(ctx context.Context, address, tokenFile string) error {
 	// Before a code is printed, let alone a token collected: is this a planaffe
 	// instance, and do the two of us fit (ADR 0011). A wrong address should
 	// fail here, not after somebody has walked to another machine.
-	handshake, err := c.ReadVersionWithResponse(ctx)
+	_, err = client.Checked(c.ReadVersionWithResponse(ctx))
 	if err != nil {
-		return client.Transport(err)
-	}
-	if err := client.Check(handshake.HTTPResponse, handshake.Body); err != nil {
 		return err
 	}
 
-	begun, err := c.BeginDeviceLoginWithResponse(ctx)
+	begun, err := client.Checked(c.BeginDeviceLoginWithResponse(ctx))
 	if err != nil {
-		return client.Transport(err)
-	}
-	if err := client.Check(begun.HTTPResponse, begun.Body); err != nil {
 		return err
 	}
 	if begun.JSON200 == nil {
@@ -101,6 +103,12 @@ func (g *globals) login(ctx context.Context, address, tokenFile string) error {
 	}
 
 	fmt.Fprintf(g.msg(), "Signed in to %s as %s.\n", resolved, collected.User.Name)
+	if env := strings.TrimRight(strings.TrimSpace(g.getenv(config.EnvURL)), "/"); env != "" && env != resolved {
+		// The login went where --url said. Every later command still asks the
+		// environment first (ADR 0025), and would quietly go somewhere else.
+		fmt.Fprintf(g.msg(), "%s is %s in this environment and still wins for every later command: unset it to use %s.\n",
+			config.EnvURL, env, resolved)
+	}
 
 	if g.json {
 		// The secret is what this command just put in the keychain, and
@@ -147,8 +155,10 @@ func (g *globals) poll(ctx context.Context, c *client.Client, login api.DeviceLo
 		}
 
 		if time.Now().After(deadline) {
+			// The code ran out on pa's clock rather than the instance's: the
+			// same thing as the instance's `device-expired`, and the same code.
 			return api.DeviceLoginRedeemed{}, &client.Failure{
-				Code:    exit.Denied,
+				Code:    exit.Refused,
 				Message: "nobody confirmed that login in time.",
 			}
 		}
@@ -245,13 +255,25 @@ func (g *globals) logout(ctx context.Context) error {
 
 // anonymous is the client for the one command that talks to an instance with
 // nothing in its hand.
-func (g *globals) anonymous(settings config.Settings) (string, *client.Client, error) {
+//
+// An explicit address wins over PLANAFFE_URL here. "The environment wins" is
+// about which identity a run acts as (ADR 0025); the target of a login somebody
+// typed out is not a run's identity, and signing in to the instance the
+// environment names instead of the one on the command line would be exactly
+// the quiet substitution that rule exists to prevent.
+func (g *globals) anonymous(settings config.Settings, explicit string) (string, *client.Client, error) {
 	getenv := g.env.Getenv
 	if getenv == nil {
 		getenv = os.Getenv
 	}
 
-	address, err := config.Input{Getenv: getenv, Settings: settings}.ResolveURL()
+	var address string
+	var err error
+	if explicit != "" {
+		address, err = config.CheckURL(explicit, "--url")
+	} else {
+		address, err = config.Input{Getenv: getenv, Settings: settings}.ResolveURL()
+	}
 	if err != nil {
 		return "", nil, err
 	}

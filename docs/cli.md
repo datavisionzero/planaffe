@@ -78,6 +78,17 @@ The table of `docs/api.md`, derived from the status and the problem document:
 | 8 | empty: `next` found nothing, or another waiting command reached its deadline |
 | 9 | version skew |
 | 10 | unreachable |
+| 130 | interrupted: Ctrl-C, whether `pa` was waiting on the instance or on its own clock |
+
+A success with no body where the contract promises one — a proxy answering
+`200` for an instance behind it — is exit 1 like the page of HTML; only a `204`
+and a `202` may be empty. A panic is exit 1 too, as the bug in `pa` it is,
+never the 2 the runtime would leave behind. A device code that runs out on
+`pa`'s own clock is 4, the same as the instance's `device-expired`.
+
+`pa next` without `--claim` finding nothing is exit 8 with the reasons on
+stdout; `pa next --json` finding nothing is exit 0, because the page it prints
+— empty items, reasons and all — is the answer a script asked for.
 
 ## Verbs
 
@@ -177,6 +188,7 @@ pa epic create "Backend" --description-file plan.md --label feature
 pa epic list [--status open|closed|all] [--label L] · pa epic view PLAN-E2
 pa epic edit PLAN-E2 --description-file - --if-match "<updated_at>"
 pa epic close PLAN-E2 [--cancel-open | --park-open]   # lists what is still open; cancels or parks it on a flag, never interactively
+                                                      # every page of it; one that refuses is named, the rest go on, the exit is that refusal's code
 pa epic reopen PLAN-E2 · pa epic delete PLAN-E2 · pa epic restore PLAN-E2
 
 pa space list                               # the knowledge base: every space you may see, the closed ones marked
@@ -221,13 +233,24 @@ without a Secret Service, most often — it says so, **writes nothing**, and nam
 the two ways on. `logout` refuses a token that came from `PLANAFFE_TOKEN`: `pa`
 did not put it there, and it is most likely an agent's.
 
+An explicit `--url` is where the login goes, even with `PLANAFFE_URL` set:
+"the environment wins" decides which identity a run acts as, not the target of
+a login somebody typed out. Where the two differ, `login` says so on stderr —
+every later command in that environment still goes to `PLANAFFE_URL`.
+`--token-file` is stored as an absolute path, a leading `~/` expanded and a
+relative one read against the directory `login` ran in, so that the next
+command finds it wherever it starts. The file is written fresh beside the old
+one with mode 0600 and renamed over it, so a token file that was there with a
+looser mode ends up private too; a path that is there and is not a regular file
+is refused before a code is printed.
+
 Identities (ADR 0015) — a secret is printed once, to stdout, and nowhere else:
 
 ```
 pa me                                      # who the token says you are, and where pa read the token
 pa me set --kind codex --harness cli --environment container --version 1.2.3
                                            # agents report stable metadata; `none` clears a field
-pa version                                 # pa's version and the instance's; exit 9 when they do not fit
+pa version                                 # pa's version and the instance's; exit 9 when they do not fit; needs no token
 pa export --json                           # one readable document containing the current project
 pa user create NAME --email ADDRESS [--administrator] # administrators only; sends an invitation
 pa user list
@@ -235,7 +258,7 @@ pa user resend USER                        # the user by name or id, here and be
 pa user invitation-link USER               # print the activation link instead of mailing it
 pa user password-link USER                 # print a password link; the way in without SMTP
 pa user deactivate USER · pa user reactivate USER
-pa user administrator USER --enabled=true|false
+pa user administrator USER --enabled=true|false   # --enabled is required: saying nothing grants nothing
 pa me email ADDRESS                         # sends confirmation to the new address
 pa agent create [--name NAME]              # users only; the agent's one token, once
 pa agent list · pa agent view AGENT · pa agent rename AGENT --name NAME
@@ -348,17 +371,23 @@ prints no counts, and an instance with no agent is told once under the list
 rather than on every line.
 
 Descriptions, results, comments, questions and answers come from an argument, a
-file or stdin (`-`), never an editor. The whole agent cycle of VISION 6.1 is
-`pa next --claim`, work, `pa issue comment`, `pa issue ask`, and `pa issue
-close --done --result-file -`; a human answers with `pa question answer`. A
-ticket the agent writes itself ends that cycle the same way it would end a
-claim: with `--ready` when it is implementable as written, and otherwise with a
-`pa issue ask` naming what a human has to decide first, because `ready` selects
-nothing where triage required is off. The three waiting commands accept any
+file or stdin (`-`), never an editor. Stdin is read once, so only one flag of
+a command may be `-`; a second is exit 2 rather than the empty text it would
+have read. Two flags where one would silently win — `--comment` and
+`--comment-file`, `--answered` and `--all` — are exit 2 as well. The whole
+agent cycle of VISION 6.1 is `pa next --claim`, work, `pa issue comment`, `pa
+issue ask`, and `pa issue close --done --result-file -`; a human answers with
+`pa question answer`. A ticket the agent writes itself ends that cycle the
+same way it would end a claim: with `--ready` when it is implementable as
+written, and otherwise with a `pa issue ask` naming what a human has to decide
+first, because `ready` selects nothing where triage required is off. The three waiting commands accept any
 positive number of seconds and split waits longer than the server's one-hour
 limit into rounds. `pa issue ask --wait` stops no later than the expiry of the
 caller's claim; `pa needs-you --wait` first reads the current page and then
-uses its ETag for the long poll. A deadline is exit 8.
+uses its ETag for the long poll. The tag covers the whole page, the count of
+agents included, so a page that comes back changed and still empty — an agent
+token created or revoked meanwhile — is not an answer: the wait goes on from
+the new tag for whatever is left of it. A deadline is exit 8.
 
 That cycle is also written out as a paragraph to copy: [`agents-md.md`](./agents-md.md)
 is the block a user pastes into the `AGENTS.md` of their own repository, so that
