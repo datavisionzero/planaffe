@@ -179,6 +179,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Started once before it is pushed, as in CI, and this time it also has
+      # to say the version of the tag — which is the one thing a release build
+      # does that a trunk build does not.
+      - name: Build it into the local Docker
+        if: matrix.arch == 'amd64'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            VERSION=${{ needs.what.outputs.version }}
+            REVISION=${{ needs.what.outputs.sha }}
+          load: true
+          tags: planaffe:smoke
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+
+      # The script comes from the commit this workflow runs from, not from the
+      # tag: a tag cut before the script existed has to be releasable again
+      # all the same.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: matrix.arch == 'amd64'
+        with:
+          ref: ${{ github.sha }}
+          path: workflow
+          sparse-checkout: .github/scripts
+
+      - name: It starts, says its version, and serves the web application
+        if: matrix.arch == 'amd64'
+        env:
+          VERSION: ${{ needs.what.outputs.version }}
+        run: workflow/.github/scripts/smoke-image.sh planaffe:smoke "$VERSION"
+
       - id: build
         name: Build, and push the digest
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0

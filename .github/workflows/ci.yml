@@ -323,6 +323,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The image is started once before anything is pushed, on the amd64 leg,
+      # which is the runner's own architecture and the one nearly every
+      # installation runs. Built into the local Docker here and pushed by the
+      # step below from the same builder, so the second build is the cache
+      # answering and the image that was started is the image that goes out.
+      - name: Build it into the local Docker
+        if: matrix.arch == 'amd64'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            REVISION=${{ github.sha }}
+          load: true
+          tags: planaffe:smoke
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+
+      - name: It starts, answers, and serves the web application
+        if: matrix.arch == 'amd64'
+        run: .github/scripts/smoke-image.sh planaffe:smoke
+
       # No `VERSION` build argument, deliberately. `Directory.Build.props` keeps
       # `0.0.0-dev` for a build nobody released, and a trunk build is not a
       # release: the tag is the only source of a version number. `REVISION` is
