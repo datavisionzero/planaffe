@@ -351,7 +351,7 @@ live in one view, and every read query of an issue goes through it:
 create view issue_read as
 select i.id, i.project_id, i.number, i.title, i.description, i.result,
        case when i.claim_expired then 'todo' else i.status end as status,
-       i.ready, i.priority, i.assignee_id, i.epic_id,
+       i.ready, i.priority, i.assignee_id, i.epic_id, i.parent_id,
        case when i.claim_expired then null else i.claimed_by end        as claimed_by,
        case when i.claim_expired then null else i.claimed_at end        as claimed_at,
        case when i.claim_expired then null else i.claim_expires_at end  as claim_expires_at,
@@ -361,13 +361,18 @@ select i.id, i.project_id, i.number, i.title, i.description, i.result,
            and claim_expires_at is not null
            and claim_expires_at <= now() as claim_expired
           from issue
-         where deleted_at is null) i;
+         where deleted_at is null
+           and not exists (select 1 from project p where p.id = issue.project_id and p.deleted_at is not null)) i;
 ```
 
 1. **A deleted issue is absent** (ADR 0013). Not in lists, not in counts, not in
    `next`, not in epic progress, not as a blocker — an issue whose only open
    blocker is deleted is workable. The one read that sees deleted rows is the
-   `--deleted` list, and it reads the table, deliberately, in one place.
+   `--deleted` list, and it reads the table, deliberately, in one place. **So is
+   every issue of a deleted project**, which is why the view asks the project:
+   deleting a project marks its row alone, and a blocker may sit in another
+   project, so a blocker in a project that was deleted blocks nothing from the
+   moment it is deleted, not from the moment it is purged.
 2. **An expired claim is no claim, and the status falls back with it**
    (VISION 11). The row still says `in_progress` and still names the holder;
    the view says `todo` and nobody. Nothing writes the fallback — the successor
@@ -380,7 +385,8 @@ view, that it changes. The view is where a query that merely reads cannot forget
 either rule; the write path is small enough to be read as a whole.
 
 The query behind `next` repeats them a **third** time. It computes the two
-derived rules in a CTE, picks a candidate from it, and takes the candidate's
+derived rules in a CTE — together with the deleted project, in one fragment the
+"needs you" and standing statements build their CTE from as well — picks a candidate from it, and takes the candidate's
 lock with `for update of i skip locked`. When another writer changed that row
 while the query ran, Postgres locks the new version and rechecks the query's
 conditions against it — but only those naming the locked table, because a CTE
@@ -686,7 +692,9 @@ the body has both characters taken out of it before the excerpt is cut: what
 leaves the instance is a sequence of pieces with a flag each, never markup
 (ADR 0007). The set of spaces to look in is a parameter of that statement and
 not a filter on top of it, so a space closed to an agent is missing from the
-rows and from their number alike.
+rows and from their number alike. A deleted space is missing from them too,
+whatever the set says: a human's `space_access` row outlives the space until
+the purge, and deleting a space marks its row alone.
 
 ### Wake-ups
 

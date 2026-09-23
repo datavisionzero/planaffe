@@ -54,11 +54,21 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         return new IssuePageRows(hasMore ? page[..limit] : page, total, hasMore);
     }
 
+    // Which rows of `issue` the three statements below build `derived` from:
+    // not deleted, and not in a deleted project. `Live()` says the same through
+    // `issue_read`; this is the one place the raw SQL says it, because a blocker
+    // may sit in another project and a project is deleted by marking its row
+    // alone (ADR 0013).
+    private const string LiveRows = """
+        i.deleted_at is null
+               and not exists (select 1 from project dp where dp.id = i.project_id and dp.deleted_at is not null)
+        """;
+
     // The eight conditions of VISION 10 as
     // one statement over the table, with the two derived rules repeated inline
     // — because the row it locks is the row, not the view (docs/storage.md).
     // The GET and the POST run the same text; the POST adds the lock.
-    private const string Workable = """
+    private const string Workable = $$"""
         with derived as (
             select i.id, i.project_id, i.epic_id, i.parent_id, i.priority, i.created_at, i.number, i.assignee_id, i.ready,
                    case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
@@ -66,7 +76,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                    case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
                         then null else i.claimed_by end as claimed_by
               from issue i
-             where i.deleted_at is null
+             where {{LiveRows}}
         )
         select d.id
           from derived d
@@ -214,13 +224,13 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     // blocked issue in the project into a separate emergency at once — and the
     // thing to do about it is to create an agent token, which has nothing to do
     // with any of them. It is counted once per answer instead.
-    private const string NeedsYouBase = """
+    private const string NeedsYouBase = $$"""
         with recursive derived as (
             select i.id, i.project_id, i.priority, i.created_at, i.number, i.ready,
                    case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
                         then 'todo' else i.status end as status
               from issue i
-             where i.deleted_at is null
+             where {{LiveRows}}
         ),
         walk (root_id, node_id, path) as (
             select blocked.id, blocker.id, array[blocked.id, blocker.id]
@@ -338,7 +348,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     // The counts that are not "needs you" — workable, blocked, open, in flight
     // — are aggregated in the same pass over `derived`, so a project that has
     // nothing in any group still costs nothing extra.
-    private const string StandingSql = """
+    private const string StandingSql = $$"""
         with recursive scope (project_id, triage_required) as (
             select id, triage from unnest({0}::uuid[], {1}::boolean[]) as asked(id, triage)
         ),
@@ -351,7 +361,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                         then null else i.claimed_by end as claimed_by
               from issue i
               join scope s on s.project_id = i.project_id
-             where i.deleted_at is null
+             where {{LiveRows}}
         ),
         walk (root_id, node_id, path) as (
             select blocked.id, blocker.id, array[blocked.id, blocker.id]

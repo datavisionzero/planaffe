@@ -140,6 +140,25 @@ public sealed class KnowledgeSearchEndpointTests(PostgresFixture postgres)
             await agent.GetAsync("/pages?q=vertraulich&space=personal", Ct), HttpStatusCode.NotFound, "not-found");
     }
 
+    /// <summary>
+    /// The human who deleted a space still holds its access row until the
+    /// purge; the pages in it are gone from the search from the moment it is
+    /// deleted all the same (ADR 0013).
+    /// </summary>
+    [Fact]
+    public async Task A_deleted_space_is_in_no_hit()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await World(admin);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync("/spaces/personal", Ct)).StatusCode);
+
+        var hits = await admin.GetFromJsonAsync<JsonElement>("/pages?q=vertraulich", Ct);
+        Assert.Equal("handbuch", Assert.Single(hits.EnumerateArray()).GetProperty("space").GetString());
+        Assert.Empty((await admin.GetFromJsonAsync<JsonElement>("/pages?q=Vertrag", Ct)).EnumerateArray());
+    }
+
     [Fact]
     public async Task A_search_without_a_token_is_refused()
     {
