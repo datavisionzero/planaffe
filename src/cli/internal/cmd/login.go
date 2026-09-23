@@ -161,8 +161,10 @@ func (g *globals) poll(ctx context.Context, c *client.Client, login api.DeviceLo
 		}
 
 		if time.Now().After(deadline) {
+			// The code ran out on pa's clock rather than the instance's: the
+			// same thing as the instance's `device-expired`, and the same code.
 			return api.DeviceLoginRedeemed{}, &client.Failure{
-				Code:    exit.Denied,
+				Code:    exit.Refused,
 				Message: "nobody confirmed that login in time.",
 			}
 		}

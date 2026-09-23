@@ -30,10 +30,17 @@ const (
 // Keychain is what ResolveToken says a token came from when it read one.
 const Keychain = "the keychain"
 
+// LoggedIn is what ResolveURL says an address came from when it was not the
+// environment.
+const LoggedIn = "the instance `pa login` wrote down"
+
 // Config is what a command runs with.
 type Config struct {
 	// URL is the instance, from PLANAFFE_URL or from what `pa login` wrote.
 	URL string
+	// URLFrom is where that address was read: PLANAFFE_URL or LoggedIn. A
+	// message about a wrong address names the place to correct it.
+	URLFrom string
 	// Token is the caller's token; the server tells a user token from an agent
 	// token, pa never says which it holds (ADR 0015).
 	Token string
@@ -69,17 +76,17 @@ func (e *UsageError) Error() string { return e.Message }
 
 // Resolve is the whole ladder: the address, the token and the project file.
 func Resolve(in Input) (Config, error) {
-	address, err := in.ResolveURL()
+	address, urlFrom, err := in.resolveURL()
 	if err != nil {
 		return Config{}, err
 	}
 
 	token, from, err := in.ResolveToken(address)
 	if err != nil {
-		return Config{URL: address}, err
+		return Config{URL: address, URLFrom: urlFrom}, err
 	}
 
-	cfg := Config{URL: address, Token: token, TokenFrom: from}
+	cfg := Config{URL: address, URLFrom: urlFrom, Token: token, TokenFrom: from}
 
 	dir := in.Dir
 	if dir == "" {
@@ -102,16 +109,22 @@ func Resolve(in Input) (Config, error) {
 // ResolveURL answers which instance this invocation talks to: the environment,
 // then the instance `pa login` wrote down.
 func (in Input) ResolveURL() (string, error) {
-	address := strings.TrimSpace(in.getenv(EnvURL))
+	address, _, err := in.resolveURL()
+	return address, err
+}
+
+func (in Input) resolveURL() (address string, from string, err error) {
+	address, from = strings.TrimSpace(in.getenv(EnvURL)), EnvURL
 	if address == "" {
-		address = strings.TrimSpace(in.Settings.Instance)
+		address, from = strings.TrimSpace(in.Settings.Instance), LoggedIn
 	}
 	if address == "" {
-		return "", &UsageError{fmt.Sprintf(
+		return "", "", &UsageError{fmt.Sprintf(
 			"no instance: set %s, or run `pa login --url https://planaffe.example`.", EnvURL)}
 	}
 
-	return CheckURL(address, EnvURL)
+	address, err = CheckURL(address, from)
+	return address, from, err
 }
 
 // CheckURL trims a trailing slash off an address and refuses one that is not

@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"math"
 	"net/http"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -64,25 +67,39 @@ func newNeedsYou(g *globals) *cobra.Command {
 					value := int32(seconds)
 					params.Wait = &value
 					params.IfNoneMatch = optional(etag)
+					started := time.Now()
 					resp, err = c.ListNeedsYouWithResponse(cmd.Context(), project, params)
 					if err != nil {
 						return client.Transport(err)
 					}
+					spent := seconds
 					if resp.HTTPResponse.StatusCode != http.StatusNotModified {
 						if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 							return err
 						}
 						page = resp.JSON200
-						break
+						if len(page.Items) > 0 {
+							break
+						}
+						// The ETag covers the whole page, the count of agents
+						// included: an agent token created or revoked changes
+						// it while the list stays empty. That is not something
+						// needing a human, so the wait goes on from the new tag
+						// for whatever is left of it.
+						etag = resp.HTTPResponse.Header.Get("ETag")
+						if spent, err = waited(cmd.Context(), started); err != nil {
+							return client.Transport(err)
+						}
+					} else {
+						etag = resp.HTTPResponse.Header.Get("ETag")
 					}
-					etag = resp.HTTPResponse.Header.Get("ETag")
-					if remaining <= seconds {
+					if remaining <= spent {
 						if g.json {
 							_ = render.JSON(cmd.OutOrStdout(), page)
 						}
 						return emptyResult{}
 					}
-					remaining -= seconds
+					remaining -= spent
 				}
 			}
 			if g.json {
@@ -108,4 +125,21 @@ func newNeedsYou(g *globals) *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 50, "1 to 200")
 	cmd.Flags().IntVar(&wait, "wait", 0, "wait this many seconds until something needs a human")
 	return cmd
+}
+
+// waited is how many whole seconds of the wait a round that came back early
+// used up, and never less than one: a round answered at once is held until a
+// second has gone by, so that an instance whose tag keeps moving is asked at
+// most once a second and the wait still ends at its deadline.
+func waited(ctx context.Context, started time.Time) (int, error) {
+	elapsed := time.Since(started)
+	if elapsed < time.Second {
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-time.After(time.Second - elapsed):
+		}
+		return 1, nil
+	}
+	return int(math.Ceil(elapsed.Seconds())), nil
 }

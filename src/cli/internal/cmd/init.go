@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -67,10 +68,17 @@ func newInit(g *globals) *cobra.Command {
 			// which one it was is the whole answer.
 			instance, err := c.ReadVersionWithResponse(cmd.Context())
 			if err != nil {
-				return &client.Failure{Code: exit.Unreachable, Message: fmt.Sprintf("PLANAFFE_URL is %s, and nothing answered there: %v", cfg.URL, err)}
+				var failure *client.Failure
+				if errors.As(client.Transport(err), &failure) && failure.Code == exit.Interrupted {
+					return failure
+				}
+				return &client.Failure{Code: exit.Unreachable, Message: fmt.Sprintf("%s is %s, and nothing answered there: %v", cfg.URLFrom, cfg.URL, err)}
 			}
 			if instance.HTTPResponse.StatusCode != http.StatusOK {
-				return &client.Failure{Code: exit.Unexpected, Message: fmt.Sprintf("PLANAFFE_URL is %s, and what answered there is not a planaffe instance (%s at /version).", cfg.URL, instance.HTTPResponse.Status)}
+				return &client.Failure{Code: exit.Unexpected, Message: fmt.Sprintf("%s is %s, and what answered there is not a planaffe instance (%s at /version).", cfg.URLFrom, cfg.URL, instance.HTTPResponse.Status)}
+			}
+			if err := client.Check(instance.HTTPResponse, instance.Body); err != nil {
+				return err
 			}
 
 			me, err := c.ReadMeWithResponse(cmd.Context())
@@ -78,7 +86,7 @@ func newInit(g *globals) *cobra.Command {
 				return client.Transport(err)
 			}
 			if me.HTTPResponse.StatusCode == http.StatusUnauthorized {
-				return &client.Failure{Code: exit.Denied, Message: fmt.Sprintf("%s answered, but PLANAFFE_TOKEN is not a token it knows; create one in Settings, or revoke and replace the one you have.", cfg.URL)}
+				return &client.Failure{Code: exit.Denied, Message: unknownToken(cfg)}
 			}
 			if err := client.Check(me.HTTPResponse, me.Body); err != nil {
 				return err
@@ -90,15 +98,18 @@ func newInit(g *globals) *cobra.Command {
 				return err
 			}
 
+			// Before anything is created: a run that is going to refuse the
+			// file must not leave a project behind on the instance.
+			file := filepath.Join(dir, config.FileName)
+			if _, err := os.Stat(file); err == nil && !force {
+				return &config.UsageError{Message: fmt.Sprintf("%s exists; pass --force to overwrite it.", file)}
+			}
+
 			project, created, err := takeOrCreate(cmd, c, key, name, dir)
 			if err != nil {
 				return err
 			}
 
-			file := filepath.Join(dir, config.FileName)
-			if _, err := os.Stat(file); err == nil && !force {
-				return &config.UsageError{Message: fmt.Sprintf("%s exists; pass --force to overwrite it.", file)}
-			}
 			if err := writeProjectFile(file, project.Key); err != nil {
 				return err
 			}
@@ -122,6 +133,15 @@ func newInit(g *globals) *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "the project's name where it has to be created; defaults to the directory name")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing "+config.FileName)
 	return cmd
+}
+
+// unknownToken names the token the instance refused by where it came from: a
+// variable to replace, or a login to repeat.
+func unknownToken(cfg config.Config) string {
+	if cfg.TokenFrom == config.EnvToken {
+		return fmt.Sprintf("%s answered, but %s is not a token it knows; create one in Settings, or revoke and replace the one you have.", cfg.URL, config.EnvToken)
+	}
+	return fmt.Sprintf("%s answered, but the token from %s is not one it knows: run `pa login` again.", cfg.URL, cfg.TokenFrom)
 }
 
 // chosenKey is the argument, or the directory name made into a key. A

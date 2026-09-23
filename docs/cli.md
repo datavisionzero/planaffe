@@ -78,6 +78,17 @@ The table of `docs/api.md`, derived from the status and the problem document:
 | 8 | empty: `next` found nothing, or another waiting command reached its deadline |
 | 9 | version skew |
 | 10 | unreachable |
+| 130 | interrupted: Ctrl-C, whether `pa` was waiting on the instance or on its own clock |
+
+A success with no body where the contract promises one — a proxy answering
+`200` for an instance behind it — is exit 1 like the page of HTML; only a `204`
+and a `202` may be empty. A panic is exit 1 too, as the bug in `pa` it is,
+never the 2 the runtime would leave behind. A device code that runs out on
+`pa`'s own clock is 4, the same as the instance's `device-expired`.
+
+`pa next` without `--claim` finding nothing is exit 8 with the reasons on
+stdout; `pa next --json` finding nothing is exit 0, because the page it prints
+— empty items, reasons and all — is the answer a script asked for.
 
 ## Verbs
 
@@ -177,6 +188,7 @@ pa epic create "Backend" --description-file plan.md --label feature
 pa epic list [--status open|closed|all] [--label L] · pa epic view PLAN-E2
 pa epic edit PLAN-E2 --description-file - --if-match "<updated_at>"
 pa epic close PLAN-E2 [--cancel-open | --park-open]   # lists what is still open; cancels or parks it on a flag, never interactively
+                                                      # every page of it; one that refuses is named, the rest go on, the exit is that refusal's code
 pa epic reopen PLAN-E2 · pa epic delete PLAN-E2 · pa epic restore PLAN-E2
 
 pa space list                               # the knowledge base: every space you may see, the closed ones marked
@@ -369,7 +381,10 @@ nothing where triage required is off. The three waiting commands accept any
 positive number of seconds and split waits longer than the server's one-hour
 limit into rounds. `pa issue ask --wait` stops no later than the expiry of the
 caller's claim; `pa needs-you --wait` first reads the current page and then
-uses its ETag for the long poll. A deadline is exit 8.
+uses its ETag for the long poll. The tag covers the whole page, the count of
+agents included, so a page that comes back changed and still empty — an agent
+token created or revoked meanwhile — is not an answer: the wait goes on from
+the new tag for whatever is left of it. A deadline is exit 8.
 
 That cycle is also written out as a paragraph to copy: [`agents-md.md`](./agents-md.md)
 is the block a user pastes into the `AGENTS.md` of their own repository, so that

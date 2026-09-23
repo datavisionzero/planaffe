@@ -28,6 +28,10 @@ const (
 	Skew = 9
 	// Unreachable is DNS, connection refused, timeout, TLS: the instance could not be reached.
 	Unreachable = 10
+	// Interrupted is Ctrl-C: 128 plus SIGINT, what a shell reports for a
+	// process the signal ended, so that a script sees the same code whether pa
+	// was waiting on the network or on nothing at all.
+	Interrupted = 130
 )
 
 // FromResponse derives the code from a status and the problem document that

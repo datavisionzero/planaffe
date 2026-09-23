@@ -292,10 +292,11 @@ can branch without parsing:
 | 8 | empty | `next` found nothing; in cut two also a `--wait` that reached its deadline |
 | 9 | version skew | the CLI is too old or too new for the installation (ADR 0011) |
 | 10 | unreachable | the installation could not be reached: DNS, connection refused, timeout, TLS |
+| 130 | interrupted | Ctrl-C: 128 plus SIGINT, the code a shell reports for a process the signal ended |
 
 `8` is not an error of the API — `next` answers 200 with no issue — but it is
-the answer a loop most often branches on, so it has a code. `9` and `10` are
-decided by the CLI before or without a response.
+the answer a loop most often branches on, so it has a code. `9`, `10` and `130`
+are decided by the CLI before or without a response.
 
 ## Idempotency
 

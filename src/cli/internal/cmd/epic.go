@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/datavisionzero/planaffe/src/cli/internal/api"
 	"github.com/datavisionzero/planaffe/src/cli/internal/client"
 	"github.com/datavisionzero/planaffe/src/cli/internal/config"
+	"github.com/datavisionzero/planaffe/src/cli/internal/exit"
 	"github.com/datavisionzero/planaffe/src/cli/internal/render"
 )
 
@@ -207,26 +209,31 @@ func newEpicClose(g *globals) *cobra.Command {
 				return err
 			}
 
+			// The epic is closed by now, so one issue that refuses — a claim
+			// somebody holds, most often — must not leave the rest untouched.
+			// Each refusal is said as it happens, and the exit code says at
+			// the end that not everything went.
+			verb := "canceled"
+			if parkOpen {
+				verb = "parked"
+			}
+			var failed []string
+			var first *client.Failure
 			for _, issue := range open {
+				var err error
 				switch {
 				case cancelOpen:
-					status := api.IssueStatus("canceled")
-					reason := "Canceled with the epic " + key + "."
-					r, err := c.CloseIssueWithResponse(cmd.Context(), issue.Key, api.CloseRequest{Status: &status, Result: &reason})
-					if err != nil {
-						return client.Transport(err)
-					}
-					if err := client.Check(r.HTTPResponse, r.Body); err != nil {
-						return err
-					}
+					err = cancelWithEpic(cmd, c, issue.Key, key)
 				case parkOpen:
-					r, err := c.ChangeIssueWithBodyWithResponse(cmd.Context(), issue.Key, "application/json", strings.NewReader(`{"status":"backlog"}`))
-					if err != nil {
-						return client.Transport(err)
-					}
-					if err := client.Check(r.HTTPResponse, r.Body); err != nil {
-						// A claimed issue cannot be parked; say so and go on.
-						fmt.Fprintf(cmd.ErrOrStderr(), "pa: %s not parked: %v\n", issue.Key, err)
+					err = park(cmd, c, issue.Key)
+				default:
+					continue
+				}
+				if err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "pa: %s not %s: %v\n", issue.Key, verb, err)
+					failed = append(failed, issue.Key)
+					if first == nil && !errors.As(err, &first) {
+						first = &client.Failure{Code: exit.Unexpected, Message: err.Error()}
 					}
 				}
 			}
@@ -236,7 +243,15 @@ func newEpicClose(g *globals) *cobra.Command {
 				render.Summaries(cmd.ErrOrStderr(), open)
 				fmt.Fprintln(cmd.ErrOrStderr(), "pa: `--cancel-open` cancels them, `--park-open` parks them, in the same command.")
 			}
-			return printEpic(g, cmd, *resp.JSON200)
+			if err := printEpic(g, cmd, *resp.JSON200); err != nil {
+				return err
+			}
+			if len(failed) > 0 {
+				return &client.Failure{Code: first.Code, Message: fmt.Sprintf(
+					"%s is closed, but %d of %d open issue(s) were not %s: %s",
+					key, len(failed), len(open), verb, strings.Join(failed, ", "))}
+			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&cancelOpen, "cancel-open", false, "cancel every issue still open under the epic")
@@ -244,19 +259,46 @@ func newEpicClose(g *globals) *cobra.Command {
 	return cmd
 }
 
+func cancelWithEpic(cmd *cobra.Command, c *client.Client, issue, epic string) error {
+	status := api.IssueStatus("canceled")
+	reason := "Canceled with the epic " + epic + "."
+	r, err := c.CloseIssueWithResponse(cmd.Context(), issue, api.CloseRequest{Status: &status, Result: &reason})
+	if err != nil {
+		return client.Transport(err)
+	}
+	return client.Check(r.HTTPResponse, r.Body)
+}
+
+func park(cmd *cobra.Command, c *client.Client, issue string) error {
+	r, err := c.ChangeIssueWithBodyWithResponse(cmd.Context(), issue, "application/json", strings.NewReader(`{"status":"backlog"}`))
+	if err != nil {
+		return client.Transport(err)
+	}
+	return client.Check(r.HTTPResponse, r.Body)
+}
+
 // openIssuesOf lists what is still open under the epic: everything but done
-// and canceled, in one page of the maximum size.
+// and canceled, every page of it — an epic with more open issues than one page
+// holds would otherwise be closed with the rest left behind unsaid.
 func openIssuesOf(cmd *cobra.Command, c *client.Client, epic string) ([]api.IssueSummary, error) {
 	limit := int32(200)
-	resp, err := c.ListIssuesWithResponse(cmd.Context(), &api.ListIssuesParams{Epic: &epic, Limit: &limit},
-		repeated("status", []string{"backlog", "todo", "in_progress", "review"}))
-	if err != nil {
-		return nil, client.Transport(err)
+	var open []api.IssueSummary
+	var cursor *string
+	for {
+		resp, err := c.ListIssuesWithResponse(cmd.Context(), &api.ListIssuesParams{Epic: &epic, Limit: &limit, Cursor: cursor},
+			repeated("status", []string{"backlog", "todo", "in_progress", "review"}))
+		if err != nil {
+			return nil, client.Transport(err)
+		}
+		if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+			return nil, err
+		}
+		open = append(open, resp.JSON200.Items...)
+		if !resp.JSON200.HasMore || resp.JSON200.NextCursor == nil {
+			return open, nil
+		}
+		cursor = resp.JSON200.NextCursor
 	}
-	if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
-		return nil, err
-	}
-	return resp.JSON200.Items, nil
 }
 
 func newEpicSimple(g *globals, verb, short string) *cobra.Command {
