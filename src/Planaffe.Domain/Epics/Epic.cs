@@ -154,7 +154,7 @@ public sealed class Epic
             throw new ArgumentException("An epic has a title.", nameof(title));
         }
 
-        return trimmed.Length > TitleMaxLength || trimmed.Contains('\n')
+        return trimmed.Length > TitleMaxLength || trimmed.IndexOfAny(['\r', '\n']) >= 0
             ? throw new ArgumentException(
                 $"An epic title is one line of at most {TitleMaxLength} characters.", nameof(title))
             : trimmed;

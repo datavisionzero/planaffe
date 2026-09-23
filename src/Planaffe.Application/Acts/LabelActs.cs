@@ -73,20 +73,7 @@ public sealed class ChangeLabel(IProjects projects, ProjectScope scope, ILabels 
         if (changes.GroupGiven && changes.Group is not null && changes.Group != label.Group)
         {
             var group = Validated.Field("group", () => LabelName.Normalize(changes.Group, "group"));
-            var clash = await labels.ClashesWithGroupAsync(label, group, cancellationToken);
-            if (clash.Count > 0)
-            {
-                var carriers = Carriers(clash);
-                throw new Refusal(
-                    RefusalCode.Validation,
-                    $"{carriers} would carry two labels of the group {group}: {string.Join(", ", clash.Keys)}.",
-                    new Dictionary<string, object?>
-                    {
-                        ["errors"] = new Dictionary<string, string[]> { ["group"] = [$"{carriers} would carry two labels of this group."] },
-                        ["issues"] = clash.Issues,
-                        ["epics"] = clash.Epics,
-                    });
-            }
+            await GroupClashes.RefuseAsync(labels, label, group, "group", cancellationToken);
         }
 
         if (changes.Name is not null && changes.Name != label.Name)
@@ -114,6 +101,80 @@ public sealed class ChangeLabel(IProjects projects, ProjectScope scope, ILabels 
 
         return LabelShape.Of(label);
     }
+}
+
+/// <summary>Soft delete: the label vanishes from every issue; its attachments wait for a restore.</summary>
+public sealed class DeleteLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings, TimeProvider clock)
+{
+    public async Task ExecuteAsync(string projectKey, string name, CancellationToken cancellationToken)
+    {
+        var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
+        var label = await LabelLookup.LiveAsync(labels, project, name, cancellationToken);
+
+        label.Delete(clock.GetUtcNow());
+        await labels.SaveAsync(label, cancellationToken);
+    }
+}
+
+/// <summary>
+/// Back, with its attachments. A label that is not deleted is <c>transition</c>.
+/// While it was gone its group looked free on the issues and epics it still
+/// hangs on, so a restore that would give one of them two labels of a group is
+/// refused the way a regroup is.
+/// </summary>
+public sealed class RestoreLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings)
+{
+    public async Task<LabelShape> ExecuteAsync(string projectKey, string name, CancellationToken cancellationToken)
+    {
+        var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
+        await scope.RequireAsync(project.Id, cancellationToken);
+
+        var label = await labels.FindAsync(project.Id, name, cancellationToken)
+            ?? throw new Refusal(RefusalCode.NotFound, $"No label {name} in {project.Key}.");
+
+        if (!label.Deleted)
+        {
+            throw new Refusal(RefusalCode.Transition, $"The label {name} is not deleted.");
+        }
+
+        if (label.Group is { } group)
+        {
+            await GroupClashes.RefuseAsync(labels, label, group, "name", cancellationToken);
+        }
+
+        label.Restore();
+        await labels.SaveAsync(label, cancellationToken);
+
+        return LabelShape.Of(label);
+    }
+}
+
+/// <summary>
+/// The refusal for a label that would put two of its group on one issue or
+/// epic: <c>validation</c>, with the keys under <c>issues</c> and <c>epics</c>.
+/// </summary>
+internal static class GroupClashes
+{
+    public static async Task RefuseAsync(ILabels labels, Label label, string group, string field, CancellationToken cancellationToken)
+    {
+        var clash = await labels.ClashesWithGroupAsync(label, group, cancellationToken);
+        if (clash.Count == 0)
+        {
+            return;
+        }
+
+        var carriers = Carriers(clash);
+        throw new Refusal(
+            RefusalCode.Validation,
+            $"{carriers} would carry two labels of the group {group}: {string.Join(", ", clash.Keys)}.",
+            new Dictionary<string, object?>
+            {
+                ["errors"] = new Dictionary<string, string[]> { [field] = [$"{carriers} would carry two labels of this group."] },
+                ["issues"] = clash.Issues,
+                ["epics"] = clash.Epics,
+            });
+    }
 
     // Only what is actually in the way is named, so that a refusal about epics
     // alone does not open by counting issues.
@@ -131,43 +192,6 @@ public sealed class ChangeLabel(IProjects projects, ProjectScope scope, ILabels 
         }
 
         return string.Join(" and ", counted);
-    }
-}
-
-/// <summary>Soft delete: the label vanishes from every issue; its attachments wait for a restore.</summary>
-public sealed class DeleteLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings, TimeProvider clock)
-{
-    public async Task ExecuteAsync(string projectKey, string name, CancellationToken cancellationToken)
-    {
-        var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
-        await scope.RequireAsync(project.Id, cancellationToken);
-        var label = await LabelLookup.LiveAsync(labels, project, name, cancellationToken);
-
-        label.Delete(clock.GetUtcNow());
-        await labels.SaveAsync(label, cancellationToken);
-    }
-}
-
-/// <summary>Back, with its attachments. A label that is not deleted is <c>transition</c>.</summary>
-public sealed class RestoreLabel(IProjects projects, ProjectScope scope, ILabels labels, InstanceSettings settings)
-{
-    public async Task<LabelShape> ExecuteAsync(string projectKey, string name, CancellationToken cancellationToken)
-    {
-        var project = await projects.LiveAsync(projectKey, settings, cancellationToken);
-        await scope.RequireAsync(project.Id, cancellationToken);
-
-        var label = await labels.FindAsync(project.Id, name, cancellationToken)
-            ?? throw new Refusal(RefusalCode.NotFound, $"No label {name} in {project.Key}.");
-
-        if (!label.Deleted)
-        {
-            throw new Refusal(RefusalCode.Transition, $"The label {name} is not deleted.");
-        }
-
-        label.Restore();
-        await labels.SaveAsync(label, cancellationToken);
-
-        return LabelShape.Of(label);
     }
 }
 

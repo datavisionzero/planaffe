@@ -16,7 +16,7 @@ public sealed class SpaceScopeTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly User Maintainer = User.Create("maintainer", administrator: true, Now);
+    private static readonly User Maintainer = User.Create("maintainer", "maintainer@example.test", administrator: true, Now);
 
     private static readonly Agent Worker = Agent.Create("quiet-otter-42", Maintainer.Id, Now);
 

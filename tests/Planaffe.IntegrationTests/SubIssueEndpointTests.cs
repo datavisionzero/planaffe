@@ -71,6 +71,59 @@ public sealed class SubIssueEndpointTests(PostgresFixture postgres)
         Assert.Equal(1, next.GetProperty("reasons").GetProperty("parent_gated").GetInt32());
     }
 
+    [Fact]
+    public async Task Two_concurrent_moves_that_would_each_add_a_level_never_make_two()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+
+        for (var round = 0; round < 8; round++)
+        {
+            // X, P and Q, three fresh top-level issues per round.
+            var x = round * 3 + 1;
+            var p = x + 1;
+            var q = x + 2;
+            await Create(admin, "PLAN", new { title = $"X{round}" }, new { title = $"P{round}" }, new { title = $"Q{round}" });
+
+            var answers = await Task.WhenAll(
+                admin.PatchAsJsonAsync($"/issues/PLAN-{x}", new { parent = $"PLAN-{p}" }, Ct),
+                admin.PatchAsJsonAsync($"/issues/PLAN-{p}", new { parent = $"PLAN-{q}" }, Ct));
+
+            Assert.Single(answers, a => a.StatusCode == HttpStatusCode.OK);
+            await Problem(Assert.Single(answers, a => a.StatusCode != HttpStatusCode.OK), "one-level");
+        }
+    }
+
+    [Fact]
+    public async Task Taking_the_parents_epic_is_history_and_reopens_it_and_detaching_frees_the_epic()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await admin.PostAsJsonAsync("/epics", new { project = "PLAN", title = "Cut two" }, Ct);
+        await admin.PostAsJsonAsync("/epics", new { project = "PLAN", title = "Cut three" }, Ct);
+        await Create(admin, "PLAN", new { title = "Parent", epic = "PLAN-E1" }, new { title = "Loose" });
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync("/epics/PLAN-E1/close", null, Ct)).StatusCode);
+
+        using var moved = await admin.PatchAsJsonAsync("/issues/PLAN-2", new { parent = "PLAN-1" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+        Assert.Equal("PLAN-E1", (await moved.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("epic").GetProperty("key").GetString());
+        Assert.Equal("open", (await admin.GetFromJsonAsync<JsonElement>("/epics/PLAN-E1", Ct)).GetProperty("status").GetString());
+
+        var history = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-2/history", Ct);
+        var epic = Assert.Single(history.EnumerateArray(), e => e.GetProperty("field").GetString() == "epic");
+        Assert.Equal("PLAN-E1", epic.GetProperty("new_value").GetString());
+
+        // Out from under the parent and into an epic of its own, in one PATCH.
+        using var detached = await admin.PatchAsJsonAsync("/issues/PLAN-2", new { parent = (string?)null, epic = "PLAN-E2" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, detached.StatusCode);
+        var after = await detached.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal(JsonValueKind.Null, after.GetProperty("parent").ValueKind);
+        Assert.Equal("PLAN-E2", after.GetProperty("epic").GetProperty("key").GetString());
+
+        // Still a sub-issue: the epic follows the parent.
+        await Problem(await admin.PatchAsJsonAsync("/issues/PLAN-2", new { parent = "PLAN-1", epic = "PLAN-E2" }, Ct), "epic-inherited");
+    }
+
     private static async Task<HttpClient> Project(AnInstance instance)
     {
         var admin = instance.ClientWith(AnInstance.BootstrapToken);

@@ -122,7 +122,7 @@ public sealed class Label
             return null;
         }
 
-        return trimmed.Length > DescriptionMaxLength || trimmed.Contains('\n')
+        return trimmed.Length > DescriptionMaxLength || trimmed.IndexOfAny(['\r', '\n']) >= 0
             ? throw new ArgumentException(
                 $"A label description is one line of at most {DescriptionMaxLength} characters.",
                 nameof(description))

@@ -439,7 +439,7 @@ metadata back channel (`PATCH /me/metadata`) is cut two.
 | `POST` | `/projects/{key}/labels` | any | `{ name, group?, description? }` → 201 |
 | `PATCH` | `/projects/{key}/labels/{name}` | any | `{ name?, group?, description? }`. Changing the group is refused with `validation` when an issue or an epic would end up with two labels of the new group; `issues` and `epics` list them |
 | `DELETE` | `/projects/{key}/labels/{name}` | any | soft delete; the label vanishes from every issue; 204 |
-| `POST` | `/projects/{key}/labels/{name}/restore` | any | back, with its attachments |
+| `POST` | `/projects/{key}/labels/{name}/restore` | any | back, with its attachments. Refused with `validation`, `issues` and `epics` as on a group change, when one of them took another label of the group while this one was gone |
 
 ### Next
 
@@ -577,6 +577,12 @@ An empty cell is `transition`. A `claim` on `review` is refused because the
 issue has been handed over; whoever wants it sends it back to `todo` first
 (VISION 11). "Yes" in `in_progress` means with the claim: the holder, or a
 user over an agent's hold.
+
+The row an act looks at is the one it holds the lock on, not the one the
+caller last read. An issue whose agent's claim has expired is in `todo` for
+every act, exactly as every read shows it — it is parked like any other — and
+the holder check runs under that lock: an agent whose claim lapsed and was
+taken in the meantime is told `claim-lost`, and the successor's claim stays.
 
 **Closing out of `review`** is the reviewer's act: a user's close lands in
 `done` or `canceled`. An agent's close from `review` goes through only where

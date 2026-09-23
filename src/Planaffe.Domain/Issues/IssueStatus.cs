@@ -19,3 +19,19 @@ public enum IssueStatus
     Done,
     Canceled,
 }
+
+/// <summary>A status the way the wire, the history and every sentence spell it.</summary>
+public static class IssueStatusNames
+{
+    /// <summary><c>in_progress</c>, not <c>inprogress</c>: the one spelling of <c>docs/api.md</c>.</summary>
+    public static string Name(this IssueStatus status) => status switch
+    {
+        IssueStatus.Backlog => "backlog",
+        IssueStatus.Todo => "todo",
+        IssueStatus.InProgress => "in_progress",
+        IssueStatus.Review => "review",
+        IssueStatus.Done => "done",
+        IssueStatus.Canceled => "canceled",
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Not a status."),
+    };
+}

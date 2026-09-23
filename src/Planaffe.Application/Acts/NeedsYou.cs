@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Planaffe.Application.Ports;
 using Planaffe.Domain;
 
@@ -39,11 +36,7 @@ public sealed class NeedsYou(
     public async Task<NeedsYouPage> ExecuteAsync(
         string projectKey, string? cursor, int? requestedLimit, CancellationToken cancellationToken)
     {
-        var limit = requestedLimit ?? ListIssues.DefaultLimit;
-        if (limit < 1 || limit > ListIssues.MaximumLimit)
-        {
-            throw Refusal.Validation("limit", $"limit is 1 to {ListIssues.MaximumLimit}; larger pages are refused, not truncated (ADR 0012).");
-        }
+        var limit = Paging.Limit(requestedLimit, ListIssues.DefaultLimit);
 
         var project = await projects.LiveForReadAsync(projectKey, settings, cancellationToken);
         await scope.RequireAsync(project.Id, cancellationToken);
@@ -139,24 +132,12 @@ internal static class NeedsYouCursor
     public static string Encode(Guid projectId, NeedsYouRow item, IssueRow issue)
     {
         var payload = new Payload(Fingerprint(projectId), item.Because, (short)issue.Priority, issue.CreatedAt, issue.Number, issue.Id);
-        return Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(payload))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        return Cursor<Payload>.Encode(payload);
     }
 
     public static NeedsYouPosition Decode(string cursor, Guid projectId)
     {
-        Payload? payload;
-        try
-        {
-            var base64 = cursor.Replace('-', '+').Replace('_', '/');
-            base64 = base64.PadRight(base64.Length + (4 - base64.Length % 4) % 4, '=');
-            payload = JsonSerializer.Deserialize<Payload>(Convert.FromBase64String(base64));
-        }
-        catch (Exception exception) when (exception is FormatException or JsonException)
-        {
-            payload = null;
-        }
-
+        var payload = Cursor<Payload>.Decode(cursor);
         if (payload is null || payload.F != Fingerprint(projectId)
             || payload.B is < NeedsYouBecause.Question or > NeedsYouBecause.Stuck
             || payload.P is < 0 or > 4)
@@ -167,6 +148,5 @@ internal static class NeedsYouCursor
         return new NeedsYouPosition(payload.B, (Domain.Issues.Priority)payload.P, payload.T, payload.N, payload.I);
     }
 
-    private static string Fingerprint(Guid projectId) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"needs-you:{projectId}")))[..16];
+    private static string Fingerprint(Guid projectId) => Cursor<Payload>.Fingerprint($"needs-you:{projectId}");
 }

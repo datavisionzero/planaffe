@@ -43,14 +43,14 @@ public sealed record OverviewShape(IReadOnlyList<ProjectStandingShape> Projects,
 public sealed class ReadStanding(
     ICallerIdentity callerIdentity,
     IProjects projects,
-    IProjectAccess access,
+    ProjectScope scope,
     IIssues issues,
     TimeProvider clock)
 {
     public async Task<OverviewShape> ExecuteAsync(CancellationToken cancellationToken)
     {
         var caller = callerIdentity.Caller;
-        var ids = await access.ProjectIdsAsync(caller.OwnerId ?? caller.Id, cancellationToken);
+        var ids = await scope.ProjectIdsAsync(cancellationToken);
         var mine = (await projects.ListAsync(cancellationToken)).Where(project => ids.Contains(project.Id)).ToArray();
 
         var rows = await issues.StandingAsync(

@@ -186,6 +186,90 @@ public sealed class ClaimEndpointTests(PostgresFixture postgres)
         await ProjectEndpointTests.Problem(await another.PostAsync("/issues/PLAN-1/release", null, Ct), HttpStatusCode.Conflict, "claim-held");
     }
 
+    [Fact]
+    public async Task A_close_over_a_lapsed_claim_never_takes_the_successors_claim_away()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Seeded(instance);
+        using var lapsed = await AgentAsync(instance, admin, "quiet-otter-42");
+        using var successor = await AgentAsync(instance, admin, "brisk-heron-7");
+        await using var context = Migrated.ContextFor(instance.ConnectionString);
+
+        // The one whose claim lapsed closes while the successor claims. Either
+        // the close came first and the claim finds a closed issue, or the claim
+        // came first and the close is told its claim was lost — never both.
+        for (var round = 1; round <= 8; round++)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await lapsed.PostAsJsonAsync("/issues/PLAN-1/claim", new { }, Ct)).StatusCode);
+            await context.Database.ExecuteSqlRawAsync("update issue set claim_expires_at = now() - interval '1 minute' where number = 1", Ct);
+
+            var answers = await Task.WhenAll(
+                lapsed.PostAsJsonAsync("/issues/PLAN-1/close", new { status = "done" }, Ct),
+                successor.PostAsJsonAsync("/issues/PLAN-1/claim", new { }, Ct));
+            var (close, claim) = (answers[0], answers[1]);
+
+            Assert.Equal(1, answers.Count(a => a.StatusCode == HttpStatusCode.OK));
+            var read = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+            if (claim.StatusCode == HttpStatusCode.OK)
+            {
+                await ProjectEndpointTests.Problem(close, HttpStatusCode.Conflict, "claim-lost");
+                Assert.Equal("in_progress", read.GetProperty("status").GetString());
+                Assert.Equal("brisk-heron-7", read.GetProperty("claim").GetProperty("holder").GetProperty("name").GetString());
+                Assert.Equal(HttpStatusCode.OK, (await successor.PostAsync("/issues/PLAN-1/release", null, Ct)).StatusCode);
+            }
+            else
+            {
+                await ProjectEndpointTests.Problem(claim, HttpStatusCode.UnprocessableEntity, "transition");
+                Assert.Equal("done", read.GetProperty("status").GetString());
+                Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync("/issues/PLAN-1/reopen", new { }, Ct)).StatusCode);
+            }
+
+            foreach (var answer in answers)
+            {
+                answer.Dispose();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task An_issue_whose_claim_lapsed_is_todo_to_park_and_to_close()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Seeded(instance);
+        using var agent = await AgentAsync(instance, admin, "quiet-otter-42");
+        using var other = await AgentAsync(instance, admin, "brisk-heron-7");
+        await using var context = Migrated.ContextFor(instance.ConnectionString);
+
+        Assert.Equal(HttpStatusCode.OK, (await agent.PostAsJsonAsync("/issues/PLAN-1/claim", new { }, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await agent.PostAsJsonAsync("/issues/PLAN-2/claim", new { }, Ct)).StatusCode);
+
+        // A live claim of somebody else's keeps another agent from parking.
+        await ProjectEndpointTests.Problem(await other.PatchAsJsonAsync("/issues/PLAN-1", new { status = "backlog" }, Ct), HttpStatusCode.Conflict, "claim-held");
+        var own = await ProjectEndpointTests.Problem(await agent.PatchAsJsonAsync("/issues/PLAN-1", new { status = "backlog" }, Ct), HttpStatusCode.UnprocessableEntity, "transition");
+        Assert.Contains("in_progress", own.GetProperty("detail").GetString());
+
+        await context.Database.ExecuteSqlRawAsync("update issue set claim_expires_at = now() - interval '1 minute' where number in (1, 2)", Ct);
+
+        using var parked = await other.PatchAsJsonAsync("/issues/PLAN-1", new { status = "backlog" }, Ct);
+        Assert.Equal(HttpStatusCode.OK, parked.StatusCode);
+        var issue = await parked.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal("backlog", issue.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, issue.GetProperty("claim").ValueKind);
+
+        // Closing over a lapsed claim writes the move from what every reader
+        // was shown, and no claim entry for a claim that was already nobody's.
+        Assert.Equal(HttpStatusCode.OK, (await other.PostAsJsonAsync("/issues/PLAN-2/close", new { status = "done" }, Ct)).StatusCode);
+
+        var history = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1/history", Ct);
+        var status = history.EnumerateArray().Last(e => e.GetProperty("field").GetString() == "status");
+        Assert.Equal("todo", status.GetProperty("old_value").GetString());
+        Assert.Equal("backlog", status.GetProperty("new_value").GetString());
+
+        var closed = (await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-2/history", Ct)).EnumerateArray().ToList();
+        Assert.Equal("todo", closed.Last(e => e.GetProperty("field").GetString() == "status").GetProperty("old_value").GetString());
+        Assert.Single(closed, e => e.GetProperty("field").GetString() == "claim");
+    }
+
     private static async Task<HttpClient> Seeded(AnInstance instance)
     {
         var admin = instance.ClientWith(AnInstance.BootstrapToken);

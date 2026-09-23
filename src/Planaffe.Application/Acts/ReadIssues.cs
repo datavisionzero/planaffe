@@ -66,11 +66,7 @@ public sealed class ListIssues(
         ArgumentNullException.ThrowIfNull(request);
         var caller = callerIdentity.Caller;
 
-        var limit = request.Limit ?? DefaultLimit;
-        if (limit < 1 || limit > MaximumLimit)
-        {
-            throw Refusal.Validation("limit", $"limit is 1 to {MaximumLimit}; larger pages are refused, not truncated (ADR 0012).");
-        }
+        var limit = Paging.Limit(request.Limit, DefaultLimit);
 
         var sort = request.Sort?.ToLowerInvariant() switch
         {

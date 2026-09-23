@@ -221,6 +221,11 @@ public sealed class CreateIssues(
                 }
             }
 
+            // One edge may be said twice — `blocks` on one item and `blocked_by`
+            // on the other — and is written once. An issue that existed before
+            // this request moves its version when it gains a blocker, as it
+            // would through the edge endpoint.
+            var written = new HashSet<(Guid BlockerId, Guid BlockedId)>();
             foreach (var (blocked, blockerId, blockerKey, _) in edges)
             {
                 if (blocked.Id == blockerId)
@@ -228,10 +233,14 @@ public sealed class CreateIssues(
                     throw Refusal.Validation("issues", $"{blocked.Key(project.Key)} cannot block itself.");
                 }
 
-                if (!await issues.HasBlockerAsync(blockerId, blocked.Id, cancellationToken))
+                if (written.Add((blockerId, blocked.Id)) && !await issues.HasBlockerAsync(blockerId, blocked.Id, cancellationToken))
                 {
                     issues.Add(Blocker.Between(blockerId, blocked.Id, caller.Id, now));
                     history.Add(HistoryEntry.OnIssue(blocked.Id, caller.Id, now, HistoryField.BlockedBy, newValue: blockerKey));
+                    if (!rows.Contains(blocked))
+                    {
+                        blocked.Touch(now);
+                    }
                 }
             }
 

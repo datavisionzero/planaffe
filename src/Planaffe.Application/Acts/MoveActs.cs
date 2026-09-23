@@ -12,30 +12,31 @@ public sealed record ReviewRequest(string? Result);
 public sealed record ReopenRequest(string? Comment);
 
 /// <summary>
-/// The line every act on a claimed issue runs through (<c>docs/api.md</c>, The
-/// acts on an issue): a user acts over any claim; an agent that is not the
-/// holder is told <c>claim-lost</c> when the newest claim entry names it as the
-/// one displaced, and <c>claim-held</c> otherwise.
+/// What an agent is told when the Domain refuses it an act on an issue somebody
+/// else holds (<c>docs/api.md</c>, The acts on an issue): <c>claim-lost</c> when
+/// the newest claim entry names it as the one displaced, and <c>claim-held</c>
+/// otherwise, with the holder rendered. The rule itself is the Domain's and
+/// runs under the row's lock; this is only the telling.
 /// </summary>
 public static class ClaimGate
 {
-    public static async Task RefuseIfHeldByAnotherAsync(
-        IssueRow row, Caller caller, IHistory history, IIdentities identities, CancellationToken cancellationToken)
-    {
-        if (row.ClaimedBy is not { } holder || holder == caller.Id || caller.IsUser)
-        {
-            return;
-        }
+    /// <summary>Whether a refusal is the Domain's <c>claim-held</c> naming the holder.</summary>
+    public static bool Names(Refusal refusal) =>
+        refusal.Code is RefusalCode.ClaimHeld && refusal.Extensions.TryGetValue("holder", out var holder) && holder is Guid;
 
-        var last = await history.LastAsync(row.Id, HistoryField.Claim, cancellationToken);
+    public static async Task<Refusal> ExplainAsync(
+        Refusal refusal, string key, Guid issueId, Caller caller, IHistory history, IIdentities identities, CancellationToken cancellationToken)
+    {
+        var holder = (Guid)refusal.Extensions["holder"]!;
+        var last = await history.LastAsync(issueId, HistoryField.Claim, cancellationToken);
         var lost = last is { OldValue: { } previous } && previous == caller.Id.ToString();
         var holderRef = await identities.FindAsync(holder, cancellationToken);
 
-        throw new Refusal(
+        return new Refusal(
             lost ? RefusalCode.ClaimLost : RefusalCode.ClaimHeld,
             lost
-                ? $"Your claim on {row.Key} lapsed and {holderRef?.Name ?? "somebody else"} holds it now."
-                : $"{row.Key} is held by {holderRef?.Name ?? "somebody else"}.",
+                ? $"Your claim on {key} lapsed and {holderRef?.Name ?? "somebody else"} holds it now."
+                : $"{key} is held by {holderRef?.Name ?? "somebody else"}.",
             new Dictionary<string, object?> { ["holder"] = holderRef is null ? null : IdentityRef.Of(holderRef) });
     }
 }
@@ -69,15 +70,16 @@ public sealed class MoveIssue(
                 ?? throw new InvalidOperationException($"Issue {row.Key} has no project row.");
 
             var hadResult = issue.Result;
-            var holder = issue.Claim?.HolderId;
-            var landed = issue.Close(target, request.Result, caller.Kind, project.ReviewRequired, now);
+            var from = issue.StatusAt(now);
+            var holder = issue.ClaimAt(now)?.HolderId;
+            var landed = issue.Close(target, request.Result, caller.Id, caller.Kind, project.ReviewRequired, now);
 
             if (landed is IssueStatus.Done)
             {
                 await releases.AddDoneAsync(issue, cancellationToken);
             }
 
-            History(issue, row.Status, landed, holder, hadResult, caller, now);
+            History(issue, from, landed, holder, hadResult, caller, now);
         }, cancellationToken);
     }
 
@@ -85,10 +87,11 @@ public sealed class MoveIssue(
         OnAsync(key, (issue, row, caller, now) =>
         {
             var hadResult = issue.Result;
-            var holder = issue.Claim?.HolderId;
-            issue.HandIn(request?.Result, now);
+            var from = issue.StatusAt(now);
+            var holder = issue.ClaimAt(now)?.HolderId;
+            issue.HandIn(request?.Result, caller.Id, caller.Kind, now);
 
-            History(issue, row.Status, IssueStatus.Review, holder, hadResult, caller, now);
+            History(issue, from, IssueStatus.Review, holder, hadResult, caller, now);
             return Task.CompletedTask;
         }, cancellationToken);
 
@@ -99,6 +102,7 @@ public sealed class MoveIssue(
     public Task<IssueShape> ReopenAsync(string key, ReopenRequest request, CancellationToken cancellationToken) =>
         OnAsync(key, async (issue, row, caller, now) =>
         {
+            var from = issue.Status;
             issue.Reopen(now);
             await releases.RemoveFromOpenAsync(issue.Id, cancellationToken);
 
@@ -107,8 +111,8 @@ public sealed class MoveIssue(
                 issues.Add(Comment.Write(issue.Id, caller.Id, request.Comment, now));
             }
 
-            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, ClaimHistory.SnakeCase(row.Status), ClaimHistory.SnakeCase(IssueStatus.Todo)));
-        }, cancellationToken, gate: false);
+            history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, from.Name(), IssueStatus.Todo.Name()));
+        }, cancellationToken);
 
     private void History(Issue issue, IssueStatus from, IssueStatus to, Guid? holder, string? hadResult, Caller caller, DateTimeOffset now)
     {
@@ -122,33 +126,38 @@ public sealed class MoveIssue(
             history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Result));
         }
 
-        history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, ClaimHistory.SnakeCase(from), ClaimHistory.SnakeCase(to)));
+        history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Status, from.Name(), to.Name()));
     }
 
+    /// <remarks>
+    /// Every decision is taken on the row as it stands under the lock; the
+    /// view row read before it only finds the issue and its project.
+    /// </remarks>
     private async Task<IssueShape> OnAsync(
         string key,
         Func<Issue, IssueRow, Caller, DateTimeOffset, Task> move,
-        CancellationToken cancellationToken,
-        bool gate = true)
+        CancellationToken cancellationToken)
     {
         var caller = callerIdentity.Caller;
         var row = await issues.LiveAsync(key, settings, cancellationToken);
         await scope.RequireAsync(row.ProjectId, cancellationToken);
 
-        if (gate)
+        try
         {
-            await ClaimGate.RefuseIfHeldByAnotherAsync(row, caller, history, identities, cancellationToken);
+            await transactions.RunAsync(async () =>
+            {
+                var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)
+                    ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
+
+                await move(issue, row, caller, clock.GetUtcNow());
+                await issues.SaveAsync(cancellationToken);
+                return true;
+            }, cancellationToken);
         }
-
-        await transactions.RunAsync(async () =>
+        catch (Refusal refusal) when (ClaimGate.Names(refusal))
         {
-            var issue = await issues.LoadForWriteAsync(row.Id, cancellationToken)
-                ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
-
-            await move(issue, row, caller, clock.GetUtcNow());
-            await issues.SaveAsync(cancellationToken);
-            return true;
-        }, cancellationToken);
+            throw await ClaimGate.ExplainAsync(refusal, row.Key, row.Id, caller, history, identities, cancellationToken);
+        }
 
         var after = await issues.FindLiveAsync(row.ProjectKey, row.Number, cancellationToken)
             ?? throw new InvalidOperationException($"Issue {row.Key} vanished under its own move.");

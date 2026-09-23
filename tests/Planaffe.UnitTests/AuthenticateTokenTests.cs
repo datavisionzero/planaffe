@@ -12,7 +12,7 @@ public sealed class AuthenticateTokenTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 2, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly User Maintainer = User.Create("maintainer", administrator: true, Now);
+    private static readonly User Maintainer = User.Create("maintainer", "maintainer@example.test", administrator: true, Now);
 
     private static readonly string Secret = TokenSecret.Generate();
 

@@ -62,7 +62,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
 
         // The agent is `quiet-otter-42`; a user by that name, in any case, is
         // the same address and refused.
-        db.Context.Users.Add(User.Create("Quiet-Otter-42", administrator: false, Migrated.Now));
+        db.Context.Users.Add(User.Create("Quiet-Otter-42", "quiet-otter-42@example.test", administrator: false, Migrated.Now));
 
         var refusal = await Assert.ThrowsAsync<DbUpdateException>(
             () => db.Context.SaveChangesAsync(TestContext.Current.CancellationToken));

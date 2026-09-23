@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Planaffe.Application.Ports;
 using Planaffe.Domain;
 using Planaffe.Domain.Issues;
@@ -31,25 +28,13 @@ public static class IssueCursor
             sort is IssueSort.Epic ? last.ProjectKey : null,
             sort is IssueSort.Epic ? last.EpicNumber : null);
 
-        return Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(payload))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        return Cursor<Payload>.Encode(payload);
     }
 
     /// <exception cref="Refusal"><c>cursor-invalid</c>.</exception>
     public static IssuePosition Decode(string cursor, IssueQuery query, IssueSort sort, SortOrder order)
     {
-        Payload? payload;
-        try
-        {
-            var base64 = cursor.Replace('-', '+').Replace('_', '/');
-            base64 = base64.PadRight(base64.Length + (4 - base64.Length % 4) % 4, '=');
-            payload = JsonSerializer.Deserialize<Payload>(Convert.FromBase64String(base64));
-        }
-        catch (Exception exception) when (exception is FormatException or JsonException)
-        {
-            payload = null;
-        }
-
+        var payload = Cursor<Payload>.Decode(cursor);
         if (payload is null || payload.F != Fingerprint(query, sort, order))
         {
             throw new Refusal(RefusalCode.CursorInvalid, "The cursor is not one this server issued for these filters and this sort.");
@@ -59,9 +44,6 @@ public static class IssueCursor
             payload.T, payload.P is { } p ? (Priority)p : null, payload.N, payload.I, payload.K ?? string.Empty, payload.E);
     }
 
-    private static string Fingerprint(IssueQuery query, IssueSort sort, SortOrder order)
-    {
-        var text = JsonSerializer.Serialize(new { query, sort, order });
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16];
-    }
+    private static string Fingerprint(IssueQuery query, IssueSort sort, SortOrder order) =>
+        Cursor<Payload>.Fingerprint(new { query, sort, order });
 }
