@@ -6,7 +6,7 @@
 #   docker build -f deploy/Dockerfile -t planaffe .
 
 # ---------------------------------------------------------------- the SPA ----
-FROM node:24-alpine AS web
+FROM node:25-alpine AS web
 WORKDIR /web
 
 COPY src/web/package.json src/web/package-lock.json ./
