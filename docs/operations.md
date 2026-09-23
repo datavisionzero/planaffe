@@ -26,6 +26,19 @@ prerelease. `docker compose pull` therefore upgrades between releases and not
 with every commit; set `PLANAFFE_IMAGE` to `:main` to follow the trunk instead,
 or to a version or a `sha-<commit>` to stand still.
 
+A tag is a name, and a name can be moved. An installation that must not be
+surprised pins the digest as well, and moves it on purpose:
+
+```sh
+docker buildx imagetools inspect ghcr.io/datavisionzero/planaffe:1.2.3   # the Digest: line
+# deploy/.env
+PLANAFFE_IMAGE=ghcr.io/datavisionzero/planaffe:1.2.3@sha256:<digest>
+```
+
+The same goes for `caddy:2-alpine` and `postgres:18` in the Compose file, which
+follow their major version on every pull; an installation that pins the
+instance by digest pins those two in its own copy or override of that file.
+
 Three services come up: Caddy, the instance and its Postgres. The instance
 applies its migrations, creates the first administrator and their token from the
 three bootstrap variables, and listens on port 8080 of the Compose network,
@@ -44,7 +57,15 @@ which works over HTTPS and nowhere else, and an invitation is a link an email
 carries through the open network with somebody's password at the end of it.
 Neither of those is served by a port published in the clear. Set
 `PLANAFFE_PUBLIC_URL` to the same address, and `deploy/Caddyfile` is the
-configuration, all sixteen lines of it.
+configuration, one short file of it.
+
+That file also sets the headers every answer carries: HSTS, `nosniff`, a
+`Referrer-Policy` of `same-origin`, no framing (`X-Frame-Options` and
+`frame-ancestors`), and a Content Security Policy that admits scripts, styles,
+fonts and fetches from the instance's own origin and nothing else — inline
+`<style>` elements aside, which the application writes itself, and never an
+inline script. A proxy put
+in Caddy's place should set the same; the instance does not set them itself.
 
 The same port serves the web application. On first use, exchange the bootstrap
 user token once to set the administrator's password. The browser receives an

@@ -26,6 +26,8 @@ services:
   # session cookie that is `__Host-` and `Secure` and for invitation links that
   # cross the open network.
   caddy:
+    # A major version, which takes fixes on every pull. An installation that
+    # pins the instance by digest pins this one too (see below).
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
@@ -62,7 +64,11 @@ services:
   planaffe:
     # `:latest` moves on a stable release and never on a prerelease. An
     # installation that would rather follow the trunk names `:main`, and one
-    # that wants to stand still names a `sha-<commit>` or a version.
+    # that wants to stand still names a `sha-<commit>` or a version. A tag is
+    # a name that can be moved; one that must not be surprised pins the digest
+    # as well — `ghcr.io/datavisionzero/planaffe:1.2.3@sha256:…` in
+    # `PLANAFFE_IMAGE` — and moves it on purpose (docs/operations.md). The same
+    # holds for Caddy above and Postgres below.
     image: ${PLANAFFE_IMAGE:-ghcr.io/datavisionzero/planaffe:latest}
     restart: unless-stopped
     depends_on:
@@ -112,6 +118,9 @@ services:
       start_period: 30s
 
   db:
+    # The major version is the one that matters: a new one needs a dump and a
+    # restore, never just a pull. Pin the digest here as well where the
+    # instance is pinned.
     image: postgres:18
     restart: unless-stopped
     environment:

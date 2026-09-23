@@ -76,8 +76,11 @@ ENV PATH="/app:${PATH}" \
 
 EXPOSE 8080
 
-# Reachable over the network, so it does not run as root.
-RUN chown -R $APP_UID:$APP_UID /app
+# Reachable over the network, so it does not run as root — and what it runs is
+# not its own to change. `/app` stays root's, as COPY left it: a process that
+# could rewrite its own assemblies or `wwwroot` would turn one bug that writes
+# a file into script served to every user from then on. The one place it
+# writes is its home directory, where ASP.NET keeps the data-protection keys.
 USER $APP_UID
 
 # Where this image came from, said by the image itself. The package page on

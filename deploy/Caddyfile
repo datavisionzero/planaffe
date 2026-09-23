@@ -28,4 +28,26 @@
 	# The API answers JSON and the application is a handful of static files;
 	# both compress well.
 	encode zstd gzip
+
+	# What the browser is told about this origin, on every answer. The policy
+	# is what the built application needs and nothing more: its scripts,
+	# styles and fonts come from here; images are data: URIs at most — the
+	# favicon is one, and Markdown never loads an image; the only fetches go to
+	# this instance. Styles allow `'unsafe-inline'` because the theme switch
+	# and the editor put `<style>` elements into the page — scripts do not, and
+	# the built index.html has no inline script. `blob:` workers are the
+	# confetti's, drawn off the main thread.
+	#
+	# Nothing may frame it, `/device` least of all: a page that could put the
+	# confirmation of a terminal's sign-in under somebody's cursor is the one
+	# clickjacking that would matter here. HSTS only counts over HTTPS, so on a
+	# trial at `:80` the browser ignores it, as it should.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+	}
 }
