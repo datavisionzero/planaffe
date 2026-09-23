@@ -33,7 +33,7 @@
          docs/api/openapi.json and compares against the checked-in one
          (ADR 0005). Generating it at build time was tried in the sibling and
          dropped: the tooling starts the host, and the host migrates on start. -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <!-- ADR 0029: structured console logs and optional logaffe delivery use
          Microsoft.Extensions.Logging providers. -->
     <PackageVersion Include="Logaffe.Extensions.Logging" Version="0.5.0" />
