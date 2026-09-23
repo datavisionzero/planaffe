@@ -267,7 +267,7 @@ public sealed class AnswerQuestion(
     {
         var caller = callerIdentity.Caller;
 
-        var found = await issues.FindQuestionAsync(id, cancellationToken)
+        var found = await issues.FindQuestionForReadAsync(id, cancellationToken)
             ?? throw new Refusal(RefusalCode.NotFound, $"No question {id}.");
         var row = (await issues.FindLiveManyAsync([found.IssueId], cancellationToken)).SingleOrDefault()
             ?? throw new Refusal(RefusalCode.NotFound, $"No question {id}.");

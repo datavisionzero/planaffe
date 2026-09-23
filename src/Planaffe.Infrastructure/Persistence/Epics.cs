@@ -70,7 +70,7 @@ public sealed class Epics(PlanaffeDbContext context) : IEpics
         }
 
         await context.Database.ExecuteSqlRawAsync("select id from epic where id = {0} for update", [id], cancellationToken);
-        return await context.Epics.SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
+        return await Fresh.SingleAsync(context.Epics, id, e => e.Id == id, cancellationToken);
     }
 
     public async Task<IReadOnlyDictionary<Guid, Progress>> ProgressAsync(IReadOnlyCollection<Guid> epicIds, CancellationToken cancellationToken)

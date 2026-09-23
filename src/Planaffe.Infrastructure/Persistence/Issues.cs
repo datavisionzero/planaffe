@@ -542,7 +542,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         var locked = await context.Database.ExecuteSqlRawAsync(
             "select id from issue where id = {0} and deleted_at is null for update", [id], cancellationToken);
 
-        return await context.Issues.SingleOrDefaultAsync(i => i.Id == id && i.DeletedAt == null, cancellationToken);
+        return await Fresh.SingleAsync(context.Issues, id, i => i.Id == id && i.DeletedAt == null, cancellationToken);
     }
 
     public async Task<Issue?> LoadDeletedForWriteAsync(Guid id, CancellationToken cancellationToken)
@@ -555,7 +555,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         await context.Database.ExecuteSqlRawAsync(
             "select id from issue where id = {0} and deleted_at is not null for update", [id], cancellationToken);
 
-        return await context.Issues.SingleOrDefaultAsync(i => i.Id == id && i.DeletedAt != null, cancellationToken);
+        return await Fresh.SingleAsync(context.Issues, id, i => i.Id == id && i.DeletedAt != null, cancellationToken);
     }
 
     public async Task<IReadOnlyList<IssueLabelRow>> LabelsOfAsync(IReadOnlyCollection<Guid> issueIds, CancellationToken cancellationToken) =>
@@ -611,15 +611,18 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
 
     public void Add(Comment comment) => context.Comments.Add(comment);
 
+    // Read fresh: an act finds the comment before its transaction and again
+    // under the issue's lock, and the second read has to see what the first
+    // one could not.
     public Task<Comment?> FindCommentAsync(Guid id, CancellationToken cancellationToken) =>
-        context.Comments.SingleOrDefaultAsync(c => c.Id == id, cancellationToken);
+        Fresh.SingleAsync(context.Comments, id, c => c.Id == id, cancellationToken);
 
     public void Remove(Comment comment) => context.Comments.Remove(comment);
 
     public void Add(Question question) => context.Questions.Add(question);
 
     public Task<Question?> FindQuestionAsync(Guid id, CancellationToken cancellationToken) =>
-        context.Questions.SingleOrDefaultAsync(q => q.Id == id, cancellationToken);
+        Fresh.SingleAsync(context.Questions, id, q => q.Id == id, cancellationToken);
 
     public Task<Question?> FindQuestionForReadAsync(Guid id, CancellationToken cancellationToken) =>
         context.Questions.AsNoTracking().SingleOrDefaultAsync(q => q.Id == id, cancellationToken);

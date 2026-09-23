@@ -267,8 +267,9 @@ public sealed class ChangeEpic(
 
         var epic = await transactions.RunAsync(async () =>
         {
-            var row = await epics.LoadForWriteAsync(before.Id, cancellationToken)
-                ?? throw new Refusal(RefusalCode.NotFound, $"No epic {key}.");
+            var row = await epics.LoadForWriteAsync(before.Id, cancellationToken) is { Deleted: false } live
+                ? live
+                : throw new Refusal(RefusalCode.NotFound, $"No epic {key}.");
 
             if (expected is { } version && row.UpdatedAt != version)
             {
@@ -361,8 +362,9 @@ public sealed class MoveEpic(
 
         await transactions.RunAsync(async () =>
         {
-            var epic = await epics.LoadForWriteAsync(before.Id, cancellationToken)
-                ?? throw new Refusal(RefusalCode.NotFound, $"No epic {key}.");
+            var epic = await epics.LoadForWriteAsync(before.Id, cancellationToken) is { Deleted: false } live
+                ? live
+                : throw new Refusal(RefusalCode.NotFound, $"No epic {key}.");
 
             var count = await epics.ReferencingIssuesAsync(epic.Id, cancellationToken);
             if (count > 0)
@@ -393,6 +395,11 @@ public sealed class MoveEpic(
         {
             var row = await epics.LoadForWriteAsync(before.Id, cancellationToken)
                 ?? throw new Refusal(RefusalCode.NotFound, $"No epic {key}.");
+            if (!row.Deleted)
+            {
+                throw new Refusal(RefusalCode.Transition, $"Epic {key} is not deleted.");
+            }
+
             row.Restore();
             await epics.SaveAsync(cancellationToken);
             return row;
@@ -408,8 +415,9 @@ public sealed class MoveEpic(
 
         var epic = await transactions.RunAsync(async () =>
         {
-            var row = await epics.LoadForWriteAsync(before.Id, cancellationToken)
-                ?? throw new Refusal(RefusalCode.NotFound, $"No epic {key}.");
+            var row = await epics.LoadForWriteAsync(before.Id, cancellationToken) is { Deleted: false } live
+                ? live
+                : throw new Refusal(RefusalCode.NotFound, $"No epic {key}.");
             await move(row, caller, clock.GetUtcNow());
             await epics.SaveAsync(cancellationToken);
             return row;

@@ -201,7 +201,7 @@ public sealed class Pages(PlanaffeDbContext context) : IPages
         }
 
         await context.Database.ExecuteSqlRawAsync("select id from page where id = {0} for update", [id], cancellationToken);
-        return await context.Pages.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+        return await Fresh.SingleAsync(context.Pages, id, p => p.Id == id, cancellationToken);
     }
 
     public void Add(Page page) => context.Pages.Add(page);

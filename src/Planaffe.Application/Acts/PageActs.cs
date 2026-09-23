@@ -398,8 +398,9 @@ public sealed class ChangePage(
 
         var page = await transactions.RunAsync(async () =>
         {
-            var row = await pages.LoadForWriteAsync(before.Id, cancellationToken)
-                ?? throw new Refusal(RefusalCode.NotFound, $"No page {space.Name}/{path}.");
+            var row = await pages.LoadForWriteAsync(before.Id, cancellationToken) is { Deleted: false } live
+                ? live
+                : throw new Refusal(RefusalCode.NotFound, $"No page {space.Name}/{path}.");
 
             if (expected is { } version && row.UpdatedAt != version)
             {
