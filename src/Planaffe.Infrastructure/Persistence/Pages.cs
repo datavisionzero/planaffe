@@ -134,6 +134,11 @@ public sealed class Pages(PlanaffeDbContext context) : IPages
     /// question twice is the same list twice.
     /// </para>
     /// <para>
+    /// A deleted space is no place to look, whatever was asked for: a human's
+    /// access row outlives the space until the purge, so the set passed in can
+    /// still name it, and deleting a space marks its row alone (ADR 0013).
+    /// </para>
+    /// <para>
     /// The marks around the words that matched are <see cref="Excerpt"/>'s two
     /// control characters rather than the <c>&lt;b&gt;</c> Postgres would use,
     /// and the body has both taken out of it before the excerpt is cut: a page
@@ -183,7 +188,7 @@ public sealed class Pages(PlanaffeDbContext context) : IPages
                join page page
                  on page.search @@ asked.query and page.deleted_at is null and page.space_id = any({ids})
                join tree on tree.id = page.id
-               join space on space.id = page.space_id
+               join space on space.id = page.space_id and space.deleted_at is null
               order by ts_rank_cd(page.search, asked.query) desc, space.name, page.title, tree.path
               limit {limit}
              """)
@@ -201,7 +206,7 @@ public sealed class Pages(PlanaffeDbContext context) : IPages
         }
 
         await context.Database.ExecuteSqlRawAsync("select id from page where id = {0} for update", [id], cancellationToken);
-        return await context.Pages.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+        return await Fresh.SingleAsync(context.Pages, id, p => p.Id == id, cancellationToken);
     }
 
     public void Add(Page page) => context.Pages.Add(page);

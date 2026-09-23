@@ -38,16 +38,19 @@ jobs:
   prune:
     name: The sha- tags nobody pins to any more
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The rule is in a script rather than in this file because it can be run
       # by hand against the live registry without starting a workflow, which is
       # how it was checked before it ever deleted anything. It prints and
-      # decides; it does not delete.
+      # decides; it does not delete. A registry that does not answer for a
+      # version that stays makes this step red, and a red step hands no ids
+      # to the one below.
       - id: pick
         name: Which versions have stopped being useful
         env:
@@ -58,7 +61,7 @@ jobs:
       # explicitly ticked box on a manual one holds back.
       - name: Take them
         if: steps.pick.outputs.ids != '' && !inputs.dry_run
-        uses: actions/delete-package-versions@v5
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
         with:
           owner: ${{ env.OWNER }}
           package-name: ${{ env.PACKAGE }}

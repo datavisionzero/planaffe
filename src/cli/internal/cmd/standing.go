@@ -20,11 +20,8 @@ func newStanding(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReadStandingWithResponse(cmd.Context())
+			resp, err := client.Checked(c.ReadStandingWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {

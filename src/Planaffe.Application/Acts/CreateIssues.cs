@@ -72,6 +72,7 @@ public sealed class CreateIssues(
         await scope.RequireAsync(project.Id, cancellationToken);
         var plans = new List<Plan>();
         var refs = new HashSet<string>(StringComparer.Ordinal);
+        var projectLabels = await labels.ListAsync(project.Id, cancellationToken);
 
         for (var i = 0; i < request.Issues.Count; i++)
         {
@@ -97,7 +98,7 @@ public sealed class CreateIssues(
                 item,
                 field,
                 Validated.Field($"{field}.title", () => Issue.NormalizeTitle(item.Title!)),
-                await labels.ResolveLabelsAsync(project, item.Labels ?? [], $"{field}.labels", cancellationToken),
+                IssueLookup.ResolveLabels(projectLabels, project, item.Labels ?? [], $"{field}.labels"),
                 item.Epic is null ? null : await EpicAsync(project, item.Epic, $"{field}.epic", cancellationToken),
                 item.Assignee is null ? null : await AssigneeAsync(item.Assignee, $"{field}.assignee", cancellationToken)));
         }
@@ -220,6 +221,11 @@ public sealed class CreateIssues(
                 }
             }
 
+            // One edge may be said twice — `blocks` on one item and `blocked_by`
+            // on the other — and is written once. An issue that existed before
+            // this request moves its version when it gains a blocker, as it
+            // would through the edge endpoint.
+            var written = new HashSet<(Guid BlockerId, Guid BlockedId)>();
             foreach (var (blocked, blockerId, blockerKey, _) in edges)
             {
                 if (blocked.Id == blockerId)
@@ -227,10 +233,14 @@ public sealed class CreateIssues(
                     throw Refusal.Validation("issues", $"{blocked.Key(project.Key)} cannot block itself.");
                 }
 
-                if (!await issues.HasBlockerAsync(blockerId, blocked.Id, cancellationToken))
+                if (written.Add((blockerId, blocked.Id)) && !await issues.HasBlockerAsync(blockerId, blocked.Id, cancellationToken))
                 {
                     issues.Add(Blocker.Between(blockerId, blocked.Id, caller.Id, now));
                     history.Add(HistoryEntry.OnIssue(blocked.Id, caller.Id, now, HistoryField.BlockedBy, newValue: blockerKey));
+                    if (!rows.Contains(blocked))
+                    {
+                        blocked.Touch(now);
+                    }
                 }
             }
 
@@ -251,10 +261,11 @@ public sealed class CreateIssues(
             return rows;
         }, cancellationToken);
 
+        var rows = (await issues.FindLiveManyAsync(created.Select(issue => issue.Id), cancellationToken)).ToDictionary(row => row.Id);
         var shapes = new List<IssueShape>();
         foreach (var issue in created)
         {
-            var row = await issues.FindLiveAsync(project.Key, issue.Number, cancellationToken)
+            var row = rows.GetValueOrDefault(issue.Id)
                 ?? throw new InvalidOperationException($"Issue {issue.Number} vanished after its own transaction.");
             shapes.Add(await assembler.CompleteAsync(row, cancellationToken));
         }

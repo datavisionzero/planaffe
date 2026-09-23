@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
-import { Route, Routes } from "react-router";
+import { Route, Routes, useParams } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { installInstance, renderAt } from "@/shared/testing";
 import { views } from "@/shell/views";
@@ -189,7 +189,7 @@ it("marks the priority of a row with its word, not with a number", async () => {
   await screen.findByText("Step 0");
 
   for (const [priority, word] of [[0, "none"], [1, "low"], [2, "medium"], [3, "high"], [4, "urgent"]] as const) {
-    const row = screen.getByText(`Step ${priority}`).closest<HTMLElement>("[role=option]")!;
+    const row = screen.getByText(`Step ${priority}`).closest<HTMLElement>("[role=listitem]")!;
     expect(within(row).getByTitle(`Priority: ${word}`)).toBeInTheDocument();
     expect(row).toHaveTextContent(`Priority: ${word}`);
     expect(row).not.toHaveTextContent(`P${priority}`);
@@ -203,7 +203,7 @@ it("lights as many bars as the step is high, and colours only urgent", async () 
   await screen.findByText("Step 0");
 
   for (const priority of [0, 1, 2, 3, 4]) {
-    const row = screen.getByText(`Step ${priority}`).closest<HTMLElement>("[role=option]")!;
+    const row = screen.getByText(`Step ${priority}`).closest<HTMLElement>("[role=listitem]")!;
     const bars = Array.from(row.querySelectorAll("[title^='Priority'] span[aria-hidden] > span"));
 
     expect(bars).toHaveLength(4);
@@ -240,11 +240,11 @@ it("groups by epic when the epic is the sort key, and names the group without on
   // The head carries the key and the epic's own title, and the run that hangs
   // under no epic says so rather than trailing off the end of the list. The
   // key is asked of the head itself, because the rows under it name it too.
-  const heads = Array.from(document.querySelectorAll("[role=presentation]"));
+  const heads = Array.from(document.querySelectorAll("[data-group-head]"));
   expect(heads.some((head) => head.textContent?.includes("PLAN-E1") && head.textContent?.includes("The shell"))).toBe(true);
   expect(screen.getByText("No epic")).toBeInTheDocument();
-  // Heads are not options: the listbox still holds only the three issues.
-  expect(within(screen.getByRole("listbox", { name: "All issues issues" })).getAllByRole("option")).toHaveLength(3);
+  // Heads are not items: the list still holds only the three issues.
+  expect(within(screen.getByRole("list", { name: "All issues issues" })).getAllByRole("listitem")).toHaveLength(3);
 });
 
 it("draws no group heads under any other sort, and every row still names its epic", async () => {
@@ -263,10 +263,158 @@ it("draws no group heads under any other sort, and every row still names its epi
   // No head, because nothing is grouped — but the row says what it is part
   // of, which is the one thing a list that hides the epic makes you open a
   // ticket for.
-  expect(document.querySelectorAll("[role=presentation]")).toHaveLength(0);
+  expect(document.querySelectorAll("[data-group-head]")).toHaveLength(0);
   expect(screen.queryByText("No epic")).not.toBeInTheDocument();
 
-  const rows = within(screen.getByRole("listbox", { name: "All issues issues" })).getAllByRole("option");
+  const rows = within(screen.getByRole("list", { name: "All issues issues" })).getAllByRole("listitem");
   expect(within(rows[0]).getAllByText("PLAN-E1").length).toBeGreaterThan(0);
   expect(within(rows[1]).queryByText("PLAN-E1")).not.toBeInTheDocument();
+});
+
+/** The list, with the issue screen behind its rows, so that a jump shows. */
+function renderRoutedList(routes: Record<string, unknown> = {}, path = `/PLAN/${all.path}`) {
+  const instance = installInstance({
+    "GET /issues": everyStep,
+    "GET /projects/PLAN/labels": [],
+    "GET /epics": { items: [], total: 0, has_more: false, next_cursor: null },
+    ...routes,
+  });
+
+  renderAt(path, <Routes>
+    <Route path="/:project/issues/:number" element={<IssueScreen />} />
+    <Route path="/:project/:view" element={<IssueListView view={all} />} />
+  </Routes>);
+
+  return instance;
+}
+
+function IssueScreen() {
+  const { number } = useParams();
+  return <p>Issue screen {number}</p>;
+}
+
+function issueCalls(instance: { calls: Request[] }) {
+  return instance.calls.filter((call) => new URL(call.url).pathname === "/issues");
+}
+
+it("leaves Enter to the control that has the focus", async () => {
+  renderRoutedList();
+  const user = userEvent.setup();
+  await screen.findByText("Step 0");
+
+  screen.getByRole("button", { name: "Filters" }).focus();
+  await user.keyboard("{Enter}");
+
+  // The button opened the filters, and the list did not jump to row 0 as well.
+  expect(await screen.findByRole("group", { name: "Issue filters" })).toBeInTheDocument();
+  expect(screen.queryByText(/Issue screen/)).not.toBeInTheDocument();
+});
+
+it("moves the focus from row to row on j and k, and Enter opens the one it is on", async () => {
+  renderRoutedList();
+  const user = userEvent.setup();
+  await screen.findByText("Step 0");
+
+  const links = () => within(screen.getByRole("list", { name: "All issues issues" })).getAllByRole("link");
+  // One tab stop for the whole list, on the active row.
+  expect(links().filter((link) => link.tabIndex === 0)).toHaveLength(1);
+
+  await user.keyboard("j");
+  await waitFor(() => expect(document.activeElement).toBe(links()[0]));
+  await user.keyboard("j");
+  await waitFor(() => expect(document.activeElement).toBe(links()[1]));
+  await user.keyboard("j");
+  await user.keyboard("k");
+  await waitFor(() => expect(document.activeElement).toBe(links()[1]));
+  expect(links()[1]).toHaveAttribute("tabindex", "0");
+  expect(links()[0]).toHaveAttribute("tabindex", "-1");
+
+  await user.keyboard("{Enter}");
+  expect(await screen.findByText("Issue screen 2")).toBeInTheDocument();
+});
+
+it("opens the active row on Enter where the focus is on nothing else", async () => {
+  renderRoutedList();
+  const user = userEvent.setup();
+  await screen.findByText("Step 0");
+
+  (document.activeElement as HTMLElement | null)?.blur();
+  await user.keyboard("{Enter}");
+
+  expect(await screen.findByText("Issue screen 1")).toBeInTheDocument();
+});
+
+it("jumps into the search on /", async () => {
+  renderRoutedList();
+  const user = userEvent.setup();
+  await screen.findByText("Step 0");
+
+  await user.keyboard("/");
+
+  expect(screen.getByRole("textbox", { name: "Search issues" })).toHaveFocus();
+});
+
+it("writes the search into the address once the typing pauses, and keeps the rows meanwhile", async () => {
+  const instance = renderRoutedList();
+  const user = userEvent.setup();
+  await screen.findByText("Step 0");
+  const before = issueCalls(instance).length;
+
+  await user.type(screen.getByRole("textbox", { name: "Search issues" }), "shell");
+
+  // Typed faster than the pause: nothing asked yet, and the rows still there.
+  expect(issueCalls(instance)).toHaveLength(before);
+
+  await waitFor(() => expect(issueCalls(instance)).toHaveLength(before + 1));
+  expect(new URL(issueCalls(instance).at(-1)!.url).searchParams.get("q")).toBe("shell");
+  expect(screen.getByText("Step 0")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Search issues" })).toHaveValue("shell");
+  expect(screen.getByRole("button", { name: "Remove Search: shell" })).toBeInTheDocument();
+});
+
+it("empties the field when the search is taken off as a chip", async () => {
+  renderRoutedList({}, "/PLAN/issues?q=shell");
+  const user = userEvent.setup();
+  await screen.findByText("Step 0");
+
+  expect(screen.getByRole("textbox", { name: "Search issues" })).toHaveValue("shell");
+  await user.click(screen.getByRole("button", { name: "Remove Search: shell" }));
+
+  expect(screen.getByRole("textbox", { name: "Search issues" })).toHaveValue("");
+});
+
+it("comes back to where the list was left, loading the rows it had", async () => {
+  const pages = Array.from({ length: 60 }, (_, index) => anIssue(`PLAN-${index + 1}`, `Issue ${index + 1}`));
+  window.sessionStorage.setItem("planaffe.issue-list:/PLAN/issues", JSON.stringify({ top: 1800, count: 60 }));
+  const scrollTo = vi.spyOn(Element.prototype, "scrollTo");
+
+  const instance = renderRoutedList({
+    "GET /issues": (request: Request) => {
+      const cursor = new URL(request.url).searchParams.get("cursor");
+      return cursor === null
+        ? { items: pages.slice(0, 50), total: 60, has_more: true, next_cursor: "c2" }
+        : { items: pages.slice(50), total: 60, has_more: false, next_cursor: null };
+    },
+  });
+
+  await screen.findByText("Issue 1");
+
+  // Both pages are read before the offset is restored, because the second
+  // one is where the offset lies.
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 1800 }));
+  expect(issueCalls(instance).map((call) => new URL(call.url).searchParams.get("cursor"))).toEqual([null, "c2"]);
+
+  scrollTo.mockRestore();
+  window.sessionStorage.clear();
+});
+
+it("survives a browser that refuses storage", async () => {
+  vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+    throw new DOMException("blocked", "SecurityError");
+  });
+
+  renderRoutedList();
+
+  expect(await screen.findByText("Step 0")).toBeInTheDocument();
+  vi.restoreAllMocks();
 });

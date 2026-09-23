@@ -1,0 +1,85 @@
+name: Vulnerabilities
+
+# Not part of the gate, like `registry.yml`: the gate asks whether a commit is
+# fit for the trunk, and this asks whether what the trunk already depends on
+# has turned out to be unsafe since. An advisory published on a Tuesday would
+# otherwise surface at the next push, as somebody else's red trunk.
+#
+# A finding makes this run red and does nothing else. The run is where it is
+# seen; nothing here opens an issue or needs the rights to. The Go module is
+# not scanned here — Dependabot reports its advisories.
+on:
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vulnerabilities
+  cancel-in-progress: true
+
+jobs:
+  # Only what reaches the browser. The build tooling ships to nobody, and a
+  # high-severity advisory in a test runner is Dependabot's to raise, not a
+  # red run's.
+  web:
+    name: npm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      # Read from the lockfile; nothing has to be installed for it.
+      - run: npm audit --omit=dev --audit-level=high
+
+  # The build already fails on a NuGet advisory it knows at restore time. This
+  # is the same question asked on a clock, of the whole tree, transitive
+  # packages included.
+  dotnet:
+    name: NuGet packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Planaffe.slnx
+      # `dotnet list package --vulnerable` exits 0 whatever it finds, so the
+      # answer is read from its JSON: a project with a vulnerable package, or a
+      # problem that kept it from looking, is a red run.
+      - name: No project depends on a vulnerable package
+        run: |
+          set -euo pipefail
+          dotnet list Planaffe.slnx package --vulnerable --include-transitive --format json > /tmp/vulnerable.json
+          python3 - <<'PY'
+          import json, pathlib, sys
+
+          report = json.loads(pathlib.Path("/tmp/vulnerable.json").read_text())
+          found = []
+          for problem in report.get("problems", []):
+              found.append(f"{problem.get('project', '?')}: {problem.get('text', problem)}")
+          for project in report.get("projects", []):
+              for framework in project.get("frameworks", []):
+                  for kind in ("topLevelPackages", "transitivePackages"):
+                      for package in framework.get(kind, []):
+                          for advisory in package.get("vulnerabilities", []):
+                              found.append(
+                                  f"{project['path']} ({framework['framework']}): "
+                                  f"{package['id']} {package.get('resolvedVersion', '')} "
+                                  f"{advisory.get('severity', '')} {advisory.get('advisoryurl', '')}"
+                              )
+          for line in found:
+              print(line)
+          if found:
+              print(f"::error::{len(found)} finding(s) in the NuGet packages")
+              sys.exit(1)
+          print("No vulnerable packages.")
+          PY

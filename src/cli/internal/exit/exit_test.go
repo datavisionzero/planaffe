@@ -27,6 +27,7 @@ func TestTableOfApiMd(t *testing.T) {
 		{412, "stale", Stale},
 		{422, "transition", Refused},
 		{422, "cycle", Refused},
+		{429, "login-throttled", Refused},
 		{500, "internal", Unexpected},
 		{502, "", Unexpected},
 	}

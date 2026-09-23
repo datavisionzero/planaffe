@@ -34,9 +34,21 @@ public static class IssueLookup
     /// <summary>The labels named, resolved in the project, live; groups enforced within the set.</summary>
     /// <exception cref="Refusal"><c>unknown-label</c>, or <c>validation</c> when two share a group.</exception>
     public static async Task<IReadOnlyList<Label>> ResolveLabelsAsync(
-        this ILabels labels, Project project, IEnumerable<string> names, string field, CancellationToken cancellationToken)
+        this ILabels labels, Project project, IEnumerable<string> names, string field, CancellationToken cancellationToken) =>
+        ResolveLabels(await labels.ListAsync(project.Id, cancellationToken), project, names, field);
+
+    /// <summary>
+    /// The same against the project's labels read once, for an act that
+    /// resolves many sets: a bulk create of a hundred issues reads them once
+    /// rather than a hundred times.
+    /// </summary>
+    /// <exception cref="Refusal"><c>unknown-label</c>, or <c>validation</c> when two share a group.</exception>
+    public static IReadOnlyList<Label> ResolveLabels(
+        IReadOnlyList<Label> projectLabels, Project project, IEnumerable<string> names, string field)
     {
-        var live = (await labels.ListAsync(project.Id, cancellationToken)).ToDictionary(l => l.Name, StringComparer.Ordinal);
+        ArgumentNullException.ThrowIfNull(projectLabels);
+        ArgumentNullException.ThrowIfNull(project);
+        var live = projectLabels.ToDictionary(l => l.Name, StringComparer.Ordinal);
         var resolved = new List<Label>();
 
         foreach (var name in names.Select(n => n?.Trim() ?? string.Empty).Distinct(StringComparer.Ordinal))

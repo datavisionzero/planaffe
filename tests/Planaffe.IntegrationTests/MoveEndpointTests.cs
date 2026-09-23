@@ -18,39 +18,59 @@ public sealed class MoveEndpointTests(PostgresFixture postgres)
 
     /// <summary>
     /// Row: where the issue is; columns: claim, release, close, review, reopen,
-    /// status backlog, status todo — as a user, review not required. `ok` is
-    /// 200, `no` is `transition`.
+    /// status backlog, status todo — review not required, and an `in_progress`
+    /// issue held by the caller. `ok` is 200, `no` is `transition`. The table
+    /// is the same for a user and an agent; the last row is an issue whose
+    /// agent's claim lapsed, which is `todo` for every act.
     /// </summary>
-    public static TheoryData<string, string[]> Table() => new()
+    public static TheoryData<string, string, string[]> Table()
     {
-        { "backlog", ["ok", "no", "ok", "ok", "no", "no", "ok"] },
-        { "todo", ["ok", "no", "ok", "ok", "no", "ok", "no"] },
-        { "in_progress", ["ok", "ok", "ok", "ok", "no", "no", "no"] },
-        { "review", ["no", "no", "ok", "no", "ok", "no", "no"] },
-        { "done", ["no", "no", "no", "no", "ok", "no", "no"] },
-        { "canceled", ["no", "no", "no", "no", "ok", "no", "no"] },
-    };
+        var rows = new (string From, string[] Expected)[]
+        {
+            ("backlog", ["ok", "no", "ok", "ok", "no", "no", "ok"]),
+            ("todo", ["ok", "no", "ok", "ok", "no", "ok", "no"]),
+            ("in_progress", ["ok", "ok", "ok", "ok", "no", "no", "no"]),
+            ("review", ["no", "no", "ok", "no", "ok", "no", "no"]),
+            ("done", ["no", "no", "no", "no", "ok", "no", "no"]),
+            ("canceled", ["no", "no", "no", "no", "ok", "no", "no"]),
+            ("lapsed", ["ok", "no", "ok", "ok", "no", "ok", "no"]),
+        };
+
+        var data = new TheoryData<string, string, string[]>();
+        foreach (var caller in new[] { "user", "agent" })
+        {
+            foreach (var (from, expected) in rows)
+            {
+                data.Add(caller, from, expected);
+            }
+        }
+
+        return data;
+    }
 
     [Theory]
     [MemberData(nameof(Table))]
-    public async Task Every_cell_of_the_table(string from, string[] expected)
+    public async Task Every_cell_of_the_table(string caller, string from, string[] expected)
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
         using var admin = await Project(instance);
+        using var agent = await Agent(instance, admin, "one");
+        using var other = await Agent(instance, admin, "two");
+        var actor = caller == "agent" ? agent : admin;
 
         for (var column = 0; column < Acts.Length; column++)
         {
-            var key = await IssueIn(admin, from, column + 1);
-            using var response = await Act(admin, key, Acts[column]);
+            var key = await IssueIn(instance, admin, actor, other, from, column + 1);
+            using var response = await Act(actor, key, Acts[column]);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
 
             if (expected[column] == "ok")
             {
-                Assert.True(response.StatusCode == HttpStatusCode.OK, $"{from} × {Acts[column]}: expected 200, got {response.StatusCode} {body}");
+                Assert.True(response.StatusCode == HttpStatusCode.OK, $"{caller}: {from} × {Acts[column]}: expected 200, got {response.StatusCode} {body}");
             }
             else
             {
-                Assert.True(response.StatusCode == HttpStatusCode.UnprocessableEntity, $"{from} × {Acts[column]}: expected 422, got {response.StatusCode}");
+                Assert.True(response.StatusCode == HttpStatusCode.UnprocessableEntity, $"{caller}: {from} × {Acts[column]}: expected 422, got {response.StatusCode} {body}");
                 Assert.Equal("/problems/transition", body.GetProperty("type").GetString());
             }
         }
@@ -189,7 +209,11 @@ public sealed class MoveEndpointTests(PostgresFixture postgres)
         await ProjectEndpointTests.Problem(await admin.PatchAsJsonAsync("/issues/PLAN-1", new { status = "done" }, Ct), HttpStatusCode.UnprocessableEntity, "transition");
     }
 
-    private static async Task<string> IssueIn(HttpClient admin, string from, int number)
+    /// <remarks>
+    /// `in_progress` is claimed by the caller itself; `lapsed` by another agent
+    /// whose claim has expired, moved in the row as the claim tests do.
+    /// </remarks>
+    private static async Task<string> IssueIn(AnInstance instance, HttpClient admin, HttpClient actor, HttpClient other, string from, int number)
     {
         var key = $"PLAN-{number}";
         await Issues(admin, new { title = $"{from} {number}" });
@@ -200,7 +224,16 @@ public sealed class MoveEndpointTests(PostgresFixture postgres)
                 await admin.PatchAsJsonAsync($"/issues/{key}", new { status = "backlog" }, Ct);
                 break;
             case "in_progress":
-                await admin.PostAsJsonAsync($"/issues/{key}/claim", new { }, Ct);
+                await actor.PostAsJsonAsync($"/issues/{key}/claim", new { }, Ct);
+                break;
+            case "lapsed":
+                await other.PostAsJsonAsync($"/issues/{key}/claim", new { }, Ct);
+                await using (var context = Migrated.ContextFor(instance.ConnectionString))
+                {
+                    await context.Database.ExecuteSqlRawAsync(
+                        "update issue set claim_expires_at = now() - interval '1 minute' where number = {0}", [number], Ct);
+                }
+
                 break;
             case "review":
                 await admin.PostAsJsonAsync($"/issues/{key}/review", new { }, Ct);
@@ -212,7 +245,7 @@ public sealed class MoveEndpointTests(PostgresFixture postgres)
         }
 
         var read = await admin.GetFromJsonAsync<JsonElement>($"/issues/{key}", Ct);
-        Assert.Equal(from, read.GetProperty("status").GetString());
+        Assert.Equal(from == "lapsed" ? "todo" : from, read.GetProperty("status").GetString());
         return key;
     }
 

@@ -18,10 +18,18 @@ public sealed record ChangeReleaseRequest(string? Name, string? Description);
 
 public sealed class ReleaseAssembler(IReleases releases, IIdentities identities, IssueAssembler issues)
 {
-    public async Task<ReleaseSummaryShape> SummaryAsync(Release release, CancellationToken ct)
+    /// <summary>Every summary of a list in two queries, not two per release.</summary>
+    public async Task<IReadOnlyList<ReleaseSummaryShape>> SummariesAsync(IReadOnlyList<Release> list, CancellationToken ct)
     {
-        var rows = await releases.IssuesAsync(release.Id, ct);
-        return new(DisplayName(release), release.Status, release.Description, release.PublishedAt, await PublisherAsync(release, ct), rows.Count);
+        var counts = await releases.IssueCountsAsync([.. list.Select(r => r.Id)], ct);
+        var publishers = await identities.FindManyAsync(list.Select(r => r.PublishedBy).OfType<Guid>().Distinct(), ct);
+        return [.. list.Select(release => new ReleaseSummaryShape(
+            DisplayName(release),
+            release.Status,
+            release.Description,
+            release.PublishedAt,
+            release.PublishedBy is { } id && publishers.TryGetValue(id, out var identity) ? IdentityRef.Of(identity) : null,
+            counts.GetValueOrDefault(release.Id)))];
     }
 
     public async Task<ReleaseShape> CompleteAsync(Release release, CancellationToken ct)
@@ -41,9 +49,7 @@ public sealed class ListReleases(IProjects projects, ProjectScope scope, IReleas
     {
         var project = await projects.LiveAsync(projectKey, settings, ct);
         await scope.RequireAsync(project.Id, ct);
-        var result = new List<ReleaseSummaryShape>();
-        foreach (var release in await releases.ListAsync(project.Id, ct)) result.Add(await assembler.SummaryAsync(release, ct));
-        return result;
+        return await assembler.SummariesAsync(await releases.ListAsync(project.Id, ct), ct);
     }
 }
 

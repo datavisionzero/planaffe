@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { failure } from "@/shared/act";
 import { Input } from "@/components/ui/input";
 import { LabelPicker } from "@/components/ui/label-picker";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -302,7 +303,7 @@ function EpicAction({ label, path, epic, onChanged }: { label: string; path: Act
     try {
       onChanged(await epicRequest(path, epic));
     } catch (reason) {
-      setWhy(reason instanceof Error ? reason.message : "The instance did not answer.");
+      setWhy(failure(reason));
     } finally {
       setBusy(false);
     }

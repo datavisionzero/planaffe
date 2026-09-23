@@ -49,8 +49,12 @@ silently did nothing would send every command to the wrong project.
   from `next` — and nothing else on stdout.
 - **Never interactive.** No prompt, no editor, no pager; stdin is read only where
   a flag says so.
-- **Every write carries an `Idempotency-Key`** `pa` generates itself, one per
-  invocation, so a retry after a lost connection is safe (docs/api.md).
+- **Every write carries an `Idempotency-Key`** `pa` generates itself: 32 hex
+  characters per invocation, numbered `-1`, `-2`, … per write. A write whose
+  connection fails before any answer is sent again with the same key, up to
+  three times in all, and the instance answers the repetition from what it kept
+  of the first (docs/api.md, Idempotency). Running the command again is a new
+  key and a new request: after exit 10 on a write, look before repeating it.
 - **`User-Agent: pa/<version> (<os>/<arch>)`** on every request, and the
   instance's `Planaffe-Version` compared on every answer: a `pa` of another major,
   or older than the instance's minor, stops with exit 9 and says which of the two
@@ -71,13 +75,24 @@ The table of `docs/api.md`, derived from the status and the problem document:
 | 1 | unexpected: a 500, an answer `pa` cannot parse, a bug in `pa` |
 | 2 | usage: bad arguments, no instance and no login, no token anywhere, a `.planaffe` file `pa` cannot read |
 | 3 | not found, deleted included |
-| 4 | refused: validation, every 422, and the 410 of a one-time thing that is gone — a used link, a device login that ran out |
-| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `release-exists`, `device-pending` |
+| 4 | refused: validation, every 422, the 410 of a one-time thing that is gone — a used link, a device login that ran out — and the 429 of `login-throttled`, whose message says how long to wait |
+| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `idempotency-pending`, `already-shown`, `release-exists`, `device-pending` |
 | 6 | stale |
 | 7 | denied: 401, 403 |
 | 8 | empty: `next` found nothing, or another waiting command reached its deadline |
 | 9 | version skew |
 | 10 | unreachable |
+| 130 | interrupted: Ctrl-C, whether `pa` was waiting on the instance or on its own clock |
+
+A success with no body where the contract promises one — a proxy answering
+`200` for an instance behind it — is exit 1 like the page of HTML; only a `204`
+and a `202` may be empty. A panic is exit 1 too, as the bug in `pa` it is,
+never the 2 the runtime would leave behind. A device code that runs out on
+`pa`'s own clock is 4, the same as the instance's `device-expired`.
+
+`pa next` without `--claim` finding nothing is exit 8 with the reasons on
+stdout; `pa next --json` finding nothing is exit 0, because the page it prints
+— empty items, reasons and all — is the answer a script asked for.
 
 ## Verbs
 
@@ -177,6 +192,7 @@ pa epic create "Backend" --description-file plan.md --label feature
 pa epic list [--status open|closed|all] [--label L] · pa epic view PLAN-E2
 pa epic edit PLAN-E2 --description-file - --if-match "<updated_at>"
 pa epic close PLAN-E2 [--cancel-open | --park-open]   # lists what is still open; cancels or parks it on a flag, never interactively
+                                                      # every page of it; one that refuses is named, the rest go on, the exit is that refusal's code
 pa epic reopen PLAN-E2 · pa epic delete PLAN-E2 · pa epic restore PLAN-E2
 
 pa space list                               # the knowledge base: every space you may see, the closed ones marked
@@ -195,14 +211,21 @@ pa space search "vertrag" --space personal  # one space by name
 pa space search "claim-held" --limit 5 --json
 
 pa release list
-pa release view unreleased | pa release view v1.2.0
-pa release publish v1.2.0 [--description-file notes.md]
-pa release notes v1.2.0                 # Markdown, with sub-issues indented under their parent
+pa release view unreleased | pa release view 1.2.0
+pa release publish 1.2.0 [--description-file notes.md]
+pa release notes 1.2.0                  # Markdown, with sub-issues indented under their parent
+pa release notes 1.2.0 --description-file -   # replace its annotation first, then print the notes
 pa release add PLAN-42                  # into the open release by hand
 pa release remove PLAN-42               # out of it: it has not shipped yet
-pa release rename v1.2.O v1.2.0         # the newest publication only
-pa release retract v1.2.0               # take the publication back; it is the open release again
+pa release rename 1.2.O 1.2.0           # the newest publication only
+pa release retract 1.2.0                # take the publication back; it is the open release again
 ```
+
+A release in the tracker is named without the `v` its git tag carries: the tag
+`v1.2.0` is the release `1.2.0`. `notes` with `--description-file` replaces the
+Markdown annotation the release carries above its issues — the same text
+`publish --description-file` sets — and then prints the notes as they now read,
+so that a publication made without one can be finished afterwards.
 
 Signing in (ADR 0025) — the device-code flow, because SSH sessions, CI jobs,
 containers and agent sandboxes have no browser of their own:
@@ -221,13 +244,24 @@ without a Secret Service, most often — it says so, **writes nothing**, and nam
 the two ways on. `logout` refuses a token that came from `PLANAFFE_TOKEN`: `pa`
 did not put it there, and it is most likely an agent's.
 
+An explicit `--url` is where the login goes, even with `PLANAFFE_URL` set:
+"the environment wins" decides which identity a run acts as, not the target of
+a login somebody typed out. Where the two differ, `login` says so on stderr —
+every later command in that environment still goes to `PLANAFFE_URL`.
+`--token-file` is stored as an absolute path, a leading `~/` expanded and a
+relative one read against the directory `login` ran in, so that the next
+command finds it wherever it starts. The file is written fresh beside the old
+one with mode 0600 and renamed over it, so a token file that was there with a
+looser mode ends up private too; a path that is there and is not a regular file
+is refused before a code is printed.
+
 Identities (ADR 0015) — a secret is printed once, to stdout, and nowhere else:
 
 ```
 pa me                                      # who the token says you are, and where pa read the token
 pa me set --kind codex --harness cli --environment container --version 1.2.3
                                            # agents report stable metadata; `none` clears a field
-pa version                                 # pa's version and the instance's; exit 9 when they do not fit
+pa version                                 # pa's version and the instance's; exit 9 when they do not fit; needs no token
 pa export --json                           # one readable document containing the current project
 pa user create NAME --email ADDRESS [--administrator] # administrators only; sends an invitation
 pa user list
@@ -235,7 +269,7 @@ pa user resend USER                        # the user by name or id, here and be
 pa user invitation-link USER               # print the activation link instead of mailing it
 pa user password-link USER                 # print a password link; the way in without SMTP
 pa user deactivate USER · pa user reactivate USER
-pa user administrator USER --enabled=true|false
+pa user administrator USER --enabled=true|false   # --enabled is required: saying nothing grants nothing
 pa me email ADDRESS                         # sends confirmation to the new address
 pa agent create [--name NAME]              # users only; the agent's one token, once
 pa agent list · pa agent view AGENT · pa agent rename AGENT --name NAME
@@ -331,13 +365,6 @@ draws around what an agent does in the knowledge base, and they are done in the
 browser. The CLI deliberately does not mirror the whole interface here: the
 border is the bracket, not the work inside it.
 
-A page is addressed by its slug, which is given and never derived from the
-title. Renaming is its own verb rather than a flag on `edit`, because moving an
-address is not the same kind of act as editing a text: nothing forwards, and
-every reference written to the old address stops working. `pa page view` prints
-the head and then the body unchanged, so that the output pipes straight back
-into `--body-file -`.
-
 `pa standing` is the one verb with no project in it: it is the overview
 (`human-interface.md`), and everything the caller can see is the point. Each
 line carries the step as its **word** rather than as the icon the browser
@@ -348,17 +375,23 @@ prints no counts, and an instance with no agent is told once under the list
 rather than on every line.
 
 Descriptions, results, comments, questions and answers come from an argument, a
-file or stdin (`-`), never an editor. The whole agent cycle of VISION 6.1 is
-`pa next --claim`, work, `pa issue comment`, `pa issue ask`, and `pa issue
-close --done --result-file -`; a human answers with `pa question answer`. A
-ticket the agent writes itself ends that cycle the same way it would end a
-claim: with `--ready` when it is implementable as written, and otherwise with a
-`pa issue ask` naming what a human has to decide first, because `ready` selects
-nothing where triage required is off. The three waiting commands accept any
+file or stdin (`-`), never an editor. Stdin is read once, so only one flag of
+a command may be `-`; a second is exit 2 rather than the empty text it would
+have read. Two flags where one would silently win — `--comment` and
+`--comment-file`, `--answered` and `--all` — are exit 2 as well. The whole
+agent cycle of VISION 6.1 is `pa next --claim`, work, `pa issue comment`, `pa
+issue ask`, and `pa issue close --done --result-file -`; a human answers with
+`pa question answer`. A ticket the agent writes itself ends that cycle the
+same way it would end a claim: with `--ready` when it is implementable as
+written, and otherwise with a `pa issue ask` naming what a human has to decide
+first, because `ready` selects nothing where triage required is off. The three waiting commands accept any
 positive number of seconds and split waits longer than the server's one-hour
 limit into rounds. `pa issue ask --wait` stops no later than the expiry of the
 caller's claim; `pa needs-you --wait` first reads the current page and then
-uses its ETag for the long poll. A deadline is exit 8.
+uses its ETag for the long poll. The tag covers the whole page, the count of
+agents included, so a page that comes back changed and still empty — an agent
+token created or revoked meanwhile — is not an answer: the wait goes on from
+the new tag for whatever is left of it. A deadline is exit 8.
 
 That cycle is also written out as a paragraph to copy: [`agents-md.md`](./agents-md.md)
 is the block a user pastes into the `AGENTS.md` of their own repository, so that

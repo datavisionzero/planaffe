@@ -108,16 +108,68 @@ public sealed class ClaimRulesTests
     public void Releasing_lands_in_todo_and_needs_a_holder()
     {
         var issue = Fresh();
-        Assert.Equal(RefusalCode.Transition, Assert.Throws<Refusal>(() => issue.Release(Now)).Code);
+        Assert.Equal(RefusalCode.Transition, Assert.Throws<Refusal>(() => issue.Release(Agent, IdentityKind.Agent, Now)).Code);
 
         issue.ClaimFor(Agent, IdentityKind.Agent, false, Now, FourHours);
-        Assert.Equal(Agent, issue.Release(Now.AddHours(1)));
+        Assert.Equal(Agent, issue.Release(Agent, IdentityKind.Agent, Now.AddHours(1)));
         Assert.Equal(IssueStatus.Todo, issue.Status);
         Assert.Null(issue.Claim);
 
         // A claim that has lapsed is nobody's to release.
         issue.ClaimFor(Agent, IdentityKind.Agent, false, Now, FourHours);
-        Assert.Equal(RefusalCode.Transition, Assert.Throws<Refusal>(() => issue.Release(Now.AddHours(9))).Code);
+        Assert.Equal(RefusalCode.Transition, Assert.Throws<Refusal>(() => issue.Release(Agent, IdentityKind.Agent, Now.AddHours(9))).Code);
+    }
+
+    [Fact]
+    public void Another_agents_live_claim_refuses_the_moves_and_a_lapsed_one_does_not()
+    {
+        var issue = Fresh();
+        issue.ClaimFor(Agent, IdentityKind.Agent, false, Now, FourHours);
+
+        foreach (var move in new Action[]
+        {
+            () => issue.Release(OtherAgent, IdentityKind.Agent, Now.AddHours(1)),
+            () => issue.Close(IssueStatus.Done, null, OtherAgent, IdentityKind.Agent, false, Now.AddHours(1)),
+            () => issue.HandIn(null, OtherAgent, IdentityKind.Agent, Now.AddHours(1)),
+            () => issue.MoveTo(IssueStatus.Backlog, OtherAgent, IdentityKind.Agent, Now.AddHours(1)),
+        })
+        {
+            var held = Assert.Throws<Refusal>(move);
+            Assert.Equal(RefusalCode.ClaimHeld, held.Code);
+            Assert.Equal(Agent, held.Extensions["holder"]);
+        }
+
+        Assert.Equal(Agent, issue.Claim!.HolderId);
+        Assert.Equal(IssueStatus.Done, issue.Close(IssueStatus.Done, null, OtherAgent, IdentityKind.Agent, false, Now.AddHours(5)));
+        Assert.Null(issue.Claim);
+    }
+
+    [Fact]
+    public void A_user_acts_over_an_agents_claim()
+    {
+        var issue = Fresh();
+        issue.ClaimFor(Agent, IdentityKind.Agent, false, Now, FourHours);
+
+        Assert.Equal(Agent, issue.Release(User, IdentityKind.User, Now.AddHours(1)));
+    }
+
+    [Fact]
+    public void An_issue_whose_claim_lapsed_reads_todo_and_is_parked()
+    {
+        var issue = Fresh();
+        issue.ClaimFor(Agent, IdentityKind.Agent, false, Now, FourHours);
+        Assert.Equal(IssueStatus.InProgress, issue.StatusAt(Now.AddHours(1)));
+
+        var own = Assert.Throws<Refusal>(() => issue.MoveTo(IssueStatus.Backlog, Agent, IdentityKind.Agent, Now.AddHours(1)));
+        Assert.Equal(RefusalCode.Transition, own.Code);
+        Assert.Contains("in_progress", own.Detail);
+
+        Assert.Equal(IssueStatus.Todo, issue.StatusAt(Now.AddHours(5)));
+        Assert.Null(issue.ClaimAt(Now.AddHours(5)));
+
+        issue.MoveTo(IssueStatus.Backlog, OtherAgent, IdentityKind.Agent, Now.AddHours(5));
+        Assert.Equal(IssueStatus.Backlog, issue.Status);
+        Assert.Null(issue.Claim);
     }
 
     private static Issue Fresh() => Issue.Create(Guid.NewGuid(), 1, "An issue", User, Now);

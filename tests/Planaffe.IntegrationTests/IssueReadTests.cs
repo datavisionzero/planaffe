@@ -76,6 +76,23 @@ public sealed class IssueReadTests(PostgresFixture postgres)
         Assert.Equal(0L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
+    /// <summary>Deleting a project marks the project row alone; its issues are gone all the same.</summary>
+    [Fact]
+    public async Task An_issue_in_a_deleted_project_is_absent()
+    {
+        await using var db = await Migrated.SeededAsync(postgres);
+        await db.Context.Database.ExecuteSqlRawAsync(
+            "update project set deleted_at = now(), deleted_by = {0} where id = {1}",
+            [db.User.Id, db.Issue.ProjectId],
+            TestContext.Current.CancellationToken);
+
+        await using var connection = new NpgsqlConnection(db.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var command = new NpgsqlCommand("select count(*) from issue_read", connection);
+
+        Assert.Equal(0L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task An_unclaimed_issue_has_no_claim_when_read_back()
     {

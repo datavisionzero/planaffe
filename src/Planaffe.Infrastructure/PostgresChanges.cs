@@ -18,7 +18,19 @@ public sealed class PostgresChanges(string connectionString, ILogger<PostgresCha
         // outside Npgsql's pool and never participates in request transactions.
         Pooling = false,
         ApplicationName = "planaffe-change-listener",
+
+        // A connection a NAT, a firewall or a failover drops without a reset
+        // is otherwise never noticed: the wait below has no timeout of its
+        // own, and every waiter would fall back to its deadline in silence.
+        // The keepalive query makes the drop an error, and the error is the
+        // reconnect.
+        KeepAlive = KeepAliveSeconds,
+        TcpKeepAlive = true,
     }.ConnectionString;
+    private const int KeepAliveSeconds = 30;
+    private static readonly TimeSpan FirstReconnectDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan LongestReconnectDelay = TimeSpan.FromSeconds(30);
+
     private readonly Lock _gate = new();
     private readonly Dictionary<Guid, Registration> _projects = [];
     private readonly CancellationTokenSource _stopping = new();
@@ -72,7 +84,10 @@ public sealed class PostgresChanges(string connectionString, ILogger<PostgresCha
 
     private async Task ListenAsync()
     {
-        var reconnectDelay = TimeSpan.FromSeconds(1);
+        // Doubled on every failure to connect and back to the first once a
+        // connection is listening, so a database that is gone is one warning
+        // every half minute rather than one a second.
+        var reconnectDelay = FirstReconnectDelay;
 
         while (!_stopping.IsCancellationRequested)
         {
@@ -104,6 +119,8 @@ public sealed class PostgresChanges(string connectionString, ILogger<PostgresCha
                     }
                 }
 
+                reconnectDelay = FirstReconnectDelay;
+
                 using var wait = CancellationTokenSource.CreateLinkedTokenSource(
                     _stopping.Token, registrationsChanged);
                 while (!wait.IsCancellationRequested)
@@ -123,7 +140,7 @@ public sealed class PostgresChanges(string connectionString, ILogger<PostgresCha
             }
             catch (Exception exception)
             {
-                logger.LogWarning(exception, "The PostgreSQL change listener disconnected; reconnecting.");
+                logger.LogWarning(exception, "The PostgreSQL change listener disconnected; reconnecting in {Delay}.", reconnectDelay);
                 NotifyAndReset();
 
                 try
@@ -134,6 +151,8 @@ public sealed class PostgresChanges(string connectionString, ILogger<PostgresCha
                 {
                     return;
                 }
+
+                reconnectDelay = reconnectDelay * 2 < LongestReconnectDelay ? reconnectDelay * 2 : LongestReconnectDelay;
             }
         }
     }

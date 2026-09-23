@@ -31,21 +31,21 @@ public static class DeviceLoginEndpoints
                 // The one unauthenticated write that creates a row. The limit is
                 // per source address and its own window, so that a machine
                 // making them cannot lock a person out of signing in.
-                var source = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                if (throttle.IsDeviceBlocked(source))
+                // It is `login-throttled` and not `device-pending`, which
+                // means keep polling: a client told that would loop.
+                if (!throttle.TryBeginDevice(LoginThrottle.SourceOf(http.Connection.RemoteIpAddress), out var wait))
                 {
-                    return Problems.Result(RefusalCode.DevicePending,
-                        "Too many logins were begun from here. Wait a few minutes.");
+                    return Problems.Throttled(http, wait, "Too many logins were begun from this address.");
                 }
 
-                throttle.DeviceBegun(source);
                 return Results.Ok(await begin.ExecuteAsync(ct));
             })
             .AllowAnonymous()
             .WithName("BeginDeviceLogin")
             .WithSummary("Begin a device login: the code the CLI prints, and the code it polls with.")
             .Produces<DeviceLoginBegun>()
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ShownOnce();
 
         endpoints.MapPost("/device-logins/redeem", async (RedeemDeviceLoginRequest? request,
                 RedeemDeviceLogin redeem, CancellationToken ct) =>
@@ -57,7 +57,8 @@ public static class DeviceLoginEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
-            .ProducesProblem(StatusCodes.Status410Gone);
+            .ProducesProblem(StatusCodes.Status410Gone)
+            .ShownOnce();
 
         var door = endpoints.MapGroup(string.Empty)
             .RequireAuthorization()

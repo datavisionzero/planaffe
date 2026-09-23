@@ -100,6 +100,44 @@ public sealed class SmtpEndpointTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NoContent, replacement.StatusCode);
     }
 
+    /// <summary>
+    /// A recovery email is a thing a stranger can make the instance send: once
+    /// per account in a while, however often it is asked for — so a mailbox
+    /// is not flooded and its live link not replaced over and over — and a
+    /// source that keeps asking is told to wait.
+    /// </summary>
+    [Fact]
+    public async Task Recovery_sends_one_email_per_account_in_a_while_and_throttles_a_source()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var instance = await AnInstance.ConfiguredAsync(postgres, ConfiguredMailpit());
+        using var browser = instance.ClientWith(null);
+        await instance.AddActiveUserAsync("other");
+
+        for (var request = 0; request < 3; request++)
+        {
+            using var asked = await browser.PostAsJsonAsync("/password-recovery", new { email = "other@example.test" }, ct);
+            Assert.Equal(HttpStatusCode.Accepted, asked.StatusCode);
+        }
+
+        await SecretFromLatestMessage("recover");
+        await Task.Delay(TimeSpan.FromSeconds(1), ct);
+        Assert.Equal(1, await MessageCount());
+
+        // Twenty in the window from one source, whoever they name.
+        for (var request = 3; request < 20; request++)
+        {
+            using var asked = await browser.PostAsJsonAsync("/password-recovery", new { email = $"nobody{request}@example.test" }, ct);
+            Assert.Equal(HttpStatusCode.Accepted, asked.StatusCode);
+        }
+
+        using var throttled = await browser.PostAsJsonAsync("/password-recovery", new { email = "someone@example.test" }, ct);
+        Assert.Equal(HttpStatusCode.TooManyRequests, throttled.StatusCode);
+        Assert.True(throttled.Headers.RetryAfter?.Delta > TimeSpan.Zero);
+        var problem = await throttled.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal("/problems/login-throttled", problem.GetProperty("type").GetString());
+    }
+
     [Fact]
     public async Task A_new_email_only_takes_effect_after_its_one_time_confirmation()
     {
@@ -125,15 +163,39 @@ public sealed class SmtpEndpointTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Gone, reused.StatusCode);
     }
 
+    // A recovery email leaves after the answer, so the latest message is
+    // waited for rather than expected to be there already.
     private async Task<string> SecretFromLatestMessage(string path)
     {
         using var mailpit = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{_mailpit.GetMappedPublicPort(8025)}") };
+        var text = string.Empty;
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            var messages = await mailpit.GetFromJsonAsync<JsonElement>("/api/v1/messages", TestContext.Current.CancellationToken);
+            if (messages.GetProperty("total").GetInt32() > 0)
+            {
+                var id = messages.GetProperty("messages")[0].GetProperty("ID").GetString();
+                var message = await mailpit.GetFromJsonAsync<JsonElement>($"/api/v1/message/{id}", TestContext.Current.CancellationToken);
+                text = message.GetProperty("Text").GetString()!;
+                var match = Regex.Match(text, $@"/{path}\?secret=([^\s]+)");
+                if (match.Success)
+                {
+                    return Uri.UnescapeDataString(match.Groups[1].Value);
+                }
+            }
+
+            await Task.Delay(200, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Fail($"No /{path} link arrived; the latest message says: {text}");
+        return string.Empty;
+    }
+
+    private async Task<int> MessageCount()
+    {
+        using var mailpit = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{_mailpit.GetMappedPublicPort(8025)}") };
         var messages = await mailpit.GetFromJsonAsync<JsonElement>("/api/v1/messages", TestContext.Current.CancellationToken);
-        var id = messages.GetProperty("messages")[0].GetProperty("ID").GetString();
-        var message = await mailpit.GetFromJsonAsync<JsonElement>($"/api/v1/message/{id}", TestContext.Current.CancellationToken);
-        var match = Regex.Match(message.GetProperty("Text").GetString()!, $@"/{path}\?secret=([^\s]+)");
-        Assert.True(match.Success, message.GetProperty("Text").GetString());
-        return Uri.UnescapeDataString(match.Groups[1].Value);
+        return messages.GetProperty("total").GetInt32();
     }
 
     private Dictionary<string, string?> ConfiguredMailpit() => new()

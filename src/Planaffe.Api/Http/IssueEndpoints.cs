@@ -104,15 +104,9 @@ public static class IssueEndpoints
 
         door.MapPatch(string.Empty, async (HttpRequest http, ChangeIssue change, CancellationToken cancellationToken) =>
             {
-                var body = await JsonDocument.ParseAsync(http.Body, cancellationToken: cancellationToken);
-                if (body.RootElement.ValueKind is not JsonValueKind.Object)
-                {
-                    throw Domain.Refusal.Validation("body", "A bulk change is an object.");
-                }
-                var keys = body.RootElement.TryGetProperty("keys", out var keysElement) && keysElement.ValueKind is JsonValueKind.Array
-                    ? keysElement.EnumerateArray().Select(key => key.GetString() ?? string.Empty).ToArray()
-                    : null;
-                var changes = body.RootElement.TryGetProperty("changes", out var changesElement)
+                var body = await PatchBody.ReadObjectAsync(http, "A bulk change", cancellationToken);
+                var keys = PatchBody.Texts(body, "keys");
+                var changes = body.TryGetProperty("changes", out var changesElement)
                     ? Changes(changesElement)
                     : throw Domain.Refusal.Validation("changes", "The changes object is required.");
                 return await change.ExecuteManyAsync(keys, changes, cancellationToken);
@@ -145,8 +139,8 @@ public static class IssueEndpoints
 
         door.MapPatch("/{key}", async (string key, HttpRequest http, ChangeIssue change, CancellationToken cancellationToken) =>
             {
-                var body = await JsonDocument.ParseAsync(http.Body, cancellationToken: cancellationToken);
-                return await change.ExecuteAsync(key, Changes(body.RootElement), http.Headers.IfMatch.ToString(), cancellationToken);
+                var body = await PatchBody.ReadObjectAsync(http, "A change", cancellationToken);
+                return await change.ExecuteAsync(key, Changes(body), http.Headers.IfMatch.ToString(), cancellationToken);
             })
             .WithName("ChangeIssue")
             .WithSummary("Change the fields present; `null` clears. `If-Match` with the `updated_at` last read guards the write.")
@@ -256,37 +250,26 @@ public static class IssueEndpoints
     // the raw document tells them apart.
     private static IssueChanges Changes(JsonElement body)
     {
-        if (body.ValueKind is not JsonValueKind.Object)
-        {
-            throw Domain.Refusal.Validation("body", "A change is an object.");
-        }
+        PatchBody.Object(body, "A change");
 
         return new IssueChanges(
-            Text(body, "title"),
-            body.TryGetProperty("description", out _),
-            Text(body, "description"),
-            body.TryGetProperty("result", out _),
-            Text(body, "result"),
-            body.TryGetProperty("priority", out var priority) && priority.ValueKind is JsonValueKind.Number
-                ? (Priority)priority.GetInt32()
-                : null,
-            body.TryGetProperty("ready", out var ready) && ready.ValueKind is JsonValueKind.True or JsonValueKind.False
-                ? ready.GetBoolean()
-                : null,
-            body.TryGetProperty("assignee", out _),
-            Text(body, "assignee"),
-            body.TryGetProperty("epic", out _),
-            Text(body, "epic"),
-            body.TryGetProperty("parent", out _),
-            Text(body, "parent"),
-            body.TryGetProperty("labels", out var labels) && labels.ValueKind is JsonValueKind.Array
-                ? [.. labels.EnumerateArray().Select(l => l.GetString() ?? string.Empty)]
-                : null,
-            Text(body, "status"));
+            PatchBody.Text(body, "title"),
+            PatchBody.Given(body, "description"),
+            PatchBody.Text(body, "description"),
+            PatchBody.Given(body, "result"),
+            PatchBody.Text(body, "result"),
+            (Priority?)PatchBody.Integer(body, "priority"),
+            PatchBody.Flag(body, "ready"),
+            PatchBody.Given(body, "assignee"),
+            PatchBody.Text(body, "assignee"),
+            PatchBody.Given(body, "epic"),
+            PatchBody.Text(body, "epic"),
+            PatchBody.Given(body, "parent"),
+            PatchBody.Text(body, "parent"),
+            PatchBody.Texts(body, "labels"),
+            PatchBody.Text(body, "status"));
     }
 
-    private static string? Text(JsonElement body, string property) =>
-        body.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.String ? value.GetString() : null;
 
     /// <summary>
     /// <c>status</c> and <c>label</c> repeat, which minimal APIs read from the

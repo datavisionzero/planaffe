@@ -59,6 +59,8 @@ type session struct {
 	env      map[string]string
 	settings string
 	store    *store
+	// dir is the working directory of every run; empty is a fresh one each.
+	dir string
 }
 
 func newSession(t *testing.T, server *httptest.Server, env map[string]string) *session {
@@ -75,9 +77,13 @@ func newSession(t *testing.T, server *httptest.Server, env map[string]string) *s
 func (s *session) run(args ...string) (code int, stdout, stderr string) {
 	s.t.Helper()
 	var out, errOut bytes.Buffer
+	dir := s.dir
+	if dir == "" {
+		dir = s.t.TempDir()
+	}
 	code = Run(context.Background(), args, Env{
 		Getenv:   func(k string) string { return s.env[k] },
-		Dir:      s.t.TempDir(),
+		Dir:      dir,
 		Stdin:    strings.NewReader(""),
 		Stdout:   &out,
 		Stderr:   &errOut,
@@ -95,6 +101,7 @@ type theInstance struct {
 	// pending is how many polls are answered `device-pending` before a human
 	// is taken to have pressed the button.
 	pending   int
+	throttled bool
 	collected bool
 	begun     int
 	polls     int
@@ -116,6 +123,9 @@ func (i *theInstance) handler() http.Handler {
 		switch {
 		case r.URL.Path == "/version":
 			reply(200, `{"version":"0.0.0-dev"}`)
+		case r.URL.Path == "/device-logins" && r.Method == http.MethodPost && i.throttled:
+			w.Header().Set("Retry-After", "600")
+			reply(429, `{"type":"/problems/login-throttled","status":429,"detail":"Too many logins were begun from this address. Try again in 10 minutes."}`)
 		case r.URL.Path == "/device-logins" && r.Method == http.MethodPost:
 			i.begun++
 			reply(200, `{"device_code":"a-very-long-device-code","user_code":"BCDF-GHJK","verification_uri":"/device",`+
@@ -247,6 +257,137 @@ func TestLoginCanBeToldAFileAndWritesItReadableOnlyByYou(t *testing.T) {
 	}
 }
 
+func TestLoginOverATokenFileWithALooseModeLeavesItReadableOnlyByYou(t *testing.T) {
+	instance := &theInstance{version: "0.0.0-dev"}
+	server := httptest.NewServer(instance.handler())
+	defer server.Close()
+
+	s := newSession(t, server, nil)
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(path, []byte("pa_an-old-token\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code, _, errOut := s.run("login", "--url", server.URL, "--token-file", path)
+	if code != exit.OK {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("the token file is mode %04o, and login said it was readable only by you", mode)
+	}
+
+	// And the next command reads it rather than refusing it.
+	if code, _, errOut := s.run("me"); code != exit.OK {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+}
+
+func TestLoginKeepsTheAbsolutePathOfARelativeOrHomeTokenFile(t *testing.T) {
+	instance := &theInstance{version: "0.0.0-dev"}
+	server := httptest.NewServer(instance.handler())
+	defer server.Close()
+
+	home := t.TempDir()
+	s := newSession(t, server, map[string]string{"HOME": home})
+	s.dir = t.TempDir()
+
+	for arg, want := range map[string]string{
+		"token":             filepath.Join(s.dir, "token"),
+		"~/.planaffe-token": filepath.Join(home, ".planaffe-token"),
+		"nested/../token-2": filepath.Join(s.dir, "token-2"),
+	} {
+		instance.collected, instance.polls = false, 0
+		code, _, errOut := s.run("login", "--url", server.URL, "--token-file", arg)
+		if code != exit.OK {
+			t.Fatalf("%s: code %d, stderr %q", arg, code, errOut)
+		}
+
+		settings, err := config.ReadSettings(s.settings)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if settings.TokenFile != want {
+			t.Fatalf("%s: the settings name %q, want %q", arg, settings.TokenFile, want)
+		}
+		if _, err := os.Stat(want); err != nil {
+			t.Fatalf("%s: %v", arg, err)
+		}
+	}
+
+	// A command started anywhere else still finds the token.
+	s.dir = ""
+	if code, _, errOut := s.run("me"); code != exit.OK {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+}
+
+func TestLoginRefusesATokenFileThatIsNotAFileBeforePrintingACode(t *testing.T) {
+	instance := &theInstance{version: "0.0.0-dev"}
+	server := httptest.NewServer(instance.handler())
+	defer server.Close()
+
+	s := newSession(t, server, nil)
+	code, _, errOut := s.run("login", "--url", server.URL, "--token-file", t.TempDir())
+
+	if code != exit.Usage || !strings.Contains(errOut, "not a regular file") {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+	if instance.begun != 0 {
+		t.Fatal("nobody should have been sent to a browser for a token pa cannot keep")
+	}
+}
+
+func TestAnExplicitUrlWinsOverTheEnvironmentForALogin(t *testing.T) {
+	instance := &theInstance{version: "0.0.0-dev"}
+	server := httptest.NewServer(instance.handler())
+	defer server.Close()
+
+	// The environment names an instance nothing answers at; the login has to
+	// go where the command line said.
+	s := newSession(t, server, map[string]string{config.EnvURL: "http://127.0.0.1:1"})
+	code, _, errOut := s.run("login", "--url", server.URL)
+	if code != exit.OK {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+	if !strings.Contains(errOut, "Signed in to "+server.URL) {
+		t.Fatalf("unexpected stderr %q", errOut)
+	}
+	if got := s.store.entries[server.URL]; got == "" {
+		t.Fatalf("the keychain holds %+v", s.store.entries)
+	}
+
+	// And it says that the environment still decides every later command.
+	for _, want := range []string{config.EnvURL, "http://127.0.0.1:1", "still wins"} {
+		if !strings.Contains(errOut, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, errOut)
+		}
+	}
+
+	settings, err := config.ReadSettings(s.settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Instance != server.URL {
+		t.Fatalf("unexpected settings %+v", settings)
+	}
+}
+
+func TestLoginRefusesAnUrlThatIsNotOneAndNamesTheFlag(t *testing.T) {
+	instance := &theInstance{version: "0.0.0-dev"}
+	server := httptest.NewServer(instance.handler())
+	defer server.Close()
+
+	code, _, errOut := newSession(t, server, nil).run("login", "--url", "planaffe.example")
+	if code != exit.Usage || !strings.Contains(errOut, "--url") {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+}
+
 func TestLoginWithoutAnAddressSaysWhichTwoWaysThereAre(t *testing.T) {
 	instance := &theInstance{version: "0.0.0-dev"}
 	server := httptest.NewServer(instance.handler())
@@ -324,5 +465,26 @@ func TestTheEnvironmentStillWinsOverALoginOnThisMachine(t *testing.T) {
 	}
 	if !strings.Contains(out, "from "+config.EnvToken) {
 		t.Fatalf("pa me reads the wrong token:\n%s", out)
+	}
+}
+
+// A throttled login is told to wait, in the instance's words, and is a refusal
+// and not a bug in pa — nor `device-pending`, which would have it poll.
+func TestLoginThatIsThrottledSaysHowLongToWait(t *testing.T) {
+	instance := &theInstance{version: "0.0.0-dev", throttled: true}
+	server := httptest.NewServer(instance.handler())
+	defer server.Close()
+
+	s := newSession(t, server, nil)
+	code, _, errOut := s.run("login", "--url", server.URL)
+
+	if code != exit.Refused {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+	if !strings.Contains(errOut, "Try again in 10 minutes") || !strings.Contains(errOut, "login-throttled") {
+		t.Fatalf("stderr does not say how long to wait:\n%s", errOut)
+	}
+	if instance.polls != 0 {
+		t.Fatalf("a throttled login polled %d times", instance.polls)
 	}
 }

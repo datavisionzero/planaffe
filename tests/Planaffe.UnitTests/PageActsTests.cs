@@ -476,8 +476,8 @@ public sealed class PageActsTests
 
         public World()
         {
-            Owner = User.Create("maintainer", administrator: true, Now);
-            Colleague = User.Create("colleague", administrator: false, Now);
+            Owner = User.Create("maintainer", "maintainer@example.test", administrator: true, Now);
+            Colleague = User.Create("colleague", "colleague@example.test", administrator: false, Now);
             Worker = Agent.Create("quiet-otter-42", Owner.Id, Now);
             Space = Space.Create("handbuch", "Handbuch", Owner.Id, Now);
             Other = Space.Create("personal", "Personal", Owner.Id, Now);

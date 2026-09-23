@@ -8,7 +8,8 @@ public static class ReleaseEndpoints
     {
         var door = endpoints.MapGroup("/projects/{key}/releases").RequireAuthorization().ProducesProblem(StatusCodes.Status401Unauthorized);
         door.MapGet(string.Empty, (string key, ListReleases list, CancellationToken ct) => list.ExecuteAsync(key, ct))
-            .WithName("ListReleases").WithSummary("Every release of the project: the open one first, then published ones newest first.");
+            .WithName("ListReleases").WithSummary("Every release of the project: the open one first, then published ones newest first.")
+            .ProducesProblem(StatusCodes.Status404NotFound);
         door.MapGet("/{name}", (string key, string name, ReadRelease read, CancellationToken ct) => read.ExecuteAsync(key, name, ct))
             .WithName("ReadRelease").WithSummary("One release with the issues that shipped in it.").ProducesProblem(StatusCodes.Status404NotFound);
         door.MapPatch("/{name}", async (string key, string name, ChangeReleaseRequest? request, ChangeRelease change, CancellationToken ct) =>
@@ -22,7 +23,8 @@ public static class ReleaseEndpoints
                 return Results.Created($"/projects/{key}/releases/{Uri.EscapeDataString(release.Name)}", release);
             })
             .WithName("PublishRelease").WithSummary("Name and freeze the open release, then create the next open one.")
-            .Produces<ReleaseShape>(StatusCodes.Status201Created).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status409Conflict);
+            .Produces<ReleaseShape>(StatusCodes.Status201Created).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict).ProducesProblem(StatusCodes.Status422UnprocessableEntity);
         door.MapPost("/{name}/retract", (string key, string name, RetractRelease retract, CancellationToken ct) => retract.ExecuteAsync(key, name, ct))
             .WithName("RetractRelease")
             .WithSummary("Take the newest publication back: the release is the open one again and the empty open release goes. Refused once another followed it.")

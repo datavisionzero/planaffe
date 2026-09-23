@@ -31,7 +31,7 @@ material value to understanding the decision.
 - [0005 – The contract is checked in, and both clients are generated from it](./0005-the-contract-is-checked-in-and-both-clients-are-generated-from-it.md)
 - [0006 – The web application is a shell before it is a screen](./0006-the-web-application-is-a-shell-before-it-is-a-screen.md)
 - [0007 – Markdown is rendered in the browser, and never as HTML](./0007-markdown-is-rendered-in-the-browser-and-never-as-html.md)
-- [0008 – planaffe logs into logaffe, and Serilog is the way out](./0008-planaffe-logs-into-logaffe-and-serilog-is-the-way-out.md)
+- [0008 – planaffe logs into logaffe, and Serilog is the way out](./0008-planaffe-logs-into-logaffe-and-serilog-is-the-way-out.md) — superseded by [0029](./0029-logging-uses-framework-providers.md)
 - [0009 – The MVP is built in three cuts, and the first one ends at the switch-over](./0009-the-mvp-is-built-in-three-cuts.md)
 - [0010 – The product speaks English, and only English](./0010-the-product-speaks-english-and-only-english.md)
 - [0011 – The API carries no version, and migrations only run forward](./0011-the-api-carries-no-version-and-migrations-only-run-forward.md)

@@ -161,7 +161,7 @@ public sealed class SpaceSearchActsTests
     {
         public World()
         {
-            Owner = User.Create("maintainer", administrator: true, Now);
+            Owner = User.Create("maintainer", "maintainer@example.test", administrator: true, Now);
             Worker = Agent.Create("quiet-otter-42", Owner.Id, Now);
             Handbook = Space.Create("handbuch", "Handbuch", Owner.Id, Now);
             Personal = Space.Create("personal", "Personal", Owner.Id, Now);

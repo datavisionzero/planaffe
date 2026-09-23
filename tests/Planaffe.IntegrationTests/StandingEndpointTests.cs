@@ -168,6 +168,42 @@ public sealed class StandingEndpointTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/standing", Ct)).StatusCode);
     }
 
+    /// <summary>
+    /// A blocker in a project the caller does not see still blocks: what the
+    /// standing counts as ready is what <c>next</c> would hand out, not more.
+    /// </summary>
+    [Fact]
+    public async Task Ready_agrees_with_next_when_the_blocker_is_in_a_project_out_of_sight()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "MINE", name = "mine" }, Ct);
+        await admin.PostAsJsonAsync("/projects", new { key = "THEIRS", name = "theirs" }, Ct);
+        using var blocker = await admin.PostAsJsonAsync("/issues", new { project = "THEIRS", issues = new[] { new { title = "Theirs" } } }, Ct);
+        Assert.Equal(HttpStatusCode.Created, blocker.StatusCode);
+        using var blocked = await admin.PostAsJsonAsync("/issues", new
+        {
+            project = "MINE",
+            issues = new object[] { new { title = "Blocked from over there", blocked_by = new[] { "THEIRS-1" } }, new { title = "Free" } },
+        }, Ct);
+        Assert.Equal(HttpStatusCode.Created, blocked.StatusCode);
+
+        var otherToken = await instance.AddActiveUserAsync("other");
+        using var other = instance.ClientWith(otherToken);
+        using var users = await admin.GetAsync("/users", Ct);
+        var otherId = (await users.Content.ReadFromJsonAsync<JsonElement>(Ct)).EnumerateArray()
+            .Single(value => value.GetProperty("name").GetString() == "other").GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsync($"/projects/MINE/users/{otherId}", null, Ct)).StatusCode);
+
+        var next = await other.GetFromJsonAsync<JsonElement>("/projects/MINE/next", Ct);
+        Assert.Equal(1, next.GetProperty("total").GetInt32());
+
+        var standing = await other.GetFromJsonAsync<JsonElement>("/standing", Ct);
+        var work = Project(standing, "MINE").GetProperty("work");
+        Assert.Equal(1, work.GetProperty("ready").GetInt32());
+        Assert.Equal(2, work.GetProperty("open").GetInt32());
+    }
+
     private static JsonElement Project(JsonElement answer, string key) =>
         answer.GetProperty("projects").EnumerateArray().Single(value => value.GetProperty("key").GetString() == key);
 

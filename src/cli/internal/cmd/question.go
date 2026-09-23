@@ -34,6 +34,9 @@ func newQuestionList(g *globals) *cobra.Command {
 		Short: "Open questions across the project, oldest first — what only a human can resolve.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := exclusive(cmd, [2]string{"answered", "all"}); err != nil {
+				return err
+			}
 			cfg, c, err := g.load()
 			if err != nil {
 				return err
@@ -53,18 +56,15 @@ func newQuestionList(g *globals) *cobra.Command {
 				v := int32(limit)
 				params.Limit = &v
 			}
-			resp, err := c.ListQuestionsWithResponse(cmd.Context(), params, func(_ context.Context, req *http.Request) error {
+			resp, err := client.Checked(c.ListQuestionsWithResponse(cmd.Context(), params, func(_ context.Context, req *http.Request) error {
 				if all {
 					q := req.URL.Query()
 					q.Del("open")
 					req.URL.RawQuery = q.Encode()
 				}
 				return nil
-			})
+			}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -105,11 +105,8 @@ func newQuestionAnswer(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.AnswerQuestionWithResponse(cmd.Context(), id, api.AnswerRequest{Answer: &text})
+			resp, err := client.Checked(c.AnswerQuestionWithResponse(cmd.Context(), id, api.AnswerRequest{Answer: &text}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {

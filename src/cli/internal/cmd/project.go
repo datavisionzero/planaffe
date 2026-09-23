@@ -30,11 +30,8 @@ func newProjectAccess(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListProjectUsersWithResponse(cmd.Context(), strings.ToUpper(args[0]))
+			resp, err := client.Checked(c.ListProjectUsersWithResponse(cmd.Context(), strings.ToUpper(args[0])))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -119,11 +116,8 @@ func newProjectCreate(g *globals) *cobra.Command {
 			if review {
 				body.ReviewRequired = &review
 			}
-			resp, err := c.CreateProjectWithResponse(cmd.Context(), body)
+			resp, err := client.Checked(c.CreateProjectWithResponse(cmd.Context(), body))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printProject(g, cmd, *resp.JSON201)
@@ -142,11 +136,8 @@ func newProjectList(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListProjectsWithResponse(cmd.Context())
+			resp, err := client.Checked(c.ListProjectsWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -172,11 +163,8 @@ func newProjectView(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReadProjectWithResponse(cmd.Context(), key)
+			resp, err := client.Checked(c.ReadProjectWithResponse(cmd.Context(), key))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printProject(g, cmd, *resp.JSON200)
@@ -231,11 +219,8 @@ func newProjectEdit(g *globals) *cobra.Command {
 				return &config.UsageError{Message: "nothing to change: --name, --triage-required, --review-required or --instructions-file."}
 			}
 			body, _ := json.Marshal(changes)
-			resp, err := c.ChangeProjectWithBodyWithResponse(cmd.Context(), strings.ToUpper(args[0]), "application/json", bytes.NewReader(body))
+			resp, err := client.Checked(c.ChangeProjectWithBodyWithResponse(cmd.Context(), strings.ToUpper(args[0]), "application/json", bytes.NewReader(body)))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printProject(g, cmd, *resp.JSON200)
@@ -263,11 +248,8 @@ func newProjectDelete(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.DeleteProjectWithResponse(cmd.Context(), key)
+			_, err = client.Checked(c.DeleteProjectWithResponse(cmd.Context(), key))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -289,11 +271,8 @@ func newProjectRestore(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RestoreProjectWithResponse(cmd.Context(), strings.ToUpper(args[0]))
+			resp, err := client.Checked(c.RestoreProjectWithResponse(cmd.Context(), strings.ToUpper(args[0])))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printProject(g, cmd, *resp.JSON200)

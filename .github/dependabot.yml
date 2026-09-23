@@ -1,0 +1,36 @@
+# Updates arrive as pull requests and go through the same gate as everything
+# else. A version bump of something already here is not a new dependency
+# (ADR 0023); one that pulls in a new package is, and is read as such before
+# it is merged.
+#
+# The actions are pinned by commit, with the version in a comment beside it,
+# and this is what keeps those pins from going stale.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /src/web
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /src/cli
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule:
+      interval: weekly

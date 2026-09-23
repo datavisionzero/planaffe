@@ -155,10 +155,42 @@ public sealed class BrowserIdentityEndpointTests(PostgresFixture postgres)
         Assert.StartsWith("https://plan.example.org/activate?secret=", invitation);
     }
 
+    /// <summary>
+    /// A one-time secret is spent once, however many hands hold it at the same
+    /// moment: of the redemptions that arrive together, one sets the password
+    /// and the others are told the secret is gone.
+    /// </summary>
+    [Fact]
+    public async Task A_secret_redeemed_twice_at_once_is_spent_once()
+    {
+        await using var instance = await AnInstance.ConfiguredAsync(postgres, WithoutSmtp);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+
+        for (var round = 0; round < 5; round++)
+        {
+            var name = $"other{round}";
+            using var invited = await admin.PostAsJsonAsync("/users",
+                new { name, email = $"{name}@example.test" }, Ct);
+            Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
+            var secret = SecretIn(await Link(admin, $"/users/{name}/invitation-link"));
+
+            var answers = await Task.WhenAll(Enumerable.Range(0, 4).Select(async attempt =>
+            {
+                using var browser = instance.ClientWith(null);
+                using var accepted = await browser.PostAsJsonAsync("/invitations/accept",
+                    new { secret, password = $"a long password number {attempt}" }, Ct);
+                return accepted.StatusCode;
+            }));
+
+            Assert.Equal(1, answers.Count(status => status == HttpStatusCode.NoContent));
+            Assert.All(answers, status => Assert.True((int)status < 500, $"a redemption answered {status}"));
+        }
+    }
+
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
 
     /// <summary>An instance with transactional email switched off entirely (ADR 0018).</summary>
-    private static readonly Dictionary<string, string?> WithoutSmtp = new()
+    internal static readonly Dictionary<string, string?> WithoutSmtp = new()
     {
         ["PLANAFFE_PUBLIC_URL"] = string.Empty,
         ["PLANAFFE_SMTP_HOST"] = string.Empty,

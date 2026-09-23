@@ -71,6 +71,12 @@ TanStack Virtual, `react-markdown`, Serilog, Cobra and the rest were decided,
 each in its place, and this rule is not a reason to revisit them. It applies to
 the next one.
 
+> **Since
+> [ADR 0029](./0029-logging-uses-framework-providers.md)**, Serilog is no
+> longer among them: logging goes through the framework's own providers and
+> `Logaffe.Extensions.Logging`, which was approved under this rule. The rest
+> of this paragraph stands.
+
 **Nothing about what the answer should be.** ADR 0017's refusals stay refusals
 and remain correct on their own reasoning. A rule about how a question is
 decided says nothing about how it comes out.

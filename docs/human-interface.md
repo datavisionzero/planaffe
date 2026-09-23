@@ -302,8 +302,8 @@ the page it happens to hold — the epic is the first sort key on the server
 page it began on. A head names the epic and its title, the run for the issues
 under no epic comes last and says "No epic" rather than trailing off the end,
 and within a group the order is what is up next: priority first. The heads are
-rows of the same virtual window and are `presentation` inside the listbox, which
-takes only options; every row still says which issue it is.
+rows of the same virtual window, drawn for the eye and hidden from assistive
+technology: the list holds only issues, and every row names its epic itself.
 
 **A row names the epic it hangs under**, as its key and not its title. A list
 that hides it makes the reader open a ticket to learn what it is part of, and
@@ -325,8 +325,19 @@ native option holds text and nothing else.
 `j` and `k` move the active row, `Enter` opens it, `/` focuses
 search and `Escape` closes the topmost filter or preview — the same list `?`
 shows. Focus and the active
-row remain visible. Returning from a detail screen restores filters and scroll
-position.
+row remain visible. The list is a list of links rather than a listbox, and the
+active row is where the focus is: `j` and `k` move the focus onto the next
+row's link, so a screen reader hears the row the eye sees, and Tab enters the
+list at that row and leaves it again. `Enter` belongs to whatever has the focus
+— a button, a chip, a row's link — and the list opens the active row only where
+the focus is on nothing that answers it. Returning from a detail screen
+restores filters and scroll position; the rows that were loaded are loaded
+again first, so the offset is there to return to.
+
+The search field waits for a pause in the typing before the address — and the
+list — follow it, the same pause the palette waits, and while a new query is on
+its way the rows of the last one stay in place rather than giving way to the
+loading state.
 
 Anything that has to exist already is chosen, never typed. One control does it
 everywhere: chips for what is chosen, a field that filters, a list of what
@@ -556,7 +567,10 @@ than a plainer text area that would be swapped out from under somebody who had
 started typing. Fenced code is not highlighted; it
 carries the language its fence named ([ADR 0017](./adr/0017-the-web-application-is-drawn-by-tailwind-and-base-ui-components-the-repository-owns.md)).
 Loading, empty, error and permission states are designed states rather than
-blank screens.
+blank screens. A screen that fails — one that throws, or a lazy chunk a
+redeploy took away — fails inside the frame: the navigation stays, the screen
+area says so and offers a reload, and the next address tries again. A missing
+chunk reloads the page once by itself, and only once.
 
 Three of those weights are a number and not a description, because a budget
 that names none is never exceeded — it is only not kept, and nobody notices:

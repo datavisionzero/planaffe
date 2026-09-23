@@ -76,8 +76,9 @@ merely to plan them.
 Immediately before writing, reread the epic and its issues to detect concurrent
 planning. Epics have no claim, so this is not an atomic planning lock. If
 another planner is active, coordinate with the user instead of creating a
-competing breakdown. After an uncertain write, inspect the server before
-retrying; never replay a batch blindly.
+competing breakdown. `pa` repeats a write whose connection dropped by itself,
+safely; after a write that still ends uncertain, inspect the server before
+running it again, because a new invocation is a new request.
 
 Keep agreed shared decisions in the epic description where needed, preserving
 existing content with `pa epic edit EPIC --description-file - --if-match VERSION`

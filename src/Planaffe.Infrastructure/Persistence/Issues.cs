@@ -13,7 +13,7 @@ namespace Planaffe.Infrastructure.Persistence;
 /// the expired claim gone — and writes take the row <c>for update</c>
 /// (<c>docs/storage.md</c>, What is derived on read).
 /// </summary>
-public sealed class Issues(PlanaffeDbContext context) : IIssues
+public sealed class Issues(PlanaffeDbContext context, TimeProvider clock) : IIssues
 {
     private const int CycleDepth = 100;
 
@@ -22,6 +22,8 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         public Guid Id { get; init; }
 
         public int Because { get; init; }
+
+        public int Total { get; init; }
     }
 
     public Task<IssueRow?> FindLiveAsync(string projectKey, int number, CancellationToken cancellationToken) =>
@@ -54,19 +56,51 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         return new IssuePageRows(hasMore ? page[..limit] : page, total, hasMore);
     }
 
+    // Which rows of `issue` the three statements below build `derived` from:
+    // not deleted, and not in a deleted project. `Live()` says the same through
+    // `issue_read`; this is the one place the raw SQL says it, because a blocker
+    // may sit in another project and a project is deleted by marking its row
+    // alone (ADR 0013).
+    private const string LiveRows = """
+        i.deleted_at is null
+               and not exists (select 1 from project dp where dp.id = i.project_id and dp.deleted_at is not null)
+        """;
+
     // The eight conditions of VISION 10 as
     // one statement over the table, with the two derived rules repeated inline
     // — because the row it locks is the row, not the view (docs/storage.md).
     // The GET and the POST run the same text; the POST adds the lock.
-    private const string Workable = """
-        with derived as (
+    //
+    // `derived` holds only the rows the conditions can name: the project's
+    // own, the parents and sub-issues of those, and whatever blocks any of
+    // them — which is where another project comes in. Every condition looks
+    // at most one blocker edge away, so one step is enough, and the project's
+    // rows come off `issue_next` instead of a scan of the instance.
+    //
+    // An expired claim is measured against the instance's clock, `{9}`, not
+    // the database's: the claim this lock is taken for is written by
+    // `Issue.ClaimFor` with that clock, and a database a second ahead would
+    // hand out an issue the domain then refuses as `claim-held`.
+    private const string Workable = $$"""
+        with near as (
+            select t.id, t.parent_id from issue t where t.project_id = {0} and t.deleted_at is null
+        ),
+        reach (id) as (
+            select id from near
+            union select parent_id from near where parent_id is not null
+            union select child.id from issue child join near n on child.parent_id = n.id
+            union select edge.blocker_id from blocker edge join near n on edge.blocked_id = n.id
+            union select edge.blocker_id from blocker edge join near n on edge.blocked_id = n.parent_id
+        ),
+        derived as (
             select i.id, i.project_id, i.epic_id, i.parent_id, i.priority, i.created_at, i.number, i.assignee_id, i.ready,
-                   case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+                   case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= {9}
                         then 'todo' else i.status end as status,
-                   case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+                   case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= {9}
                         then null else i.claimed_by end as claimed_by
               from issue i
-             where i.deleted_at is null
+              join reach r on r.id = i.id
+             where {{LiveRows}}
         )
         select d.id
           from derived d
@@ -86,9 +120,9 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
            -- a refusal the caller cannot act on and VISION 11 does not allow.
            and i.deleted_at is null
            and i.project_id = {0}
-           and (case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+           and (case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= {9}
                      then 'todo' else i.status end) = 'todo'
-           and (case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
+           and (case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= {9}
                      then null else i.claimed_by end) is null
            and (i.assignee_id is null or i.assignee_id = {1})
            and (not {2} or i.ready)
@@ -148,7 +182,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
 
     public async Task<bool> IsWorkableAsync(Guid issueId, NextQuery query, CancellationToken cancellationToken)
     {
-        var sql = "select exists (" + Workable + " and d.id = {9}) as \"Value\"";
+        var sql = "select exists (" + Workable + " and d.id = {10}) as \"Value\"";
         var parameters = Parameters(query, 0).Append(issueId).ToArray();
         return (await context.Database.SqlQueryRaw<bool>(sql, parameters).ToListAsync(cancellationToken))[0];
     }
@@ -214,13 +248,24 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     // blocked issue in the project into a separate emergency at once — and the
     // thing to do about it is to create an agent token, which has nothing to do
     // with any of them. It is counted once per answer instead.
-    private const string NeedsYouBase = """
-        with recursive derived as (
+    //
+    // `derived` holds the project's rows and everything that blocks them,
+    // however far down the chain and in whatever project: `walk` follows the
+    // chain to its end, so one step would not do. `union` rather than
+    // `union all` is what ends the reach at a cycle.
+    private const string NeedsYouBase = $$"""
+        with recursive reach (id) as (
+            select t.id from issue t where t.project_id = {0} and t.deleted_at is null
+            union
+            select edge.blocker_id from reach join blocker edge on edge.blocked_id = reach.id
+        ),
+        derived as (
             select i.id, i.project_id, i.priority, i.created_at, i.number, i.ready,
                    case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
                         then 'todo' else i.status end as status
               from issue i
-             where i.deleted_at is null
+              join reach r on r.id = i.id
+             where {{LiveRows}}
         ),
         walk (root_id, node_id, path) as (
             select blocked.id, blocker.id, array[blocked.id, blocker.id]
@@ -284,13 +329,20 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                   or (because = {3} and priority = {4} and created_at = {5} and number = {6} and id > {7})
               """;
 
-        var pageSql = NeedsYouBase + "select id as \"Id\", because as \"Because\" from classified " + afterSql
-            + " order by because, priority desc, created_at, number, id limit {8}";
+        // The page carries the total beside every row, so the recursion is
+        // walked once rather than once for the page and once for the count.
+        // Only a page with no rows on it has to ask for the number on its own.
+        var pageSql = NeedsYouBase
+            + "select id as \"Id\", because as \"Because\", (select count(*)::int from classified) as \"Total\" from classified "
+            + afterSql + " order by because, priority desc, created_at, number, id limit {8}";
         var countSql = NeedsYouBase + "select count(*)::int as \"Value\" from classified";
         var selected = await context.Database.SqlQueryRaw<NeedsYouSelection>(pageSql, parameters)
             .ToListAsync(cancellationToken);
-        var total = (await context.Database.SqlQueryRaw<int>(countSql, parameters)
-            .ToListAsync(cancellationToken))[0];
+        var total = selected.Count > 0
+            ? selected[0].Total
+            : after is null
+                ? 0
+                : (await context.Database.SqlQueryRaw<int>(countSql, parameters).ToListAsync(cancellationToken))[0];
         var hasMore = selected.Count > limit;
         var page = hasMore ? selected[..limit] : selected;
 
@@ -329,18 +381,34 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     }
 
     // Every project's standing in one statement (ADR 0024). The shape is the
-    // needs-you query generalised: `derived` and `walk` are scoped by a join
-    // against the projects asked for instead of by one project id, and the
-    // triage switch comes out of that join rather than out of a parameter,
-    // because it differs per project. The recursion is the expensive half and
-    // it is walked once for all of them rather than once each.
+    // needs-you query generalised: the candidates and the roots of `walk` are
+    // scoped by a join against the projects asked for instead of by one
+    // project id, and the triage switch comes out of that join rather than out
+    // of a parameter, because it differs per project. `derived` is not
+    // limited to those projects, as it is not for `next`: a blocker may sit in
+    // a project nobody asked about, and it blocks all the same — it is limited
+    // to what `reach` can get to from them. The recursion is the expensive
+    // half and it is walked once for all of them rather than once each.
     //
     // The counts that are not "needs you" — workable, blocked, open, in flight
     // — are aggregated in the same pass over `derived`, so a project that has
     // nothing in any group still costs nothing extra.
-    private const string StandingSql = """
+    private const string StandingSql = $$"""
         with recursive scope (project_id, triage_required) as (
             select id, triage from unnest({0}::uuid[], {1}::boolean[]) as asked(id, triage)
+        ),
+        -- The rows of the projects asked for, their parents and sub-issues,
+        -- and everything that blocks any of those down to the end of the
+        -- chain, in whatever project: what `work` and `walk` can name.
+        reach (id) as (
+            select t.id from issue t join scope s on s.project_id = t.project_id where t.deleted_at is null
+            union
+            select t.parent_id from issue t join scope s on s.project_id = t.project_id
+             where t.deleted_at is null and t.parent_id is not null
+            union
+            select child.id from issue child join issue t on t.id = child.parent_id join scope s on s.project_id = t.project_id
+            union
+            select edge.blocker_id from reach join blocker edge on edge.blocked_id = reach.id
         ),
         derived as (
             select i.id, i.project_id, i.epic_id, i.parent_id, i.priority, i.created_at, i.number,
@@ -350,12 +418,13 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                    case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
                         then null else i.claimed_by end as claimed_by
               from issue i
-              join scope s on s.project_id = i.project_id
-             where i.deleted_at is null
+              join reach r on r.id = i.id
+             where {{LiveRows}}
         ),
         walk (root_id, node_id, path) as (
             select blocked.id, blocker.id, array[blocked.id, blocker.id]
               from derived blocked
+              join scope rs on rs.project_id = blocked.project_id
               join blocker edge on edge.blocked_id = blocked.id
               join derived blocker on blocker.id = edge.blocker_id
              where blocked.status not in ('done', 'canceled')
@@ -513,7 +582,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         limit,
     ];
 
-    private static object[] Parameters(NextQuery query, int limit) =>
+    private object[] Parameters(NextQuery query, int limit) =>
     [
         query.ProjectId,
         query.CallerId,
@@ -524,6 +593,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = Label.RepoGroup },
         limit,
         query.EpicNone,
+        clock.GetUtcNow(),
     ];
 
     // Two statements, deliberately. The lock is its own statement, because a
@@ -542,7 +612,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         var locked = await context.Database.ExecuteSqlRawAsync(
             "select id from issue where id = {0} and deleted_at is null for update", [id], cancellationToken);
 
-        return await context.Issues.SingleOrDefaultAsync(i => i.Id == id && i.DeletedAt == null, cancellationToken);
+        return await Fresh.SingleAsync(context.Issues, id, i => i.Id == id && i.DeletedAt == null, cancellationToken);
     }
 
     public async Task<Issue?> LoadDeletedForWriteAsync(Guid id, CancellationToken cancellationToken)
@@ -555,7 +625,7 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         await context.Database.ExecuteSqlRawAsync(
             "select id from issue where id = {0} and deleted_at is not null for update", [id], cancellationToken);
 
-        return await context.Issues.SingleOrDefaultAsync(i => i.Id == id && i.DeletedAt != null, cancellationToken);
+        return await Fresh.SingleAsync(context.Issues, id, i => i.Id == id && i.DeletedAt != null, cancellationToken);
     }
 
     public async Task<IReadOnlyList<IssueLabelRow>> LabelsOfAsync(IReadOnlyCollection<Guid> issueIds, CancellationToken cancellationToken) =>
@@ -611,15 +681,18 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
 
     public void Add(Comment comment) => context.Comments.Add(comment);
 
+    // Read fresh: an act finds the comment before its transaction and again
+    // under the issue's lock, and the second read has to see what the first
+    // one could not.
     public Task<Comment?> FindCommentAsync(Guid id, CancellationToken cancellationToken) =>
-        context.Comments.SingleOrDefaultAsync(c => c.Id == id, cancellationToken);
+        Fresh.SingleAsync(context.Comments, id, c => c.Id == id, cancellationToken);
 
     public void Remove(Comment comment) => context.Comments.Remove(comment);
 
     public void Add(Question question) => context.Questions.Add(question);
 
     public Task<Question?> FindQuestionAsync(Guid id, CancellationToken cancellationToken) =>
-        context.Questions.SingleOrDefaultAsync(q => q.Id == id, cancellationToken);
+        Fresh.SingleAsync(context.Questions, id, q => q.Id == id, cancellationToken);
 
     public Task<Question?> FindQuestionForReadAsync(Guid id, CancellationToken cancellationToken) =>
         context.Questions.AsNoTracking().SingleOrDefaultAsync(q => q.Id == id, cancellationToken);
@@ -733,11 +806,26 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         where p.DeletedAt == null
         select new IssueRow
         {
-            Id = i.Id, ProjectId = i.ProjectId, ProjectKey = p.Key, Number = i.Number, Title = i.Title,
-            Description = i.Description, Result = i.Result, Status = i.Status, Ready = i.Ready, Priority = i.Priority,
-            AssigneeId = i.AssigneeId, EpicId = i.EpicId, EpicNumber = e == null ? null : e.Number, ParentId = i.ParentId,
-            ClaimedBy = i.ClaimedBy, ClaimedAt = i.ClaimedAt,
-            ClaimExpiresAt = i.ClaimExpiresAt, AuthorId = i.AuthorId, CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
+            Id = i.Id,
+            ProjectId = i.ProjectId,
+            ProjectKey = p.Key,
+            Number = i.Number,
+            Title = i.Title,
+            Description = i.Description,
+            Result = i.Result,
+            Status = i.Status,
+            Ready = i.Ready,
+            Priority = i.Priority,
+            AssigneeId = i.AssigneeId,
+            EpicId = i.EpicId,
+            EpicNumber = e == null ? null : e.Number,
+            ParentId = i.ParentId,
+            ClaimedBy = i.ClaimedBy,
+            ClaimedAt = i.ClaimedAt,
+            ClaimExpiresAt = i.ClaimExpiresAt,
+            AuthorId = i.AuthorId,
+            CreatedAt = i.CreatedAt,
+            UpdatedAt = i.UpdatedAt,
             ClosedAt = i.ClosedAt,
         };
 
@@ -751,12 +839,29 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         where i.DeletedAt != null
         select new IssueRow
         {
-            Id = i.Id, ProjectId = i.ProjectId, ProjectKey = p.Key, Number = i.Number, Title = i.Title,
-            Description = i.Description, Result = i.Result, Status = i.Status, Ready = i.Ready, Priority = i.Priority,
-            AssigneeId = i.AssigneeId, EpicId = i.EpicId, EpicNumber = e == null ? null : e.Number, ParentId = i.ParentId,
-            ClaimedBy = i.Claim!.HolderId, ClaimedAt = i.Claim!.ClaimedAt,
-            ClaimExpiresAt = i.Claim!.ExpiresAt, AuthorId = i.AuthorId, CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
-            ClosedAt = i.ClosedAt, DeletedAt = i.DeletedAt, DeletedBy = i.DeletedBy,
+            Id = i.Id,
+            ProjectId = i.ProjectId,
+            ProjectKey = p.Key,
+            Number = i.Number,
+            Title = i.Title,
+            Description = i.Description,
+            Result = i.Result,
+            Status = i.Status,
+            Ready = i.Ready,
+            Priority = i.Priority,
+            AssigneeId = i.AssigneeId,
+            EpicId = i.EpicId,
+            EpicNumber = e == null ? null : e.Number,
+            ParentId = i.ParentId,
+            ClaimedBy = i.Claim!.HolderId,
+            ClaimedAt = i.Claim!.ClaimedAt,
+            ClaimExpiresAt = i.Claim!.ExpiresAt,
+            AuthorId = i.AuthorId,
+            CreatedAt = i.CreatedAt,
+            UpdatedAt = i.UpdatedAt,
+            ClosedAt = i.ClosedAt,
+            DeletedAt = i.DeletedAt,
+            DeletedBy = i.DeletedBy,
         };
 
     private IQueryable<IssueRow> Filtered(IQueryable<IssueRow> rows, IssueQuery query)

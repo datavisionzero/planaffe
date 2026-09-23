@@ -91,7 +91,7 @@ public sealed class Release
     public static string NormalizeName(string name)
     {
         var value = name?.Trim();
-        if (string.IsNullOrEmpty(value) || value.Contains('\n') || value.Length > NameMaxLength)
+        if (string.IsNullOrEmpty(value) || value.IndexOfAny(['\r', '\n']) >= 0 || value.Length > NameMaxLength)
         {
             throw new ArgumentException($"A release name is one line of at most {NameMaxLength} characters.", nameof(name));
         }

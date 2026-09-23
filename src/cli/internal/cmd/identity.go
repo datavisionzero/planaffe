@@ -34,11 +34,8 @@ func newMe(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReadMeWithResponse(cmd.Context())
+			resp, err := client.Checked(c.ReadMeWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -58,11 +55,8 @@ func newMeEmail(g *globals) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		resp, err := c.RequestEmailChangeWithResponse(cmd.Context(), api.EmailChangeRequest{Email: &args[0]})
+		_, err = client.Checked(c.RequestEmailChangeWithResponse(cmd.Context(), api.EmailChangeRequest{Email: &args[0]}))
 		if err != nil {
-			return client.Transport(err)
-		}
-		if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 			return err
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "confirmation sent")
@@ -96,11 +90,8 @@ func newMeSet(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReportAgentMetadataWithBodyWithResponse(cmd.Context(), "application/json", bytes.NewReader(encoded))
+			resp, err := client.Checked(c.ReportAgentMetadataWithBodyWithResponse(cmd.Context(), "application/json", bytes.NewReader(encoded)))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -119,11 +110,19 @@ func newMeSet(g *globals) *cobra.Command {
 
 // newVersion prints both sides — and, when they do not fit, says so with exit
 // 9, the way every other command would have on its first request (ADR 0011).
+//
+// It needs an address and no token: `/version` is anonymous, and this is the
+// command other messages send somebody to when something does not fit — often
+// before there is a token to hand, or when the one in hand is the problem.
 func newVersion(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use: "version", Short: "pa's version and the instance's, and whether the two fit.", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, c, err := g.load()
+			settings, err := g.readSettings()
+			if err != nil {
+				return err
+			}
+			_, c, err := g.anonymous(settings, "")
 			if err != nil {
 				return err
 			}
@@ -167,11 +166,8 @@ func newUser(g *globals) *cobra.Command {
 			if administrator {
 				body.Administrator = &administrator
 			}
-			resp, err := c.CreateUserWithResponse(cmd.Context(), body)
+			resp, err := client.Checked(c.CreateUserWithResponse(cmd.Context(), body))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -191,11 +187,8 @@ func newUser(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListUsersWithResponse(cmd.Context())
+			resp, err := client.Checked(c.ListUsersWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -253,16 +246,18 @@ func newUser(g *globals) *cobra.Command {
 		return resp.HTTPResponse, resp.Body, nil
 	}, "reactivated")
 	var role bool
-	roleCommand := &cobra.Command{Use: "administrator USER", Short: "Grant or revoke the administrator role. The user by name or id.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	roleCommand := &cobra.Command{Use: "administrator USER --enabled=true|false", Short: "Grant or revoke the administrator role. The user by name or id.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		// Granting the one role that administers everything is not a default:
+		// `pa user administrator bob` used to mean yes.
+		if !cmd.Flags().Changed("enabled") {
+			return &config.UsageError{Message: "say which: --enabled=true grants the administrator role, --enabled=false revokes it."}
+		}
 		_, c, err := g.load()
 		if err != nil {
 			return err
 		}
-		resp, err := c.ChangeUserAdministratorWithResponse(cmd.Context(), args[0], api.ChangeAdministratorRequest{Administrator: &role})
+		resp, err := client.Checked(c.ChangeUserAdministratorWithResponse(cmd.Context(), args[0], api.ChangeAdministratorRequest{Administrator: &role}))
 		if err != nil {
-			return client.Transport(err)
-		}
-		if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 			return err
 		}
 		if g.json {
@@ -271,7 +266,7 @@ func newUser(g *globals) *cobra.Command {
 		fmt.Fprintf(cmd.OutOrStdout(), "%s administrator=%t\n", args[0], role)
 		return nil
 	}}
-	roleCommand.Flags().BoolVar(&role, "enabled", true, "whether the user administers the instance")
+	roleCommand.Flags().BoolVar(&role, "enabled", false, "whether the user administers the instance; required")
 	cmd.AddCommand(create, list, resend, invitationLink, passwordLink, deactivate, reactivate, roleCommand)
 	return cmd
 }
@@ -345,11 +340,8 @@ func newAgent(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.CreateAgentWithResponse(cmd.Context(), api.CreateAgentRequest{Name: optional(name)})
+			resp, err := client.Checked(c.CreateAgentWithResponse(cmd.Context(), api.CreateAgentRequest{Name: optional(name)}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -368,11 +360,8 @@ func newAgent(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListAgentsWithResponse(cmd.Context())
+			resp, err := client.Checked(c.ListAgentsWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -389,11 +378,8 @@ func newAgent(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListAgentsWithResponse(cmd.Context())
+			resp, err := client.Checked(c.ListAgentsWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			for _, agent := range *resp.JSON200 {
@@ -419,11 +405,8 @@ func newAgent(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RenameAgentWithResponse(cmd.Context(), args[0], api.RenameAgentRequest{Name: &newName})
+			resp, err := client.Checked(c.RenameAgentWithResponse(cmd.Context(), args[0], api.RenameAgentRequest{Name: &newName}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -444,11 +427,8 @@ func newAgent(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RotateAgentTokenWithResponse(cmd.Context(), args[0])
+			resp, err := client.Checked(c.RotateAgentTokenWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -466,11 +446,8 @@ func newAgent(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RevokeAgentWithResponse(cmd.Context(), args[0])
+			_, err = client.Checked(c.RevokeAgentWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -493,11 +470,8 @@ func newToken(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.CreateTokenWithResponse(cmd.Context())
+			resp, err := client.Checked(c.CreateTokenWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -515,11 +489,8 @@ func newToken(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListTokensWithResponse(cmd.Context())
+			resp, err := client.Checked(c.ListTokensWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -546,11 +517,8 @@ func newToken(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RevokeTokenWithResponse(cmd.Context(), id)
+			_, err = client.Checked(c.RevokeTokenWithResponse(cmd.Context(), id))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {

@@ -97,13 +97,15 @@ public static class IdentityEndpoints
                 issue.ExecuteAsync(id, OneTimeSecretPurpose.Invitation, ct))
             .WithName("IssueInvitationLink")
             .WithSummary("Issue an invited user's activation link and return it instead of mailing it, by name or id. Administrators only.")
-            .Produces<AccessLink>().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+            .Produces<AccessLink>().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+            .ShownOnce();
 
         door.MapPost("/users/{id}/recovery-link", (string id, IssueAccessLink issue, CancellationToken ct) =>
                 issue.ExecuteAsync(id, OneTimeSecretPurpose.PasswordRecovery, ct))
             .WithName("IssueRecoveryLink")
             .WithSummary("Issue an active user's password link and return it instead of mailing it, by name or id. Administrators only.")
-            .Produces<AccessLink>().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+            .Produces<AccessLink>().ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+            .ShownOnce();
 
         door.MapPost("/users/{id}/deactivate", (string id, ChangeUserLifecycle change, CancellationToken ct) =>
                 change.ExecuteAsync(id, UserLifecycleChange.Deactivate, ct))
@@ -146,7 +148,8 @@ public static class IdentityEndpoints
             .WithName("CreateAgent")
             .WithSummary("Create an agent and its one token, shown once. Users only.")
             .Produces<CreatedAgent>(StatusCodes.Status201Created)
-            .ProducesProblem(StatusCodes.Status400BadRequest);
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ShownOnce();
 
         door.MapGet("/agents", (ListAgents list, CancellationToken cancellationToken) => list.ExecuteAsync(cancellationToken))
             .WithName("ListAgents")
@@ -177,7 +180,8 @@ public static class IdentityEndpoints
             .WithName("RotateAgentToken")
             .WithSummary("Give an agent its next token, by name or id, shown once; the one it had is revoked. A revoked agent works again. Its owner or an administrator.")
             .Produces<IssuedToken>(StatusCodes.Status201Created)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ShownOnce();
 
         door.MapPatch("/me/metadata", (AgentMetadataRequest? request, ReportAgentMetadata report, CancellationToken cancellationToken) =>
             {
@@ -209,7 +213,8 @@ public static class IdentityEndpoints
             })
             .WithName("CreateToken")
             .WithSummary("A further user token for the caller, shown once.")
-            .Produces<IssuedToken>(StatusCodes.Status201Created);
+            .Produces<IssuedToken>(StatusCodes.Status201Created)
+            .ShownOnce();
 
         door.MapDelete("/tokens/{id:guid}", async (Guid id, RevokeToken revoke, CancellationToken cancellationToken) =>
             {

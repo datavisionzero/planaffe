@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { failure } from "@/shared/act";
 import {
   Dialog,
   DialogClose,
@@ -51,7 +52,7 @@ export function ActionDialog({ trigger, open: controlled, onOpenChange, title, d
       if (controlled === undefined) setUncontrolled(false);
       onOpenChange?.(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The instance did not answer.");
+      setError(failure(reason));
     } finally {
       setBusy(false);
     }
@@ -100,10 +101,20 @@ export function TextActionDialog({ trigger, open: controlled, onOpenChange, titl
   const [error, setError] = useState<string>();
   const id = useId();
   const open = controlled ?? uncontrolled;
+  // Every opening starts from the value it is handed, however it was opened.
+  // Resetting only where the dialog opened itself left a controlled one — the
+  // agent's rename, opened from a menu — showing the text a Cancel threw away.
+  const [shownOpen, setShownOpen] = useState(open);
+  if (open !== shownOpen) {
+    setShownOpen(open);
+    if (open) {
+      setValue(initialValue);
+      setError(undefined);
+    }
+  }
 
   function changeOpen(next: boolean) {
     if (busy) return;
-    if (next) setValue(initialValue);
     setError(undefined);
     if (controlled === undefined) setUncontrolled(next);
     onOpenChange?.(next);
@@ -119,7 +130,7 @@ export function TextActionDialog({ trigger, open: controlled, onOpenChange, titl
       await onSubmit(next);
       changeOpen(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The instance did not answer.");
+      setError(failure(reason));
     } finally {
       setBusy(false);
     }

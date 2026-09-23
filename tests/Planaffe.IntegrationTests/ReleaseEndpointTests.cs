@@ -181,6 +181,103 @@ public sealed class ReleaseEndpointTests(PostgresFixture postgres)
         await ProjectEndpointTests.Problem(refused, HttpStatusCode.UnprocessableEntity, "transition");
     }
 
+    // docs/storage.md: a sub-issue closed after its parent already shipped
+    // enters the open release like any issue — alone, because the parent is
+    // in the record it shipped in and nowhere else.
+    [Fact]
+    public async Task A_sub_issue_closed_after_its_parent_shipped_enters_the_open_release_alone()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+        await CreateAsync(admin, "Parent");
+        using var child = await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "Child", parent = "PLAN-1" } } }, Ct);
+        Assert.Equal(HttpStatusCode.Created, child.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync("/issues/PLAN-2/close", new { status = "done", result = "Part." }, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync("/issues/PLAN-1/close", new { status = "done", result = "Whole." }, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await admin.PostAsJsonAsync("/projects/PLAN/releases/publish", new { name = "v1.0.0" }, Ct)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync("/issues/PLAN-2/reopen", new { }, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync("/issues/PLAN-2/close", new { status = "done", result = "Fixed." }, Ct)).StatusCode);
+
+        var unreleased = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/releases/unreleased", Ct);
+        Assert.Equal(["PLAN-2"], unreleased.GetProperty("issues").EnumerateArray().Select(i => i.GetProperty("key").GetString()));
+        Assert.Equal("v1.0.0", (await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct)).GetProperty("release").GetString());
+    }
+
+    // A publication replaces the open release, and a close waiting behind it
+    // has to find the new one rather than the row it waited for. Each issue
+    // lands in exactly one release, and nobody is told the project has none.
+    [Fact]
+    public async Task Closes_while_a_release_is_published_each_land_in_one_release()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+
+        const int Rounds = 5;
+        const int PerRound = 6;
+        for (var round = 0; round < Rounds; round++)
+        {
+            using var created = await admin.PostAsJsonAsync("/issues",
+                new { project = "PLAN", issues = Enumerable.Range(0, PerRound).Select(n => new { title = $"Round {round}, {n}" }).ToArray() }, Ct);
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var first = (round * PerRound) + 1;
+
+            var closes = Enumerable.Range(first, PerRound).Select(async number =>
+            {
+                using var client = instance.ClientWith(AnInstance.BootstrapToken);
+                using var closed = await client.PostAsJsonAsync($"/issues/PLAN-{number}/close", new { status = "done", result = "Built." }, Ct);
+                return closed.StatusCode;
+            });
+            var publish = Task.Run(async () =>
+            {
+                using var client = instance.ClientWith(AnInstance.BootstrapToken);
+                using var published = await client.PostAsJsonAsync("/projects/PLAN/releases/publish", new { name = $"v0.{round}.0" }, Ct);
+                return published.StatusCode;
+            }, Ct);
+
+            var answers = await Task.WhenAll([.. closes, publish]);
+            Assert.All(answers[..PerRound], status => Assert.Equal(HttpStatusCode.OK, status));
+            Assert.Equal(HttpStatusCode.Created, answers[PerRound]);
+        }
+
+        var releases = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/releases", Ct);
+        Assert.Equal(Rounds * PerRound, releases.EnumerateArray().Sum(r => r.GetProperty("issues").GetInt32()));
+        Assert.Single(releases.EnumerateArray(), r => r.GetProperty("status").GetString() == "open");
+    }
+
+    // Two publications at once are two publications one after the other: the
+    // second names the release the first opened, and a name only one of them
+    // may have is refused as taken rather than failing.
+    [Fact]
+    public async Task Two_publications_at_once_are_one_after_the_other()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+
+        async Task<HttpStatusCode> PublishAsync(string name)
+        {
+            using var client = instance.ClientWith(AnInstance.BootstrapToken);
+            using var published = await client.PostAsJsonAsync("/projects/PLAN/releases/publish", new { name }, Ct);
+            return published.StatusCode;
+        }
+
+        for (var round = 0; round < 5; round++)
+        {
+            var distinct = await Task.WhenAll(PublishAsync($"v{round}.0.0"), PublishAsync($"v{round}.1.0"));
+            Assert.All(distinct, status => Assert.Equal(HttpStatusCode.Created, status));
+
+            var same = await Task.WhenAll(PublishAsync($"v{round}.2.0"), PublishAsync($"V{round}.2.0"));
+            Assert.Equal([HttpStatusCode.Created, HttpStatusCode.Conflict], same.Order());
+        }
+
+        var releases = await admin.GetFromJsonAsync<JsonElement>("/projects/PLAN/releases", Ct);
+        Assert.Equal(16, releases.GetArrayLength());
+        Assert.Single(releases.EnumerateArray(), r => r.GetProperty("status").GetString() == "open");
+    }
+
     private static async Task CreateAsync(HttpClient client, string title)
     {
         using var response = await client.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title } } }, Ct);

@@ -45,11 +45,8 @@ func newSpaceList(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListSpacesWithResponse(cmd.Context())
+			resp, err := client.Checked(c.ListSpacesWithResponse(cmd.Context()))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -81,22 +78,16 @@ func newSpaceView(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			space, err := c.ReadSpaceWithResponse(cmd.Context(), args[0])
+			space, err := client.Checked(c.ReadSpaceWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(space.HTTPResponse, space.Body); err != nil {
 				return err
 			}
 			if g.json {
 				return render.JSON(cmd.OutOrStdout(), space.JSON200)
 			}
 
-			tree, err := c.ListPagesWithResponse(cmd.Context(), args[0])
+			tree, err := client.Checked(c.ListPagesWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(tree.HTTPResponse, tree.Body); err != nil {
 				return err
 			}
 
@@ -147,11 +138,8 @@ func newSpaceSearch(g *globals) *cobra.Command {
 				params.Limit = &asked
 			}
 
-			resp, err := c.SearchPagesWithResponse(cmd.Context(), params)
+			resp, err := client.Checked(c.SearchPagesWithResponse(cmd.Context(), params))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {

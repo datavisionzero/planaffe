@@ -25,6 +25,9 @@ src/web/src/api/schema.d.ts
 /planaffe
 /pa
 
+# Python, which runs the workflow scripts and their tests
+__pycache__/
+
 # Node
 node_modules/
 dist/
@@ -38,9 +41,6 @@ volume/
 
 # macOS
 .DS_Store
-
-# The rolling file of a development run (ADR 0008)
-logs/
 
 # The Go client of the contract, generated before every build (ADR 0005)
 src/cli/internal/api/client.gen.go

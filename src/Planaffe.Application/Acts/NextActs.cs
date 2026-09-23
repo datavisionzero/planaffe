@@ -38,11 +38,7 @@ public sealed class Next(
 
     public async Task<NextPage> PreviewAsync(string projectKey, NextRequest request, CancellationToken cancellationToken)
     {
-        var limit = request.Limit ?? DefaultLimit;
-        if (limit < 1 || limit > ListIssues.MaximumLimit)
-        {
-            throw Refusal.Validation("limit", $"limit is 1 to {ListIssues.MaximumLimit}.");
-        }
+        var limit = Paging.Limit(request.Limit, DefaultLimit);
 
         var query = await QueryAsync(projectKey, request, cancellationToken);
         var ids = await issues.NextWorkableAsync(query, limit + 1, lockOne: false, cancellationToken);

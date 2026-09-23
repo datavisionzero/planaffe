@@ -186,8 +186,13 @@ uses `planaffe_session` without `Secure`; no other mode may weaken it. The cooki
 contains only the opaque session secret.
 
 Every `POST`, `PATCH` or `DELETE` authenticated by that cookie also requires
-`X-Planaffe-CSRF: 1` and an `Origin` exactly equal to the configured public
-origin. Missing or mismatched protection is `csrf`. A Bearer-authenticated
+`X-Planaffe-CSRF: 1` and an `Origin` that is this instance. With
+`PLANAFFE_PUBLIC_URL` set, that is its origin, scheme, host and port exactly.
+Without it the instance cannot know its own scheme — a reverse proxy that ends
+TLS forwards the request as `http` unless it is trusted to say otherwise — so
+the `Origin`'s host and port are compared with the request's `Host` alone, on
+purpose: a foreign origin cannot match it. Missing or mismatched protection is
+`csrf`. A Bearer-authenticated
 request is not subject to either browser check. If both credentials arrive,
 Bearer authentication wins and the cookie is ignored.
 
@@ -240,7 +245,7 @@ person. Extension members carry what the code needs — the holder on
 
 | status | type | when |
 |---|---|---|
-| 400 | `validation` | a field is missing, malformed or over its limit; `errors` maps field to message |
+| 400 | `validation` | a field is missing, malformed or over its limit, or the body is not the JSON object the endpoint reads — empty, not JSON, `1.5` where a whole number goes; `errors` maps field to message, `body` for the body as a whole |
 | 400 | `unknown-field` | a closed request object contains a field it does not define; `field` names it |
 | 400 | `cursor-invalid` | the cursor does not fit the filters or is not one the server issued |
 | 401 | `unauthenticated` | no token, an unknown token, or a revoked one |
@@ -251,6 +256,8 @@ person. Extension members carry what the code needs — the holder on
 | 409 | `claim-held` | the issue is held by somebody else and the act needs the claim, or `claim` was called without `force` |
 | 409 | `claim-lost` | the caller's claim has expired and somebody else holds the issue now |
 | 409 | `idempotency-mismatch` | the `Idempotency-Key` was used for a different request |
+| 409 | `idempotency-pending` | a request with this `Idempotency-Key` is still being answered and did not finish while this one waited; send it again later and it is answered from the store |
+| 409 | `already-shown` | the `Idempotency-Key` names a write whose answer carried a secret shown once, which is not kept to be replayed |
 | 409 | `release-exists` | the project already has a release with that case-insensitive name |
 | 409 | `last-administrator` | deactivation or demotion would leave no active administrator |
 | 409 | `email-exists` | an invitation or confirmed email would duplicate a normalized address |
@@ -267,7 +274,7 @@ person. Extension members carry what the code needs — the holder on
 | 422 | `smtp-not-configured` | an action that must send email cannot do so |
 | 409 | `device-pending` | nobody has confirmed this device login yet; the one refusal that means keep polling |
 | 403 | `device-denied` | a human refused this device login, or it is no longer theirs to decide |
-| 429 | `login-throttled` | too many failed sign-ins for the account or source address; `Retry-After` is set |
+| 429 | `login-throttled` | too many attempts at a sign-in, a device login, a recovery email or a current password, for the account or the source; `Retry-After` says in seconds when to try again |
 | 500 | `internal` | a bug; the response carries nothing else |
 
 Three things an agent has to tell apart (VISION 6.1) are three different rows:
@@ -285,17 +292,18 @@ can branch without parsing:
 | 1 | unexpected | 500, a response the CLI cannot parse, a bug in the CLI |
 | 2 | usage | bad arguments, no instance and no login, no token anywhere, a `.planaffe` file the CLI cannot read |
 | 3 | not found | 404 `not-found`, 404 `deleted` |
-| 4 | refused | 400 `validation`, 400 `unknown-field`, 422 of every type, and 410 — a one-time thing that is gone cannot be retried |
-| 5 | conflict | 409 `claim-held`, 409 `claim-lost`, 409 `idempotency-mismatch`, 409 `release-exists`, 409 `device-pending` |
+| 4 | refused | 400 `validation`, 400 `unknown-field`, 422 of every type, 410 — a one-time thing that is gone cannot be retried — and 429 `login-throttled`, which can, after the wait its detail names |
+| 5 | conflict | 409 `claim-held`, 409 `claim-lost`, 409 `idempotency-mismatch`, 409 `idempotency-pending`, 409 `already-shown`, 409 `release-exists`, 409 `device-pending` |
 | 6 | stale | 412 `stale` |
 | 7 | denied | 401, 403 |
 | 8 | empty | `next` found nothing; in cut two also a `--wait` that reached its deadline |
 | 9 | version skew | the CLI is too old or too new for the installation (ADR 0011) |
 | 10 | unreachable | the installation could not be reached: DNS, connection refused, timeout, TLS |
+| 130 | interrupted | Ctrl-C: 128 plus SIGINT, the code a shell reports for a process the signal ended |
 
 `8` is not an error of the API — `next` answers 200 with no issue — but it is
-the answer a loop most often branches on, so it has a code. `9` and `10` are
-decided by the CLI before or without a response.
+the answer a loop most often branches on, so it has a code. `9`, `10` and `130`
+are decided by the CLI before or without a response.
 
 ## Idempotency
 
@@ -306,13 +314,36 @@ key and the same request — same method, path and body — from the store, with
 the original status and body. The same key with a different request is refused
 as `idempotency-mismatch`. Keys of different identities never meet.
 
-**The CLI sends one on every write, generated by itself** — a UUID per
-invocation, retried with the same key when the connection fails before a
-response arrives. No agent has to know the header exists. This is what makes a
-retry safe on the two writes where it is not safe by nature: a bulk create
-replayed without it creates the seven issues twice, and `next` replayed without
-it claims a second issue while the first is held under a response nobody
-received.
+**A secret is shown once, and a replay does not show it again.** The writes
+whose answer carries one — `POST /tokens`, `POST /agents`,
+`POST /agents/{id}/token`, `POST /users/{id}/invitation-link`,
+`POST /users/{id}/recovery-link`, `POST /device-logins` and
+`POST /device-logins/redeem` — keep only the status of a success, never its
+body, so that the store holds nothing a copy of the database could sign in
+with. Their replay is refused as `already-shown`: the token, link or device
+login exists, the first answer was the one chance to read it, and whoever lost
+that answer revokes what it created and asks for another. A refusal of one of
+these writes carries no secret and is replayed like any other.
+
+**A request holds its key while it runs.** The row is written before the
+write, pending, and only one request can write it: a twin that arrives with the
+same key while the first is still being answered — a client that retried after
+a timeout — waits up to ten seconds for that answer and is answered with it, or
+is refused as `idempotency-pending` when the first takes longer, as a `next`
+with `wait` may. Either way the write runs once. A replay carries the first
+answer's `Location` and `ETag` too. A pending row whose request can no longer
+be running — its process went away — gives its key back after 65 minutes; a
+500 is not kept at all, so a retry after a bug runs again.
+
+**The CLI sends one on every write, generated by itself** — 32 hex characters
+per invocation, with `-1`, `-2`, … for the writes a command makes — and sends a
+write again with the same key, up to three times in all with a short backoff,
+when the connection fails before any response arrives. No agent has to know
+the header exists. This is what makes a lost connection safe on the two writes
+where a repetition is not safe by nature: a bulk create replayed without it
+creates the seven issues twice, and `next` replayed without it claims a second
+issue while the first is held under a response nobody received. Running the
+command again is a new invocation with a new key, and so a new request.
 
 The claim by key needs none (VISION 11): a second claim by the holder on the
 same issue succeeds and extends. The CLI sends the header anyway, for
@@ -438,7 +469,7 @@ metadata back channel (`PATCH /me/metadata`) is cut two.
 | `POST` | `/projects/{key}/labels` | any | `{ name, group?, description? }` → 201 |
 | `PATCH` | `/projects/{key}/labels/{name}` | any | `{ name?, group?, description? }`. Changing the group is refused with `validation` when an issue or an epic would end up with two labels of the new group; `issues` and `epics` list them |
 | `DELETE` | `/projects/{key}/labels/{name}` | any | soft delete; the label vanishes from every issue; 204 |
-| `POST` | `/projects/{key}/labels/{name}/restore` | any | back, with its attachments |
+| `POST` | `/projects/{key}/labels/{name}/restore` | any | back, with its attachments. Refused with `validation`, `issues` and `epics` as on a group change, when one of them took another label of the group while this one was gone |
 
 ### Next
 
@@ -576,6 +607,12 @@ An empty cell is `transition`. A `claim` on `review` is refused because the
 issue has been handed over; whoever wants it sends it back to `todo` first
 (VISION 11). "Yes" in `in_progress` means with the claim: the holder, or a
 user over an agent's hold.
+
+The row an act looks at is the one it holds the lock on, not the one the
+caller last read. An issue whose agent's claim has expired is in `todo` for
+every act, exactly as every read shows it — it is parked like any other — and
+the holder check runs under that lock: an agent whose claim lapsed and was
+taken in the meantime is told `claim-lost`, and the successor's claim stays.
 
 **Closing out of `review`** is the reviewer's act: a user's close lands in
 `done` or `canceled`. An agent's close from `review` goes through only where
@@ -886,22 +923,35 @@ way to read what the lists already say (ADR 0012).
 | `DELETE` | `/session` | browser user | revoke the server-side session and expire the cookie; 204 |
 | `POST` | `/session/bootstrap` | anyone | `{ token, password }` → 204 and a browser cookie; once per bootstrap user token, and never stores that token in the browser |
 | `POST` | `/invitations/accept` | anyone | `{ secret, password }` → 204 and a browser cookie; consumes the invitation and activates the user |
-| `POST` | `/password-recovery` | anyone | `{ email }` → 202 in every case; sends a one-hour link only for an active matching user |
+| `POST` | `/password-recovery` | anyone | `{ email }` → 202 in every case, answered before anything is looked up; afterwards sends a one-hour link only for an active matching user, and at most one per address in five minutes |
 | `POST` | `/password-recovery/complete` | anyone | `{ secret, password }` → 204; consumes the secret, changes the password and revokes every browser session |
 | `GET` | `/sessions` | user | the caller's `BrowserSession` values, current first |
 | `DELETE` | `/sessions/{id}` | user | revoke one of the caller's sessions; 204 |
 | `DELETE` | `/sessions` | user | revoke every session except the current one; 204 |
-| `POST` | `/me/password` | user | `{ current_password, password }` → 204; revokes every other session |
+| `POST` | `/me/password` | user | `{ current_password, password }` → 204; revokes every other session. A wrong current password is `validation` on `current_password`, and the session that sent it stays signed in |
 | `DELETE` | `/me/token` | token caller | revoke the token this request presented; 204. A browser session is told its own exit is `DELETE /session` |
 | `PATCH` | `/me` | user | `{ name }` → 200 `User`; email and password have their own confirmation-aware acts |
 | `POST` | `/me/email` | user | `{ email }` → 202; sends a confirmation link to the new address while the old remains active |
-| `POST` | `/me/email/confirm` | user | `{ secret }` → 200 `User`; consumes the link and changes the address |
+| `POST` | `/email-changes/confirm` | anyone | `{ secret }` → 204; consumes the link and changes the address. Anonymous, because the link is opened wherever the new mailbox is read; `secret-expired` when it is used, replaced or expired |
 
-Login failures are throttled over 15 minutes after five attempts for a normalized
-account or 20 for a source address. The public recovery response is deliberately
-indistinguishable for unknown, invited, deactivated and active addresses. If
-SMTP itself is absent it returns `smtp-not-configured` for every address.
-Passwords never appear in response bodies or logs.
+Sign-ins are throttled over 15 minutes after five failed attempts for a
+normalized account or 20 for a source address, and answered `login-throttled`
+with `Retry-After` from then on — the right password included, because a guess
+that happens to be right is still a guess. An attempt is counted before the
+password is checked, so a burst of concurrent sign-ins gets as many checks as
+the limit and not as many as arrived. A source is the client's address, and an
+IPv6 address is its /64. A current password in `POST /me/password` is limited
+the same way, five wrong ones per user in 15 minutes: a session or a token in
+the wrong hands is not a way to guess it without limit.
+
+The public recovery response is deliberately indistinguishable for unknown,
+invited, deactivated and active addresses — in its body, its status and its
+timing, because it is answered before the address is looked up and the email
+is sent after. A normalized address is sent at most one email in five minutes,
+however often it is asked for, and a source that asks more than 20 times in 15
+minutes is told `login-throttled`. If SMTP itself is absent it returns
+`smtp-not-configured` for every address. Passwords never appear in response
+bodies or logs.
 
 That last case is why the two `-link` endpoints exist. Transactional email is
 optional ([ADR 0018](./adr/0018-transactional-email-is-an-optional-instance-capability.md))
@@ -958,7 +1008,8 @@ their guesses was half right.
 agent that could confirm one would be issuing itself a second identity
 (VISION 12). Beginning a login is limited per source address, in a window of
 its own, so that a machine making them cannot lock a person out of the password
-screen.
+screen. Past the limit it is `login-throttled` with `Retry-After` — never
+`device-pending`, which would tell a client to keep polling.
 
 **What comes out is a user token and not a session**, which is the one place
 this differs from the sibling project's flow. A session expires, and VISION 12

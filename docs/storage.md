@@ -207,7 +207,8 @@ update`) so that two concurrent writers cannot leave two labels of one group on
 the issue. The database does not hold this invariant, because holding it would
 mean copying the group name onto every `issue_label` row and rewriting those
 rows whenever a label changes group. Every write to an issue's labels goes
-through one place in the store, and that place is where the rule lives.
+through the acts in Application, which resolve a label set in one place and add
+a single label in another, and those are where the rule lives.
 
 **The rule is the epic's as well.** An epic carries labels through `epic_label`
 under the same group rule, and it holds through the same code: creating an epic
@@ -351,7 +352,7 @@ live in one view, and every read query of an issue goes through it:
 create view issue_read as
 select i.id, i.project_id, i.number, i.title, i.description, i.result,
        case when i.claim_expired then 'todo' else i.status end as status,
-       i.ready, i.priority, i.assignee_id, i.epic_id,
+       i.ready, i.priority, i.assignee_id, i.epic_id, i.parent_id,
        case when i.claim_expired then null else i.claimed_by end        as claimed_by,
        case when i.claim_expired then null else i.claimed_at end        as claimed_at,
        case when i.claim_expired then null else i.claim_expires_at end  as claim_expires_at,
@@ -361,13 +362,18 @@ select i.id, i.project_id, i.number, i.title, i.description, i.result,
            and claim_expires_at is not null
            and claim_expires_at <= now() as claim_expired
           from issue
-         where deleted_at is null) i;
+         where deleted_at is null
+           and not exists (select 1 from project p where p.id = issue.project_id and p.deleted_at is not null)) i;
 ```
 
 1. **A deleted issue is absent** (ADR 0013). Not in lists, not in counts, not in
    `next`, not in epic progress, not as a blocker — an issue whose only open
    blocker is deleted is workable. The one read that sees deleted rows is the
-   `--deleted` list, and it reads the table, deliberately, in one place.
+   `--deleted` list, and it reads the table, deliberately, in one place. **So is
+   every issue of a deleted project**, which is why the view asks the project:
+   deleting a project marks its row alone, and a blocker may sit in another
+   project, so a blocker in a project that was deleted blocks nothing from the
+   moment it is deleted, not from the moment it is purged.
 2. **An expired claim is no claim, and the status falls back with it**
    (VISION 11). The row still says `in_progress` and still names the holder;
    the view says `todo` and nobody. Nothing writes the fallback — the successor
@@ -380,14 +386,31 @@ view, that it changes. The view is where a query that merely reads cannot forget
 either rule; the write path is small enough to be read as a whole.
 
 The query behind `next` repeats them a **third** time. It computes the two
-derived rules in a CTE, picks a candidate from it, and takes the candidate's
-lock with `for update of i skip locked`. When another writer changed that row
+derived rules in a CTE — together with the deleted project, in one fragment the
+"needs you" and standing statements build their CTE from as well — picks a
+candidate from it, and takes the candidate's lock with `for update of i skip
+locked`. When another writer changed that row
 while the query ran, Postgres locks the new version and rechecks the query's
 conditions against it — but only those naming the locked table, because a CTE
 is not run again for the recheck. So every condition on the candidate's own row
 appears twice, once on the CTE for the plan and once on `issue i` for the
 recheck. Without the second copy, an issue claimed and committed inside that
 window came back as a candidate and `next` answered `claim-held`.
+
+**The CTE holds only the rows a condition can name**, not every live issue of
+the instance: the project's own, their parents and sub-issues, and whatever
+blocks any of those, in whatever project. `next` looks one blocker edge away,
+so one step is enough; "needs you" and the standing walk a blocker chain to its
+end, so theirs follows the edges recursively, with `union` ending it at a
+cycle. On sixty projects of four hundred issues each, `next` went from about a
+second to under a millisecond.
+
+**`next` measures an expired claim against the instance's clock**, passed in as
+a parameter, rather than against the database's `now()`: the claim it locks the
+row for is written with the instance's clock, and a database a second ahead
+would hand out an issue the claim then refuses as `claim-held`. The view and
+the counts beside it stay on `now()`; a second's disagreement there changes a
+number, not an answer.
 
 ### Blockers
 
@@ -527,17 +550,36 @@ create table idempotency (
     identity_id   uuid        not null references identity (id),
     key           text        not null,
     request_hash  bytea       not null,    -- sha-256 of method, path and body
-    status        smallint    not null,
+    status        smallint,                -- null while the request is being answered
     body          jsonb,
+    withheld      boolean     not null default false,  -- the answer carried a secret shown once
+    location      text,                    -- the answer's Location header
+    etag          text,                    -- the answer's ETag header
     created_at    timestamptz not null,
     primary key (identity_id, key)
 );
+
+create index idempotency_created_at on idempotency (created_at);
 ```
 
 A replayed write is answered from here for 24 hours ([`api.md`](./api.md),
 Idempotency). The key is scoped to the identity, so two agents choosing the same
 key cannot answer each other's requests; the request hash is what tells a
 replay from a reuse of the key for a different request, which is refused.
+
+**The row comes first.** A write inserts its row pending — no status — before it
+runs, with `on conflict do nothing`, so that of two requests with one key only
+one runs; the other waits for the row to be completed and replays it. A 500
+deletes the pending row again. A pending row older than 65 minutes belongs to a
+request that can no longer be running and is replaced. The purge finds rows
+older than 24 hours by `idempotency_created_at`.
+
+**No secret is kept here.** A write whose answer carries one that is shown once
+— a user or agent token, a device code, an invitation or recovery link — keeps
+its status with `withheld` set and `body` empty, and its replay is refused as
+`already-shown` rather than answered with a copy. The tokens and one-time
+secrets themselves are stored only as hashes (ADR 0018); a replay store that
+kept the answer would have been the one place they were not.
 
 ## Deletion and the purge
 
@@ -552,9 +594,11 @@ that touches a project, the store removes up to twenty of that project's rows
 whose grace period has passed — issues, then epics, then pages, then labels,
 the cascades taking their comments, questions, history and edges with them — and up to twenty
 idempotency rows older than 24 hours, instance-wide. A deleted project is purged
-the same way by the next write anywhere. The batch is small so that no request
-pays for a backlog; the floor is a floor, and a project nobody writes to keeps
-its deleted rows longer.
+the same way by the next write anywhere, one per transaction, because its
+cascade is a whole project. A transaction that wrote nothing — Postgres has not
+given it a transaction id — sweeps nothing, so an empty `next` poll costs no
+deletes. The batch is small so that no request pays for a backlog; the floor is
+a floor, and a project nobody writes to keeps its deleted rows longer.
 
 The grace period is `PLANAFFE_DELETION_GRACE_DAYS`, default `7`, per instance.
 
@@ -637,6 +681,17 @@ a sub-issue closed after its parent already shipped enters the open release
 like any issue. Publishing names the open release, sets `published_at` and
 `published_by`, and creates the next open one, in one transaction.
 
+**Every act that writes a project's releases is serialised per project** —
+close into the open release, reopen out of it, publish, retract, rename and the
+two hand edits. Each takes `pg_advisory_xact_lock(1, hashtext(project_id::text))`
+first and only then loads what it writes, in a statement of its own. A lock on
+the open release row would not do: publishing replaces that row, and a close
+that waited for it found no open release at all. The project row would not do
+either, because allocating an issue number takes it before locking a parent,
+while a close holds its issue before it gets here. A unique violation on
+`release_open` or `release_name` that happens anyway is a refusal, not an
+error.
+
 Three acts write `release_issue` and `release` by hand, and only ever the open
 release (VISION 7): one inserts a `release_issue` row, one deletes it, and
 retracting a publication deletes the empty open release row and clears the
@@ -686,7 +741,9 @@ the body has both characters taken out of it before the excerpt is cut: what
 leaves the instance is a sequence of pieces with a flag each, never markup
 (ADR 0007). The set of spaces to look in is a parameter of that statement and
 not a filter on top of it, so a space closed to an agent is missing from the
-rows and from their number alike.
+rows and from their number alike. A deleted space is missing from them too,
+whatever the set says: a human's `space_access` row outlives the space until
+the purge, and deleting a space marks its row alone.
 
 ### Wake-ups
 
@@ -697,23 +754,53 @@ begin
     return null;
 end $$;
 
-create trigger issue_notify    after insert or update on issue    for each row execute function planaffe_notify();
+-- An issue wakes its own project and every other project it blocks an issue in.
+create function planaffe_notify_issue() returns trigger language plpgsql as $$
+declare
+    held uuid;
+begin
+    perform pg_notify('planaffe_' || replace(new.project_id::text, '-', ''), '');
+    for held in
+        select distinct blocked.project_id
+          from blocker edge
+          join issue blocked on blocked.id = edge.blocked_id
+         where edge.blocker_id = new.id
+           and blocked.project_id <> new.project_id
+    loop
+        perform pg_notify('planaffe_' || replace(held::text, '-', ''), '');
+    end loop;
+    return null;
+end $$;
+
+create trigger issue_notify    after insert or update on issue    for each row execute function planaffe_notify_issue();
 create trigger question_notify after insert or update on question for each row execute function planaffe_notify();
+create trigger project_notify  after update of deleted_at on project
+    for each row when (old.deleted_at is distinct from new.deleted_at)
+    execute function planaffe_notify_project();
 ```
 
 One channel per project, because every question a waiter asks — `next`, a
 question's answer, "needs you" — is a project's question, and an agent waiting
-in one project has no reason to wake for a change in another. The payload is
-empty: a notification says "look again", and the waiter re-runs the query it
+in one project has no reason to wake for a change in another. The exception is
+the blocker, which may sit in another project: closing or deleting it makes an
+issue here workable, so an issue also notifies the projects of the issues it
+blocks, and deleting a project (`planaffe_notify_project`) notifies the
+projects its issues block, since they stop blocking at that moment. The payload
+is empty: a notification says "look again", and the waiter re-runs the query it
 was waiting on. `question` carries `project_id` denormalised from its issue for
 this trigger. Comments notify nothing — a comment makes nothing workable.
 
 The instance holds one listening connection and fans notifications out to its
-waiters in process; a waiter that outlives that connection is woken by the
-reconnect and re-runs its query, which is the same as being woken by a change
-it might have missed. The deadline is the fallback for a notification that
-never comes, and it is bounded — one hour — so that a proxy's idle timeout is a
-number an operator can set (`docs/operations.md`).
+waiters in process. A waiter is woken whenever that connection is given up —
+when it drops, and when the listener reconnects to add the channel of a project
+nobody was waiting on before, which wakes every waiter — and re-runs its query,
+which is the same as being woken by a change it might have missed. The
+connection sends a keepalive query every 30 seconds with TCP keepalive
+underneath, so a connection a NAT or a failover drops silently is noticed
+rather than left to every waiter's deadline, and a failed reconnect is retried
+after one second, doubling to at most thirty. The deadline is the fallback for
+a notification that never comes, and it is bounded — one hour — so that a
+proxy's idle timeout is a number an operator can set (`docs/operations.md`).
 
 ### The agent's metadata
 
@@ -822,7 +909,7 @@ distinguish a session from one that vanished.
 
 ```sql
 create table project_access (
-    project_id  uuid        not null references project (id),
+    project_id  uuid        not null references project (id) on delete cascade,
     user_id     uuid        not null references identity (id),
     granted_by  uuid        not null references identity (id),
     granted_at  timestamptz not null,
@@ -836,7 +923,9 @@ those cross-row facts are held by the application transaction. Project creation
 adds the creator in the same transaction. The migration inserts the Cartesian
 product of existing users and projects before authorization starts, preserving
 all existing access. Agents have no rows: every query resolves an agent to its
-owner first, and user tokens already resolve to the user.
+owner first, and user tokens already resolve to the user. A project purged
+after its grace period takes its access rows with it, which is the cascade on
+`project_id`; the identities are never deleted (ADR 0013).
 
 A central project scope filters every content query, including direct keys,
 search, export, `next` and `needs-you`. The blocker query deliberately crosses
@@ -846,8 +935,13 @@ blocker as an anonymous open reference.
 ### Login throttling
 
 Failed sign-ins are limited in a rolling 15-minute window: five attempts per
-normalized email and 20 per source address. A successful login clears the
-account window, not the address window. Counters live in a small bounded
+normalized email and 20 per source address, where an IPv6 source is its /64.
+An attempt is reserved before the password is checked; a successful login
+gives it back and clears the account window, not the address window. The same
+store limits a user's wrong current passwords (five in 15 minutes), device
+logins begun from a source (20 in 15 minutes) and recovery emails (one per
+normalized address in five minutes, 20 requests per source in 15). Counters
+live in a small bounded
 in-memory store. They are deliberately not durable product data: a restart
 forgiving attempts is safer than making authentication depend on a cleanup table
 or another service. Deployments with several application replicas are outside

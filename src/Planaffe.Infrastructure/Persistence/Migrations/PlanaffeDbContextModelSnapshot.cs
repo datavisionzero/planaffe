@@ -1180,17 +1180,34 @@ namespace Planaffe.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("ETag")
+                        .HasColumnType("text")
+                        .HasColumnName("etag");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("text")
+                        .HasColumnName("location");
+
                     b.Property<byte[]>("RequestHash")
                         .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("request_hash");
 
-                    b.Property<short>("Status")
+                    b.Property<short?>("Status")
                         .HasColumnType("smallint")
                         .HasColumnName("status");
 
+                    b.Property<bool>("Withheld")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("withheld");
+
                     b.HasKey("IdentityId", "Key")
                         .HasName("pk_idempotency");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("idempotency_created_at");
 
                     b.ToTable("idempotency", (string)null);
                 });

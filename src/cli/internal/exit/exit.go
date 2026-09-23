@@ -14,7 +14,7 @@ const (
 	Usage = 2
 	// NotFound is 404 not-found and 404 deleted.
 	NotFound = 3
-	// Refused is 400 validation and every 422.
+	// Refused is 400 validation, every 422, a 410 and a 429.
 	Refused = 4
 	// Conflict is 409: claim-held, claim-lost, idempotency-mismatch.
 	Conflict = 5
@@ -28,6 +28,10 @@ const (
 	Skew = 9
 	// Unreachable is DNS, connection refused, timeout, TLS: the instance could not be reached.
 	Unreachable = 10
+	// Interrupted is Ctrl-C: 128 plus SIGINT, what a shell reports for a
+	// process the signal ended, so that a script sees the same code whether pa
+	// was waiting on the network or on nothing at all.
+	Interrupted = 130
 )
 
 // FromResponse derives the code from a status and the problem document that
@@ -53,6 +57,11 @@ func FromResponse(status int, p *problem.Problem) int {
 		return Refused
 	case status == 412:
 		return Stale
+	// 429 is `login-throttled`: too many attempts from here, and the detail
+	// says how long to wait. Not now is a refusal a script can act on — wait
+	// and try again — not a bug in pa.
+	case status == 429:
+		return Refused
 	default:
 		return Unexpected
 	}

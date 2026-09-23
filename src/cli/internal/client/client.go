@@ -50,11 +50,17 @@ type Client struct {
 	writes int
 }
 
-// New builds the client for cfg. The idempotency key is one per invocation,
-// numbered per write: a command that writes several times — closing an epic
-// and parking what was open — sends `<key>-1`, `<key>-2`, …, so that no two of
-// its requests share a key and a retry of the whole command replays every one
-// of them in order. Two invocations never share a key.
+// New builds the client for cfg. The idempotency key is 32 hex characters per
+// invocation, numbered per write: a command that writes several times —
+// closing an epic and parking what was open — sends `<key>-1`, `<key>-2`, …,
+// so that no two of its requests share a key. Two invocations never share a
+// key, so running a command again is a new request and not a replay.
+//
+// What does replay is the transport: a write whose connection fails before any
+// answer arrives is sent again, up to Attempts times in all, with the same
+// key (docs/api.md, Idempotency). The instance answers the second from what it
+// kept of the first, if the first got that far, so a `next --claim` whose
+// answer was lost claims nothing twice.
 func New(cfg config.Config, httpClient *http.Client) (*Client, error) {
 	key := make([]byte, 16)
 	if _, err := rand.Read(key); err != nil {
@@ -64,7 +70,7 @@ func New(cfg config.Config, httpClient *http.Client) (*Client, error) {
 	c := &Client{key: hex.EncodeToString(key)}
 	generated, err := api.NewClientWithResponses(
 		cfg.URL,
-		api.WithHTTPClient(httpClient),
+		api.WithHTTPClient(Retrying(httpClient)),
 		api.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
 			// `login` is the one command that talks to an instance with nothing
 			// in its hand; an empty bearer would be a token the door has to
@@ -107,6 +113,58 @@ func New(cfg config.Config, httpClient *http.Client) (*Client, error) {
 func ByAddress(_ context.Context, req *http.Request) error {
 	req.URL.RawPath = ""
 	return nil
+}
+
+// Attempts is how often a write is sent in all when its connection fails
+// before an answer.
+const Attempts = 3
+
+// Backoff is the wait before the first repetition; each further one doubles it.
+var Backoff = 250 * time.Millisecond
+
+// Retrying is httpClient with a transport that sends a write again when its
+// connection fails before any answer arrived — only a write, because only a
+// write carries the Idempotency-Key that makes a second sending safe, and only
+// then, because an answer of any status is the instance's word and is final.
+// A deadline that ran out is not repeated either: the time was the caller's.
+func Retrying(httpClient *http.Client) *http.Client {
+	wrapped := *httpClient
+	base := httpClient.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	wrapped.Transport = retrying{base: base}
+	return &wrapped
+}
+
+type retrying struct{ base http.RoundTripper }
+
+func (r retrying) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := r.base.RoundTrip(req)
+	if req.Header.Get(IdempotencyHeader) == "" || (req.Body != nil && req.GetBody == nil) {
+		return resp, err
+	}
+
+	wait := Backoff
+	for attempt := 1; err != nil && attempt < Attempts && req.Context().Err() == nil; attempt++ {
+		select {
+		case <-req.Context().Done():
+			return resp, err
+		case <-time.After(wait):
+		}
+		wait *= 2
+
+		again := req.Clone(req.Context())
+		if req.GetBody != nil {
+			body, bodyErr := req.GetBody()
+			if bodyErr != nil {
+				return resp, err
+			}
+			again.Body = body
+		}
+		resp, err = r.base.RoundTrip(again)
+	}
+	return resp, err
 }
 
 // UserAgent is `pa/<version> (<os>/<arch>)`.
@@ -170,9 +228,18 @@ func Check(resp *http.Response, body []byte) error {
 // a nil pointer instead of saying what was wrong. Ninety-nine of those
 // dereferences: the guard belongs here rather than at each of them.
 func notJSON(resp *http.Response, body []byte) error {
-	// A 204 and anything else that answers with nothing is a fine success.
+	// A 204 and a 202 are the contract's answers with nothing in them. Every
+	// other success promises a body, and one that arrives empty — a proxy
+	// answering 200 for an instance behind it — would leave the same nil
+	// pointer as the HTML.
 	if len(body) == 0 {
-		return nil
+		if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusAccepted {
+			return nil
+		}
+		return &Failure{
+			Code:    exit.Unexpected,
+			Message: fmt.Sprintf("the instance answered %s%s with no body, where the contract promises one", resp.Status, requested(resp)),
+		}
 	}
 
 	kind, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
@@ -180,17 +247,20 @@ func notJSON(resp *http.Response, body []byte) error {
 		return nil
 	}
 
-	where := ""
-	if resp.Request != nil && resp.Request.URL != nil {
-		where = " for " + resp.Request.URL.Path
-	}
-
 	return &Failure{
 		Code: exit.Unexpected,
 		Message: fmt.Sprintf(
 			"the instance answered %s%s with %s, not JSON — most likely it does not have this endpoint yet; `pa version` says what it is",
-			resp.Status, where, described(kind)),
+			resp.Status, requested(resp), described(kind)),
 	}
+}
+
+// requested is " for <path>", where the response knows its request.
+func requested(resp *http.Response) string {
+	if resp.Request != nil && resp.Request.URL != nil {
+		return " for " + resp.Request.URL.Path
+	}
+	return ""
 }
 
 func described(kind string) string {
@@ -210,6 +280,12 @@ func Transport(err error) error {
 	var failure *Failure
 	if errors.As(err, &failure) {
 		return failure
+	}
+
+	// Ctrl-C arrives as a canceled context wrapped in a *url.Error, and it is
+	// not the instance's fault.
+	if errors.Is(err, context.Canceled) {
+		return &Failure{Code: exit.Interrupted, Message: "interrupted"}
 	}
 
 	var urlErr *url.Error

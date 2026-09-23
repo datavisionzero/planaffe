@@ -185,6 +185,42 @@ public sealed class NextEndpointTests(PostgresFixture postgres)
         Assert.Equal("PLAN-2", (await third.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("issue").GetProperty("key").GetString());
     }
 
+    /// <summary>
+    /// A blocker may sit in another project, and deleting that project marks
+    /// the project row alone. Its issues are absent from that moment (ADR
+    /// 0013): the issue they blocked is handed out, and the counts that explain
+    /// an empty answer agree with it rather than saying nothing blocks it.
+    /// </summary>
+    [Fact]
+    public async Task A_blocker_in_a_deleted_project_blocks_nothing()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        using var other = await admin.PostAsJsonAsync("/projects", new { key = "OTHER", name = "other" }, Ct);
+        Assert.Equal(HttpStatusCode.Created, other.StatusCode);
+        using var blocker = await admin.PostAsJsonAsync("/issues", new { project = "OTHER", issues = new[] { new { title = "Elsewhere" } } }, Ct);
+        Assert.Equal(HttpStatusCode.Created, blocker.StatusCode);
+        await Issues(admin, new { title = "Blocked from elsewhere", blocked_by = new[] { "OTHER-1" } });
+        using var agent = await Agent(instance, admin, "one");
+
+        var before = await agent.GetFromJsonAsync<JsonElement>("/projects/PLAN/next", Ct);
+        Assert.Empty(before.GetProperty("items").EnumerateArray());
+        Assert.Equal(1, before.GetProperty("reasons").GetProperty("blocked").GetInt32());
+
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync("/projects/OTHER", Ct)).StatusCode);
+
+        var preview = await agent.GetFromJsonAsync<JsonElement>("/projects/PLAN/next", Ct);
+        Assert.Equal(["PLAN-1"], preview.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()));
+        Assert.Equal(0, preview.GetProperty("reasons").GetProperty("blocked").GetInt32());
+
+        var issue = await agent.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+        Assert.True(issue.GetProperty("workability").GetProperty("workable").GetBoolean());
+        Assert.Empty(issue.GetProperty("blocked_by").EnumerateArray());
+
+        using var taken = await agent.PostAsJsonAsync("/projects/PLAN/next", new { }, Ct);
+        Assert.Equal("PLAN-1", (await taken.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("issue").GetProperty("key").GetString());
+    }
+
     [Fact]
     public async Task The_epic_tie_breaker_prefers_the_empty_epic_and_priority_still_trumps_it()
     {

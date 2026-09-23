@@ -77,7 +77,10 @@ public sealed class IdentityEndpointTests(PostgresFixture postgres)
 
         using var first = await asAgent.PatchAsJsonAsync("/me/metadata", new
         {
-            kind = "codex", harness = "cli", environment = "container", version = "1.2.3",
+            kind = "codex",
+            harness = "cli",
+            environment = "container",
+            version = "1.2.3",
         }, Ct);
         Assert.True(first.StatusCode == HttpStatusCode.OK,
             $"{await first.Content.ReadAsStringAsync(Ct)}\n{string.Join('\n', instance.Errors)}");

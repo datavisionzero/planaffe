@@ -21,7 +21,8 @@ public sealed class OneTimeSecretConfiguration : IEntityTypeConfiguration<OneTim
 {
     public void Configure(EntityTypeBuilder<OneTimeSecret> builder)
     {
-        builder.ToTable("one_time_secret", t => {
+        builder.ToTable("one_time_secret", t =>
+        {
             t.HasCheckConstraint("ck_one_time_secret_purpose", "purpose in ('invitation', 'password_recovery', 'email_change')");
             t.HasCheckConstraint("ck_one_time_secret_pending_email", "(purpose = 'email_change') = (pending_email is not null)");
         });
