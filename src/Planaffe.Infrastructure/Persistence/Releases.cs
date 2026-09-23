@@ -83,6 +83,17 @@ public sealed class Releases(PlanaffeDbContext context) : IReleases
                    ClosedAt = i.ClosedAt
                }).ToListAsync(ct);
 
+    public async Task<IReadOnlyDictionary<Guid, int>> IssueCountsAsync(IReadOnlyCollection<Guid> releaseIds, CancellationToken ct)
+    {
+        if (releaseIds.Count == 0) return new Dictionary<Guid, int>();
+        return await (from ri in context.ReleaseIssues.AsNoTracking()
+                      join i in context.IssueReads on ri.IssueId equals i.Id
+                      join p in context.Projects on i.ProjectId equals p.Id
+                      where releaseIds.Contains(ri.ReleaseId) && p.DeletedAt == null
+                      group ri by ri.ReleaseId into g
+                      select new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
+    }
+
     public async Task<IReadOnlyDictionary<Guid, string>> CurrentNamesAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct)
     {
         if (ids.Count == 0) return new Dictionary<Guid, string>();

@@ -386,14 +386,30 @@ either rule; the write path is small enough to be read as a whole.
 
 The query behind `next` repeats them a **third** time. It computes the two
 derived rules in a CTE — together with the deleted project, in one fragment the
-"needs you" and standing statements build their CTE from as well — picks a candidate from it, and takes the candidate's
-lock with `for update of i skip locked`. When another writer changed that row
+"needs you" and standing statements build their CTE from as well — picks a
+candidate from it, and takes the candidate's lock with `for update of i skip
+locked`. When another writer changed that row
 while the query ran, Postgres locks the new version and rechecks the query's
 conditions against it — but only those naming the locked table, because a CTE
 is not run again for the recheck. So every condition on the candidate's own row
 appears twice, once on the CTE for the plan and once on `issue i` for the
 recheck. Without the second copy, an issue claimed and committed inside that
 window came back as a candidate and `next` answered `claim-held`.
+
+**The CTE holds only the rows a condition can name**, not every live issue of
+the instance: the project's own, their parents and sub-issues, and whatever
+blocks any of those, in whatever project. `next` looks one blocker edge away,
+so one step is enough; "needs you" and the standing walk a blocker chain to its
+end, so theirs follows the edges recursively, with `union` ending it at a
+cycle. On sixty projects of four hundred issues each, `next` went from about a
+second to under a millisecond.
+
+**`next` measures an expired claim against the instance's clock**, passed in as
+a parameter, rather than against the database's `now()`: the claim it locks the
+row for is written with the instance's clock, and a database a second ahead
+would hand out an issue the claim then refuses as `claim-held`. The view and
+the counts beside it stay on `now()`; a second's disagreement there changes a
+number, not an answer.
 
 ### Blockers
 
@@ -558,9 +574,11 @@ that touches a project, the store removes up to twenty of that project's rows
 whose grace period has passed — issues, then epics, then pages, then labels,
 the cascades taking their comments, questions, history and edges with them — and up to twenty
 idempotency rows older than 24 hours, instance-wide. A deleted project is purged
-the same way by the next write anywhere. The batch is small so that no request
-pays for a backlog; the floor is a floor, and a project nobody writes to keeps
-its deleted rows longer.
+the same way by the next write anywhere, one per transaction, because its
+cascade is a whole project. A transaction that wrote nothing — Postgres has not
+given it a transaction id — sweeps nothing, so an empty `next` poll costs no
+deletes. The batch is small so that no request pays for a backlog; the floor is
+a floor, and a project nobody writes to keeps its deleted rows longer.
 
 The grace period is `PLANAFFE_DELETION_GRACE_DAYS`, default `7`, per instance.
 

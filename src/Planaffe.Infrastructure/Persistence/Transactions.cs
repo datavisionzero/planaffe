@@ -21,8 +21,9 @@ namespace Planaffe.Infrastructure.Persistence;
 /// project a written row belongs to, up to twenty of that project's deleted
 /// issues, epics, pages and labels whose grace period has passed are removed — the
 /// cascades taking comments, questions, history and edges with them — plus up
-/// to twenty idempotency rows older than a day, and up to twenty deleted
-/// projects past their grace period, instance-wide. The batch is small so that
+/// to twenty idempotency rows older than a day, and one deleted project past
+/// its grace period, instance-wide. A transaction that wrote nothing sweeps
+/// nothing. The batch is small so that
 /// no request pays for a backlog; the floor is a floor, and a project nobody
 /// writes to keeps its deleted rows longer. No scheduler, for the reason VISION
 /// 11 gives for the expired claim.
@@ -55,6 +56,18 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
 
     private async Task PurgeAsync(CancellationToken cancellationToken)
     {
+        // A transaction that wrote nothing — the empty `next` poll, a refusal
+        // found after the reads — pays for no sweep. Postgres gives a
+        // transaction an id on its first write or row lock and not before, so
+        // its absence is the cheapest way to know.
+        var wrote = (await context.Database
+            .SqlQueryRaw<bool>("""select pg_current_xact_id_if_assigned() is not null as "Value" """)
+            .ToListAsync(cancellationToken))[0];
+        if (!wrote)
+        {
+            return;
+        }
+
         var projects = context.ChangeTracker.Entries()
             .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted or EntityState.Unchanged)
             .Select(e => e.Entity switch
@@ -142,14 +155,16 @@ public sealed class Transactions(PlanaffeDbContext context, InstanceSettings set
             [grace, Batch], cancellationToken);
 
         // A deleted project goes with everything in it, on the next write
-        // anywhere: the administrator who typed the key decided that.
+        // anywhere: the administrator who typed the key decided that. One per
+        // transaction, because its cascade is a whole project's rows and the
+        // write that happens to come along should not pay for twenty.
         await context.Database.ExecuteSqlRawAsync(
             """
             delete from project where id in (
                 select id from project
                  where deleted_at is not null and deleted_at <= now() - {0}::interval
-                 limit {1})
+                 limit 1)
             """,
-            [grace, Batch], cancellationToken);
+            [grace], cancellationToken);
     }
 }

@@ -72,6 +72,7 @@ public sealed class CreateIssues(
         await scope.RequireAsync(project.Id, cancellationToken);
         var plans = new List<Plan>();
         var refs = new HashSet<string>(StringComparer.Ordinal);
+        var projectLabels = await labels.ListAsync(project.Id, cancellationToken);
 
         for (var i = 0; i < request.Issues.Count; i++)
         {
@@ -97,7 +98,7 @@ public sealed class CreateIssues(
                 item,
                 field,
                 Validated.Field($"{field}.title", () => Issue.NormalizeTitle(item.Title!)),
-                await labels.ResolveLabelsAsync(project, item.Labels ?? [], $"{field}.labels", cancellationToken),
+                IssueLookup.ResolveLabels(projectLabels, project, item.Labels ?? [], $"{field}.labels"),
                 item.Epic is null ? null : await EpicAsync(project, item.Epic, $"{field}.epic", cancellationToken),
                 item.Assignee is null ? null : await AssigneeAsync(item.Assignee, $"{field}.assignee", cancellationToken)));
         }
@@ -251,10 +252,11 @@ public sealed class CreateIssues(
             return rows;
         }, cancellationToken);
 
+        var rows = (await issues.FindLiveManyAsync(created.Select(issue => issue.Id), cancellationToken)).ToDictionary(row => row.Id);
         var shapes = new List<IssueShape>();
         foreach (var issue in created)
         {
-            var row = await issues.FindLiveAsync(project.Key, issue.Number, cancellationToken)
+            var row = rows.GetValueOrDefault(issue.Id)
                 ?? throw new InvalidOperationException($"Issue {issue.Number} vanished after its own transaction.");
             shapes.Add(await assembler.CompleteAsync(row, cancellationToken));
         }
