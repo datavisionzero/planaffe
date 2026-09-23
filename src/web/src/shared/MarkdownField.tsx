@@ -196,6 +196,7 @@ function Surface({
             }
           >
             <Editor
+              id={id}
               value={value}
               onChange={onChange}
               onSubmit={onSubmit}
@@ -210,6 +211,7 @@ function Surface({
         </div>
 
         <div
+          role="group"
           aria-label={`${label}, preview`}
           className={cn(
             "min-h-0 overflow-auto rounded-lg border bg-muted/30 p-3 font-normal",

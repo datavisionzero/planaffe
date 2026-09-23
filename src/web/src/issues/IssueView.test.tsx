@@ -499,6 +499,9 @@ describe("the human-first issue detail", () => {
 
     await waitFor(() => expect(screen.queryByText("A comment.")).toBeNull());
     expect(instance.calls.some((call) => call.method === "DELETE")).toBe(true);
+    // The menu that opened the dialog went with the comment; the focus lands on
+    // what the conversation offers next rather than on the page.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add comment" })).toHaveFocus());
   });
 
   // A comment somebody else wrote: a user may clear it up, and nobody but its

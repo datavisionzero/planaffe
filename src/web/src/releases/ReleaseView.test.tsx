@@ -1,6 +1,6 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Route, Routes } from "react-router";
+import { Link, Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { installInstance, renderAt } from "@/shared/testing";
 import { ReleaseView } from "./ReleaseView";
@@ -212,4 +212,47 @@ it("takes the newest publication back and lands on the open release", async () =
   await user.click(within(screen.getByRole("dialog", { name: "Take 0.4.0 back?" })).getByRole("button", { name: "Take it back" }));
 
   expect(await vi.waitFor(() => instance.calls.some((call) => call.url.endsWith("/retract")))).toBe(true);
+});
+
+// Both forms of the open release guard leaving, and the router heeds only the
+// blocker registered last: with the other form open beside it, what was
+// written in one used to be left without a word.
+it("guards written notes while the publication is open beside them", async () => {
+  installInstance({ "GET /projects/PLAN/releases/unreleased": { body: open }, "GET /projects/PLAN/releases": [] });
+  renderAt("/PLAN/releases/unreleased", <Routes>
+    <Route path="/:project/releases/:name" element={<><ReleaseView /><Link to="/elsewhere">Elsewhere</Link></>} />
+    <Route path="/elsewhere" element={<p>Somewhere else</p>} />
+  </Routes>);
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Edit notes" }));
+  await user.type(await screen.findByLabelText("Notes"), " More.");
+  await user.click(screen.getByRole("button", { name: "Publish…" }));
+  await within(screen.getByRole("dialog")).findByLabelText("Name");
+
+  // The dialog is modal; a navigation from outside it is what Back would be.
+  fireEvent.click(screen.getByRole("link", { name: "Elsewhere", hidden: true }));
+
+  expect(await screen.findByRole("dialog", { name: "Discard what you wrote?" })).toBeInTheDocument();
+  expect(screen.queryByText("Somewhere else")).not.toBeInTheDocument();
+});
+
+it("guards a written publication while the notes editor is open too", async () => {
+  installInstance({ "GET /projects/PLAN/releases/unreleased": { body: open }, "GET /projects/PLAN/releases": [] });
+  renderAt("/PLAN/releases/unreleased", <Routes>
+    <Route path="/:project/releases/:name" element={<><ReleaseView /><Link to="/elsewhere">Elsewhere</Link></>} />
+    <Route path="/elsewhere" element={<p>Somewhere else</p>} />
+  </Routes>);
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Edit notes" }));
+  await screen.findByLabelText("Notes");
+  await user.click(screen.getByRole("button", { name: "Publish…" }));
+  await user.type(within(screen.getByRole("dialog")).getByLabelText("Name"), "0.4.0");
+
+  // The dialog is modal; a navigation from outside it is what Back would be.
+  fireEvent.click(screen.getByRole("link", { name: "Elsewhere", hidden: true }));
+
+  expect(await screen.findByRole("dialog", { name: "Discard what you wrote?" })).toBeInTheDocument();
+  expect(screen.queryByText("Somewhere else")).not.toBeInTheDocument();
 });

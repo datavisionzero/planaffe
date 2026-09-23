@@ -100,10 +100,20 @@ export function TextActionDialog({ trigger, open: controlled, onOpenChange, titl
   const [error, setError] = useState<string>();
   const id = useId();
   const open = controlled ?? uncontrolled;
+  // Every opening starts from the value it is handed, however it was opened.
+  // Resetting only where the dialog opened itself left a controlled one — the
+  // agent's rename, opened from a menu — showing the text a Cancel threw away.
+  const [shownOpen, setShownOpen] = useState(open);
+  if (open !== shownOpen) {
+    setShownOpen(open);
+    if (open) {
+      setValue(initialValue);
+      setError(undefined);
+    }
+  }
 
   function changeOpen(next: boolean) {
     if (busy) return;
-    if (next) setValue(initialValue);
     setError(undefined);
     if (controlled === undefined) setUncontrolled(next);
     onOpenChange?.(next);

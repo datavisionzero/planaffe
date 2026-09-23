@@ -431,9 +431,20 @@ function Conversation({ issue, onChanged }: { issue: Issue; onChanged: (issue: I
   const [writing, setWriting] = useState<"comment" | "question">();
   const entries = [...issue.questions.map((value) => ({ kind: "question" as const, at: value.asked_at, value })), ...issue.comments.map((value) => ({ kind: "comment" as const, at: value.created_at, value }))].sort((a, b) => a.at.localeCompare(b.at));
   const added = (issue: Issue) => { setWriting(undefined); onChanged(issue); };
-  return <div className="space-y-5">
-    {entries.length === 0 ? <p className="text-sm text-muted-foreground">Nothing has been said on this issue yet.</p> : entries.map((entry) => entry.kind === "comment" ? <CommentEntry key={entry.value.id} issue={issue} comment={entry.value} onChanged={onChanged} /> : <article key={entry.value.id}><Eyebrow>{entry.value.answer === null ? "Open question" : "Question"}</Eyebrow><Markdown className="mt-1">{entry.value.question}</Markdown><Byline name={entry.value.asked_by.name} at={entry.value.asked_at} />{entry.value.answer !== null && <div className="mt-3 border-l-2 pl-3"><Markdown>{entry.value.answer}</Markdown><Byline name={entry.value.answered_by?.name ?? "Unknown"} at={entry.value.answered_at!} /></div>}</article>)}
-    {writing === undefined && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => setWriting("comment")}>Add comment</Button><Button variant="outline" size="sm" onClick={() => setWriting("question")}>Ask question</Button></div>}
+  // A deleted comment takes its own menu, and with it the dialog's trigger,
+  // away: the focus goes to what the conversation offers next rather than
+  // falling to the page (`docs/human-interface.md`, accessibility floor).
+  const root = useRef<HTMLDivElement>(null);
+  const [refocus, setRefocus] = useState(0);
+  useEffect(() => {
+    if (refocus === 0) return;
+    const next = root.current?.querySelector<HTMLElement>("[data-conversation-next]") ?? root.current;
+    next?.focus();
+  }, [refocus]);
+  const removed = (issue: Issue) => { onChanged(issue); setRefocus((count) => count + 1); };
+  return <div ref={root} tabIndex={-1} className="space-y-5 outline-none">
+    {entries.length === 0 ? <p className="text-sm text-muted-foreground">Nothing has been said on this issue yet.</p> : entries.map((entry) => entry.kind === "comment" ? <CommentEntry key={entry.value.id} issue={issue} comment={entry.value} onChanged={onChanged} onRemoved={removed} /> : <article key={entry.value.id}><Eyebrow>{entry.value.answer === null ? "Open question" : "Question"}</Eyebrow><Markdown className="mt-1">{entry.value.question}</Markdown><Byline name={entry.value.asked_by.name} at={entry.value.asked_at} />{entry.value.answer !== null && <div className="mt-3 border-l-2 pl-3"><Markdown>{entry.value.answer}</Markdown><Byline name={entry.value.answered_by?.name ?? "Unknown"} at={entry.value.answered_at!} /></div>}</article>)}
+    {writing === undefined && <div className="flex flex-wrap gap-2"><Button data-conversation-next variant="outline" size="sm" onClick={() => setWriting("comment")}>Add comment</Button><Button variant="outline" size="sm" onClick={() => setWriting("question")}>Ask question</Button></div>}
     {writing === "comment" && <TextAction draftKey={`issue:${issue.key}:new-comment`} version={issue.updated_at} label="Add comment" multiline onCancel={() => setWriting(undefined)} onRun={async (body) => { const result = await api.POST("/issues/{key}/comments", { params: { path: { key: issue.key } }, body: { body } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return reread(issue.key, { ...issue, comments: [...issue.comments, result.data] }); }} onChanged={added} />}
     {writing === "question" && <TextAction draftKey={`issue:${issue.key}:new-question`} version={issue.updated_at} label="Ask question" multiline onCancel={() => setWriting(undefined)} onRun={async (question) => { const result = await api.POST("/issues/{key}/questions", { params: { path: { key: issue.key } }, body: { question } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return reread(issue.key, { ...issue, questions: [...issue.questions, result.data], open_questions: issue.open_questions + 1 }); }} onChanged={added} />}
   </div>;
@@ -449,7 +460,7 @@ function Conversation({ issue, onChanged }: { issue: Issue; onChanged: (issue: I
  * instance refuses teaches the reader nothing. Hiding is not the check — the
  * instance makes it, and it is `forbidden` there.
  */
-function CommentEntry({ issue, comment, onChanged }: { issue: Issue; comment: Issue["comments"][number]; onChanged: (issue: Issue) => void }) {
+function CommentEntry({ issue, comment, onChanged, onRemoved }: { issue: Issue; comment: Issue["comments"][number]; onChanged: (issue: Issue) => void; onRemoved: (issue: Issue) => void }) {
   const { me } = useSession();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -479,7 +490,7 @@ function CommentEntry({ issue, comment, onChanged }: { issue: Issue; comment: Is
     <ActionDialog open={deleting} onOpenChange={setDeleting} title="Delete this comment?" description="It is gone for good — there is no grace period for a comment. The history keeps that it was taken away." confirmLabel="Delete comment" onConfirm={async () => {
       const result = await api.DELETE("/comments/{id}", { params: { path: { id: comment.id } } });
       if (!result.response.ok) throw new Error(describe(result.error, result.response.status));
-      onChanged(await reread(issue.key, without(issue)));
+      onRemoved(await reread(issue.key, without(issue)));
     }} />
   </article>;
 }

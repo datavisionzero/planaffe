@@ -78,3 +78,14 @@ it("saves from inside the text, where there is something to save", async () => {
 
   expect(onSubmit).toHaveBeenCalledTimes(1);
 });
+
+// The toolbar said it controlled an id nothing carried, and the preview's name
+// stood on an element without a role, where a screen reader ignores it.
+it("points the toolbar at the text it acts on, and names the preview as a group", async () => {
+  render(<Field />);
+
+  const field = await screen.findByLabelText("Description");
+  const toolbar = screen.getByRole("toolbar", { name: "Description, formatting" });
+  expect(document.getElementById(toolbar.getAttribute("aria-controls")!)).toBe(field);
+  expect(screen.getByRole("group", { name: "Description, preview" })).toBeInTheDocument();
+});

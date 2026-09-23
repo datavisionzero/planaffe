@@ -66,7 +66,15 @@ export function ThemeProvider({
   ...props
 }: ThemeProviderProps) {
   const [theme, setThemeState] = React.useState<Theme>(() => {
-    const storedTheme = localStorage.getItem(storageKey)
+    // Storage can be refused outright (a private window, blocked site data),
+    // and a throw here would take the whole application down in its first
+    // render. The theme is a convenience: without storage it is the default.
+    let storedTheme: string | null
+    try {
+      storedTheme = localStorage.getItem(storageKey)
+    } catch {
+      storedTheme = null
+    }
     if (isTheme(storedTheme)) {
       return storedTheme
     }
@@ -76,7 +84,11 @@ export function ThemeProvider({
 
   const setTheme = React.useCallback(
     (nextTheme: Theme) => {
-      localStorage.setItem(storageKey, nextTheme)
+      try {
+        localStorage.setItem(storageKey, nextTheme)
+      } catch {
+        // Not remembered past this tab; it still applies now.
+      }
       setThemeState(nextTheme)
     },
     [storageKey]

@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } 
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/session/useSession";
 import { DraftGuardContext } from "./abandon";
+import { draftPrefix } from "./storage";
 
 type Saved<T> = { value: T; baseVersion: string | null; savedAt: string };
 
@@ -14,7 +15,7 @@ export function useDraft<T>(form: string, initial: T, baseVersion: string | null
 } {
   const { me } = useSession();
   const register = useContext(DraftGuardContext);
-  const key = `planaffe.draft:${location.origin}:${me.id}:${form}`;
+  const key = `${draftPrefix}${location.origin}:${me.id}:${form}`;
   const [pending, setPending] = useState<Saved<T> | null>(() => {
     try {
       const raw = localStorage.getItem(key);

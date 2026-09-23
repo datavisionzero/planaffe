@@ -37,3 +37,24 @@ export function forget(area: Area, key: string) {
     // Nothing was kept, so nothing has to go.
   }
 }
+
+/**
+ * Where a form's unsent text is kept (`useDraft`): one key per signed-in user,
+ * object and form, all under this prefix.
+ */
+export const draftPrefix = "planaffe.draft:";
+
+/**
+ * Throw away every unsent draft in this browser. Signing out is leaving the
+ * machine to whoever comes next, and ticket text — which quotes whatever an
+ * agent pasted into it — is not left behind in storage for them.
+ */
+export function forgetDrafts() {
+  try {
+    const held = window.localStorage;
+    const drafts = Array.from({ length: held.length }, (_, index) => held.key(index)).filter((key) => key?.startsWith(draftPrefix));
+    for (const key of drafts) held.removeItem(key!);
+  } catch {
+    // Nothing could be kept where storage is refused, so nothing is left.
+  }
+}

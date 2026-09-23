@@ -14,8 +14,9 @@ import type { Selected } from "./markdownCommands";
  * It is loaded on demand and never with the shell (ADR 0006, ADR 0023): it
  * weighs several times what the render pipeline does, and it is wanted only on
  * the screens where somebody writes. `MarkdownField` is what everything else
- * imports; until this module has arrived, that field is a plain text area over
- * the same value.
+ * imports; until this module has arrived, that field is a quiet placeholder of
+ * the same height — not a plainer text area that would be swapped out from
+ * under somebody who had started typing (`docs/human-interface.md`).
  *
  * It edits Markdown as source. What is stored is Markdown and what is edited is
  * Markdown — ADR 0007 — so this shows the structure of the text while it is
@@ -34,12 +35,15 @@ export default function Editor({
   onChange,
   onSubmit,
   onReady,
+  id,
   label,
   hint,
   autoFocus,
   minHeight,
   maxHeight,
 }: {
+  /** The id of the element that is written in, which the toolbar names as what it controls. */
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   /** ⌘/Ctrl+Enter, so a comment can be sent without leaving the text. */
@@ -94,7 +98,7 @@ export default function Editor({
         keymap.of([...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
         pasteURLAsLink,
         placeholder(hint ?? ""),
-        EditorView.contentAttributes.of({ "aria-label": label }),
+        EditorView.contentAttributes.of(id === undefined ? { "aria-label": label } : { "aria-label": label, id }),
         look(minHeight, maxHeight),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
