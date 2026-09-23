@@ -7,7 +7,10 @@ name: Release
 #
 # `workflow_dispatch` takes the tag by name so that a release can be run again
 # — because the gate had not finished, or because a step here failed — without
-# deleting and re-pushing a tag people may already have.
+# deleting and re-pushing a tag people may already have. Running it again is
+# safe for any tag, the old ones included: the moving names go only to the
+# highest version that has them, and a release that already exists keeps what
+# a maintainer wrote on it.
 on:
   push:
     tags: ["v*"]
@@ -47,12 +50,17 @@ jobs:
       minor: ${{ steps.read.outputs.minor }}
       prerelease: ${{ steps.read.outputs.prerelease }}
       sha: ${{ steps.read.outputs.sha }}
+      latest: ${{ steps.highest.outputs.latest }}
+      minor_latest: ${{ steps.highest.outputs.minor_latest }}
     steps:
       - uses: actions/checkout@v7
         with:
           # The tag is the subject, so the tag is what is checked out — on a
           # dispatch `github.ref` is a branch and would build the wrong commit.
           ref: ${{ inputs.tag || github.ref }}
+          # Every tag, because whether this one is the newest is a question
+          # about all the others.
+          fetch-depth: 0
 
       - id: read
         name: Read the tag
@@ -81,22 +89,58 @@ jobs:
             echo "sha=$(git rev-parse HEAD)"
           } >> "$GITHUB_OUTPUT"
 
+      # `:latest`, the two-part tag and GitHub's "Latest" are names that move,
+      # and they only ever move forward. A hotfix on an older line, or this
+      # workflow started again for a tag that has since been overtaken, gets
+      # its own version tag and nothing else — otherwise every installation
+      # following `:latest` would be handed an image older than its database,
+      # and migrations only run forward (ADR 0011).
+      - id: highest
+        name: Whether this is the newest release
+        env:
+          TAG: ${{ steps.read.outputs.tag }}
+          MINOR: ${{ steps.read.outputs.minor }}
+          PRERELEASE: ${{ steps.read.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          stable() { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; }
+          highest=$(git tag -l 'v*' --sort=-v:refname | stable | head -n 1)
+          highest_minor=$(git tag -l "v$MINOR.*" --sort=-v:refname | stable | head -n 1)
+          echo "The highest stable tag is ${highest:-none}, on $MINOR it is ${highest_minor:-none}."
+
+          latest=false
+          minor_latest=false
+          if [ -z "$PRERELEASE" ]; then
+            [ "$TAG" = "$highest" ] && latest=true
+            [ "$TAG" = "$highest_minor" ] && minor_latest=true
+          fi
+          echo "$TAG moves :latest: $latest, moves :$MINOR: $minor_latest."
+          {
+            echo "latest=$latest"
+            echo "minor_latest=$minor_latest"
+          } >> "$GITHUB_OUTPUT"
+
       # Nothing is re-tested here — the trunk is gated on every push and a tag
       # names a commit that already went through it. What is checked is that it
       # actually did: releasing a commit the gate never passed, or passed red,
       # is the one thing ADR 0001's trunk discipline exists to prevent, and a
       # tag can be put on any commit at all.
-      - name: The gate passed on this commit
+      #
+      # Only a run for a push to `main` counts. A pull request's run is green
+      # on a commit that may never have reached the trunk, and a tag on it
+      # would release what nobody merged.
+      - name: The gate passed on this commit, on the trunk
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ steps.read.outputs.sha }}
         run: |
           set -euo pipefail
           passed=$(gh api \
-            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&status=success" \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&status=success&event=push&branch=main" \
             --jq '.total_count')
           if [ "$passed" -eq 0 ]; then
-            echo "::error::CI has no successful run for $SHA. Wait for it, or fix it, then start this workflow again with the tag."
+            echo "::error::CI has no successful run for $SHA on a push to main. Wait for it, or fix it, then start this workflow again with the tag."
             exit 1
           fi
           echo "CI passed on $SHA."
@@ -195,15 +239,23 @@ jobs:
         env:
           VERSION: ${{ needs.what.outputs.version }}
           MINOR: ${{ needs.what.outputs.minor }}
-          PRERELEASE: ${{ needs.what.outputs.prerelease }}
+          LATEST: ${{ needs.what.outputs.latest }}
+          MINOR_LATEST: ${{ needs.what.outputs.minor_latest }}
         run: |
           set -euo pipefail
 
+          # `what` has already said no to both for a prerelease, and for a
+          # version something higher has overtaken.
           tags=(--tag "$IMAGE:$VERSION")
-          if [ -z "$PRERELEASE" ]; then
-            tags+=(--tag "$IMAGE:$MINOR" --tag "$IMAGE:latest")
+          if [ "$MINOR_LATEST" = "true" ]; then
+            tags+=(--tag "$IMAGE:$MINOR")
           else
-            echo "A prerelease. It gets its own tag and moves neither :$MINOR nor :latest."
+            echo "Not the highest patch of $MINOR, so :$MINOR stays where it is."
+          fi
+          if [ "$LATEST" = "true" ]; then
+            tags+=(--tag "$IMAGE:latest")
+          else
+            echo "Not the highest stable release, so :latest stays where it is."
           fi
 
           sources=()
@@ -337,11 +389,35 @@ jobs:
           TAG: ${{ needs.what.outputs.tag }}
           VERSION: ${{ needs.what.outputs.version }}
           PRERELEASE: ${{ needs.what.outputs.prerelease }}
+          LATEST: ${{ needs.what.outputs.latest }}
         run: |
           set -euo pipefail
 
-          # A quoted heredoc, so that the backticks around the platform names
-          # are backticks and not a shell running `linux/amd64`.
+          # `--latest` explicitly, both ways: `docs/install.md` sends people
+          # to `releases/latest/download/pa_<os>_<arch>`, and that URL must
+          # never resolve to a prerelease, nor to a version something higher
+          # has overtaken. `what` has said which this is.
+          if [ "$LATEST" = "true" ]; then
+            latest=(--latest)
+          else
+            latest=(--latest=false)
+          fi
+
+          # A run again for a tag that already has its release. The assets are
+          # replaced, and whether it is "Latest" is set once more; the title
+          # and the notes are left alone, because by now the prose above the
+          # generated changelog may be a maintainer's, and a pipeline has no
+          # business overwriting it.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already has a release. Replacing its assets, keeping its notes."
+            gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" "${latest[@]}"
+            exit 0
+          fi
+
+          # Unquoted, so that `$IMAGE` and `$VERSION` are filled in; the
+          # backticks are escaped one by one, so that they stay backticks and
+          # are not a shell running `linux/amd64`.
           notes=$(mktemp)
           cat > "$notes" <<NOTES
           ## The image
@@ -361,14 +437,9 @@ jobs:
           # The heredoc is indented to sit in this file; the Markdown is not.
           sed -i 's/^          //' "$notes"
 
-          # `--latest` explicitly, both ways: `docs/install.md` sends people
-          # to `releases/latest/download/pa_<os>_<arch>`, and that URL must
-          # never resolve to a prerelease.
-          flags=(--title "$TAG" --notes-file "$notes" --generate-notes)
+          flags=(--title "$TAG" --notes-file "$notes" --generate-notes "${latest[@]}")
           if [ -n "$PRERELEASE" ]; then
-            flags+=(--prerelease --latest=false)
-          else
-            flags+=(--latest)
+            flags+=(--prerelease)
           fi
 
           gh release create "$TAG" "${flags[@]}" dist/*
