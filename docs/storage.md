@@ -643,6 +643,17 @@ a sub-issue closed after its parent already shipped enters the open release
 like any issue. Publishing names the open release, sets `published_at` and
 `published_by`, and creates the next open one, in one transaction.
 
+**Every act that writes a project's releases is serialised per project** —
+close into the open release, reopen out of it, publish, retract, rename and the
+two hand edits. Each takes `pg_advisory_xact_lock(1, hashtext(project_id::text))`
+first and only then loads what it writes, in a statement of its own. A lock on
+the open release row would not do: publishing replaces that row, and a close
+that waited for it found no open release at all. The project row would not do
+either, because allocating an issue number takes it before locking a parent,
+while a close holds its issue before it gets here. A unique violation on
+`release_open` or `release_name` that happens anyway is a refusal, not an
+error.
+
 Three acts write `release_issue` and `release` by hand, and only ever the open
 release (VISION 7): one inserts a `release_issue` row, one deletes it, and
 retracting a publication deletes the empty open release row and clears the

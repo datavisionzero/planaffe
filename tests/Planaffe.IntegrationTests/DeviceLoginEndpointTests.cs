@@ -215,6 +215,37 @@ public sealed class DeviceLoginEndpointTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
     }
 
+    /// <summary>Two polls that arrive together collect one token between them.</summary>
+    [Fact]
+    public async Task A_login_redeemed_twice_at_once_hands_over_one_token()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var human = instance.ClientWith(AnInstance.BootstrapToken);
+        var before = (await human.GetFromJsonAsync<JsonElement>("/tokens", Ct)).GetArrayLength();
+
+        for (var round = 0; round < 5; round++)
+        {
+            using var cli = instance.ClientWith(null);
+            var begun = await BeginAsync(cli);
+            var code = begun.GetProperty("user_code").GetString()!;
+            var deviceCode = begun.GetProperty("device_code").GetString()!;
+            using var approved = await human.PostAsJsonAsync($"/device-logins/{code}/decide", new { approve = true }, Ct);
+            Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
+
+            var answers = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+            {
+                using var poll = instance.ClientWith(null);
+                using var redeemed = await poll.PostAsJsonAsync("/device-logins/redeem", new { device_code = deviceCode }, Ct);
+                return redeemed.StatusCode;
+            }));
+
+            Assert.Equal(1, answers.Count(status => status == HttpStatusCode.OK));
+            Assert.All(answers.Where(status => status != HttpStatusCode.OK), status => Assert.Equal(HttpStatusCode.Gone, status));
+        }
+
+        Assert.Equal(before + 5, (await human.GetFromJsonAsync<JsonElement>("/tokens", Ct)).GetArrayLength());
+    }
+
     private static async Task<JsonElement> BeginAsync(HttpClient cli)
     {
         using var begun = await cli.PostAsJsonAsync("/device-logins", new { }, Ct);
