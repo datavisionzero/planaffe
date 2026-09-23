@@ -23,7 +23,13 @@ public sealed class OneTimeSecrets(PlanaffeDbContext context) : IOneTimeSecrets
             OneTimeSecretPurpose.EmailChange => "email_change",
             _ => throw new ArgumentOutOfRangeException(nameof(purpose)),
         };
-        var secret = await context.OneTimeSecrets.FromSqlInterpolated($"select * from one_time_secret where secret_hash = {secretHash} and purpose = {purposeName} for update").SingleOrDefaultAsync(ct);
+        // Lock, then load: the pattern and the reason are Issues.LoadForWriteAsync.
+        // A `for update` inside the query EF Core composes around a raw select
+        // hands back the row as it was before the writer it waited for
+        // committed, and two concurrent redemptions could both find it unused.
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"select id from one_time_secret where secret_hash = {secretHash} and purpose = {purposeName} for update", ct);
+        var secret = await context.OneTimeSecrets.SingleOrDefaultAsync(x => x.SecretHash == secretHash && x.Purpose == purpose, ct);
         if (secret is null || !secret.IsLive(now)) return null;
         secret.Consume(now); await context.SaveChangesAsync(ct); await transaction.CommitAsync(ct); return secret;
     }

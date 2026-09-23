@@ -53,19 +53,27 @@ public sealed class ChangeIssue(
 {
     public async Task<IssueShape> ExecuteAsync(
         string key, IssueChanges changes, string? ifMatch, CancellationToken cancellationToken)
-        => await transactions.RunAsync(
+    {
+        var after = await transactions.RunAsync(
             () => ExecuteWithinTransactionAsync(key, changes, ifMatch, cancellationToken),
             cancellationToken);
+        return await assembler.CompleteAsync(after, cancellationToken);
+    }
 
     /// <summary>The same change on several issues, committed only when every issue accepts it.</summary>
+    /// <remarks>
+    /// The answers are put together after the commit rather than inside the
+    /// transaction: each is a dozen reads, and a hundred of them would hold
+    /// every row lock of the request while they ran.
+    /// </remarks>
     public async Task<ChangedIssues> ExecuteManyAsync(
         IReadOnlyList<string>? keys, IssueChanges changes, CancellationToken cancellationToken)
     {
         ValidateKeys(keys);
 
-        return await transactions.RunAsync(async () =>
+        var rows = await transactions.RunAsync(async () =>
         {
-            var changed = new List<IssueShape>(keys!.Count);
+            var changed = new List<IssueRow>(keys!.Count);
             foreach (var key in keys)
             {
                 try
@@ -80,11 +88,19 @@ public sealed class ChangeIssue(
                 }
             }
 
-            return new ChangedIssues(changed);
+            return changed;
         }, cancellationToken);
+
+        var shapes = new List<IssueShape>(rows.Count);
+        foreach (var row in rows)
+        {
+            shapes.Add(await assembler.CompleteAsync(row, cancellationToken));
+        }
+
+        return new ChangedIssues(shapes);
     }
 
-    private async Task<IssueShape> ExecuteWithinTransactionAsync(
+    private async Task<IssueRow> ExecuteWithinTransactionAsync(
         string key, IssueChanges changes, string? ifMatch, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(changes);
@@ -270,7 +286,7 @@ public sealed class ChangeIssue(
         var after = await issues.FindLiveAsync(before.ProjectKey, before.Number, cancellationToken)
             ?? throw new InvalidOperationException($"Issue {before.Key} vanished under its own write.");
 
-        return await assembler.CompleteAsync(after, cancellationToken);
+        return after;
     }
 
     private static void ValidateKeys(IReadOnlyList<string>? keys)

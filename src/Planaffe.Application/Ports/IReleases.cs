@@ -16,6 +16,13 @@ public interface IReleases
     /// <summary>The most recently published release of the project, or none.</summary>
     Task<Release?> LatestPublishedAsync(Guid projectId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// How many issues each release shows, counted as <see cref="IssuesAsync"/>
+    /// reads them — a deleted issue is not among them — in one query for all.
+    /// A release that shows none is absent from the answer.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, int>> IssueCountsAsync(IReadOnlyCollection<Guid> releaseIds, CancellationToken cancellationToken);
+
     /// <summary>How many issues the release records. The open one is empty right after a publication.</summary>
     Task<int> IssueCountAsync(Guid releaseId, CancellationToken cancellationToken);
 
