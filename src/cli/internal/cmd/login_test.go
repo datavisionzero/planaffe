@@ -95,6 +95,7 @@ type theInstance struct {
 	// pending is how many polls are answered `device-pending` before a human
 	// is taken to have pressed the button.
 	pending   int
+	throttled bool
 	collected bool
 	begun     int
 	polls     int
@@ -116,6 +117,9 @@ func (i *theInstance) handler() http.Handler {
 		switch {
 		case r.URL.Path == "/version":
 			reply(200, `{"version":"0.0.0-dev"}`)
+		case r.URL.Path == "/device-logins" && r.Method == http.MethodPost && i.throttled:
+			w.Header().Set("Retry-After", "600")
+			reply(429, `{"type":"/problems/login-throttled","status":429,"detail":"Too many logins were begun from this address. Try again in 10 minutes."}`)
 		case r.URL.Path == "/device-logins" && r.Method == http.MethodPost:
 			i.begun++
 			reply(200, `{"device_code":"a-very-long-device-code","user_code":"BCDF-GHJK","verification_uri":"/device",`+
@@ -324,5 +328,26 @@ func TestTheEnvironmentStillWinsOverALoginOnThisMachine(t *testing.T) {
 	}
 	if !strings.Contains(out, "from "+config.EnvToken) {
 		t.Fatalf("pa me reads the wrong token:\n%s", out)
+	}
+}
+
+// A throttled login is told to wait, in the instance's words, and is a refusal
+// and not a bug in pa — nor `device-pending`, which would have it poll.
+func TestLoginThatIsThrottledSaysHowLongToWait(t *testing.T) {
+	instance := &theInstance{version: "0.0.0-dev", throttled: true}
+	server := httptest.NewServer(instance.handler())
+	defer server.Close()
+
+	s := newSession(t, server, nil)
+	code, _, errOut := s.run("login", "--url", server.URL)
+
+	if code != exit.Refused {
+		t.Fatalf("code %d, stderr %q", code, errOut)
+	}
+	if !strings.Contains(errOut, "Try again in 10 minutes") || !strings.Contains(errOut, "login-throttled") {
+		t.Fatalf("stderr does not say how long to wait:\n%s", errOut)
+	}
+	if instance.polls != 0 {
+		t.Fatalf("a throttled login polled %d times", instance.polls)
 	}
 }

@@ -6,9 +6,18 @@ using Planaffe.Application.Ports;
 namespace Planaffe.Infrastructure.Security;
 
 /// <summary>Argon2id with a PHC-style self-describing encoded value.</summary>
+/// <remarks>
+/// Every hash holds 64 MiB while it runs, and a sign-in is a door anybody can
+/// knock on: without a ceiling, a few dozen concurrent attempts hold
+/// gigabytes. So at most <see cref="MaximumConcurrent"/> run at once in the
+/// process, and the rest wait their turn — the throttle in front decides who
+/// may try at all, this decides how many try at the same moment.
+/// </remarks>
 public sealed class Argon2idPasswordHasher : IPasswordHasher
 {
+    public const int MaximumConcurrent = 4;
     private const int MemoryKiB = 65536, Iterations = 3, Parallelism = 1, HashBytes = 32, SaltBytes = 16;
+    private static readonly SemaphoreSlim Running = new(MaximumConcurrent, MaximumConcurrent);
     public Task<string> HashAsync(string password, CancellationToken cancellationToken)
     {
         Validate(password); var salt = RandomNumberGenerator.GetBytes(SaltBytes);
@@ -33,8 +42,10 @@ public sealed class Argon2idPasswordHasher : IPasswordHasher
     private static async Task<string> EncodeAsync(string password, byte[] salt, int memory, int iterations, int parallelism, CancellationToken ct)
     {
         using var argon = new Argon2id(Encoding.UTF8.GetBytes(password)) { Salt = salt, MemorySize = memory, Iterations = iterations, DegreeOfParallelism = parallelism };
-        ct.ThrowIfCancellationRequested();
-        var hash = await argon.GetBytesAsync(HashBytes);
+        await Running.WaitAsync(ct);
+        byte[] hash;
+        try { hash = await argon.GetBytesAsync(HashBytes); }
+        finally { Running.Release(); }
         ct.ThrowIfCancellationRequested();
         return $"$argon2id$v=19$m={memory},t={iterations},p={parallelism}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
     }

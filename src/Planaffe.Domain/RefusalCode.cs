@@ -123,6 +123,13 @@ public enum RefusalCode
     /// <summary>The device login ran out, or its token has already been collected.</summary>
     DeviceExpired,
 
+    /// <summary>
+    /// Too many attempts at a door a stranger can knock on — a sign-in, a
+    /// device login, a recovery email, a current password — from this account
+    /// or source; <c>Retry-After</c> says when to try again.
+    /// </summary>
+    LoginThrottled,
+
     /// <summary>Deactivation or demotion would leave no active administrator.</summary>
     LastAdministrator,
 

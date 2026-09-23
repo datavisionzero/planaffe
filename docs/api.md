@@ -268,7 +268,7 @@ person. Extension members carry what the code needs — the holder on
 | 422 | `smtp-not-configured` | an action that must send email cannot do so |
 | 409 | `device-pending` | nobody has confirmed this device login yet; the one refusal that means keep polling |
 | 403 | `device-denied` | a human refused this device login, or it is no longer theirs to decide |
-| 429 | `login-throttled` | too many failed sign-ins for the account or source address; `Retry-After` is set |
+| 429 | `login-throttled` | too many attempts at a sign-in, a device login, a recovery email or a current password, for the account or the source; `Retry-After` says in seconds when to try again |
 | 500 | `internal` | a bug; the response carries nothing else |
 
 Three things an agent has to tell apart (VISION 6.1) are three different rows:
@@ -286,7 +286,7 @@ can branch without parsing:
 | 1 | unexpected | 500, a response the CLI cannot parse, a bug in the CLI |
 | 2 | usage | bad arguments, no instance and no login, no token anywhere, a `.planaffe` file the CLI cannot read |
 | 3 | not found | 404 `not-found`, 404 `deleted` |
-| 4 | refused | 400 `validation`, 400 `unknown-field`, 422 of every type, and 410 — a one-time thing that is gone cannot be retried |
+| 4 | refused | 400 `validation`, 400 `unknown-field`, 422 of every type, 410 — a one-time thing that is gone cannot be retried — and 429 `login-throttled`, which can, after the wait its detail names |
 | 5 | conflict | 409 `claim-held`, 409 `claim-lost`, 409 `idempotency-mismatch`, 409 `already-shown`, 409 `release-exists`, 409 `device-pending` |
 | 6 | stale | 412 `stale` |
 | 7 | denied | 401, 403 |
@@ -898,22 +898,35 @@ way to read what the lists already say (ADR 0012).
 | `DELETE` | `/session` | browser user | revoke the server-side session and expire the cookie; 204 |
 | `POST` | `/session/bootstrap` | anyone | `{ token, password }` → 204 and a browser cookie; once per bootstrap user token, and never stores that token in the browser |
 | `POST` | `/invitations/accept` | anyone | `{ secret, password }` → 204 and a browser cookie; consumes the invitation and activates the user |
-| `POST` | `/password-recovery` | anyone | `{ email }` → 202 in every case; sends a one-hour link only for an active matching user |
+| `POST` | `/password-recovery` | anyone | `{ email }` → 202 in every case, answered before anything is looked up; afterwards sends a one-hour link only for an active matching user, and at most one per address in five minutes |
 | `POST` | `/password-recovery/complete` | anyone | `{ secret, password }` → 204; consumes the secret, changes the password and revokes every browser session |
 | `GET` | `/sessions` | user | the caller's `BrowserSession` values, current first |
 | `DELETE` | `/sessions/{id}` | user | revoke one of the caller's sessions; 204 |
 | `DELETE` | `/sessions` | user | revoke every session except the current one; 204 |
-| `POST` | `/me/password` | user | `{ current_password, password }` → 204; revokes every other session |
+| `POST` | `/me/password` | user | `{ current_password, password }` → 204; revokes every other session. A wrong current password is `validation` on `current_password`, and the session that sent it stays signed in |
 | `DELETE` | `/me/token` | token caller | revoke the token this request presented; 204. A browser session is told its own exit is `DELETE /session` |
 | `PATCH` | `/me` | user | `{ name }` → 200 `User`; email and password have their own confirmation-aware acts |
 | `POST` | `/me/email` | user | `{ email }` → 202; sends a confirmation link to the new address while the old remains active |
 | `POST` | `/me/email/confirm` | user | `{ secret }` → 200 `User`; consumes the link and changes the address |
 
-Login failures are throttled over 15 minutes after five attempts for a normalized
-account or 20 for a source address. The public recovery response is deliberately
-indistinguishable for unknown, invited, deactivated and active addresses. If
-SMTP itself is absent it returns `smtp-not-configured` for every address.
-Passwords never appear in response bodies or logs.
+Sign-ins are throttled over 15 minutes after five failed attempts for a
+normalized account or 20 for a source address, and answered `login-throttled`
+with `Retry-After` from then on — the right password included, because a guess
+that happens to be right is still a guess. An attempt is counted before the
+password is checked, so a burst of concurrent sign-ins gets as many checks as
+the limit and not as many as arrived. A source is the client's address, and an
+IPv6 address is its /64. A current password in `POST /me/password` is limited
+the same way, five wrong ones per user in 15 minutes: a session or a token in
+the wrong hands is not a way to guess it without limit.
+
+The public recovery response is deliberately indistinguishable for unknown,
+invited, deactivated and active addresses — in its body, its status and its
+timing, because it is answered before the address is looked up and the email
+is sent after. A normalized address is sent at most one email in five minutes,
+however often it is asked for, and a source that asks more than 20 times in 15
+minutes is told `login-throttled`. If SMTP itself is absent it returns
+`smtp-not-configured` for every address. Passwords never appear in response
+bodies or logs.
 
 That last case is why the two `-link` endpoints exist. Transactional email is
 optional ([ADR 0018](./adr/0018-transactional-email-is-an-optional-instance-capability.md))
@@ -970,7 +983,8 @@ their guesses was half right.
 agent that could confirm one would be issuing itself a second identity
 (VISION 12). Beginning a login is limited per source address, in a window of
 its own, so that a machine making them cannot lock a person out of the password
-screen.
+screen. Past the limit it is `login-throttled` with `Retry-After` — never
+`device-pending`, which would tell a client to keep polling.
 
 **What comes out is a user token and not a session**, which is the one place
 this differs from the sibling project's flow. A session expires, and VISION 12

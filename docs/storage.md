@@ -854,8 +854,13 @@ blocker as an anonymous open reference.
 ### Login throttling
 
 Failed sign-ins are limited in a rolling 15-minute window: five attempts per
-normalized email and 20 per source address. A successful login clears the
-account window, not the address window. Counters live in a small bounded
+normalized email and 20 per source address, where an IPv6 source is its /64.
+An attempt is reserved before the password is checked; a successful login
+gives it back and clears the account window, not the address window. The same
+store limits a user's wrong current passwords (five in 15 minutes), device
+logins begun from a source (20 in 15 minutes) and recovery emails (one per
+normalized address in five minutes, 20 requests per source in 15). Counters
+live in a small bounded
 in-memory store. They are deliberately not durable product data: a restart
 forgiving attempts is safer than making authentication depend on a cleanup table
 or another service. Deployments with several application replicas are outside

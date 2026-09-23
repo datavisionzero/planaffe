@@ -48,6 +48,15 @@ function Profile() {
   );
 }
 
+/**
+ * A wrong current password is a `validation` refusal on `current_password`,
+ * and the session that sent it is still signed in: the sentence is the field's
+ * own, without the field name the problem's `detail` puts in front of it.
+ */
+function wrongCurrentPassword(problem: unknown): string | undefined {
+  return (problem as { errors?: Record<string, string[] | undefined> } | undefined)?.errors?.current_password?.[0];
+}
+
 /** The password and the browsers it signs in: one subject, one address. */
 function Security() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -60,7 +69,7 @@ function Security() {
   return (
     <>
       <Section title="Password" description="Changing it signs every other browser session out.">
-        <form className="grid max-w-lg gap-2" onSubmit={(e) => void submitting(e, setPasswordNotice, async (data, form) => { const r = await api.POST("/me/password", { body: { current_password: String(data.get("current")), password: String(data.get("password")) } }); if (!r.response.ok) throw new Error(describe(r.error, r.response.status)); form.reset(); })}>
+        <form className="grid max-w-lg gap-2" onSubmit={(e) => void submitting(e, setPasswordNotice, async (data, form) => { const r = await api.POST("/me/password", { body: { current_password: String(data.get("current")), password: String(data.get("password")) } }); if (!r.response.ok) throw new Error(wrongCurrentPassword(r.error) ?? describe(r.error, r.response.status)); form.reset(); })}>
           <Input name="current" type="password" placeholder="Current password" aria-label="Current password" />
           <Input name="password" type="password" placeholder="New password (12 characters or more)" minLength={12} aria-label="New password" />
           <Button type="submit" className="w-fit">Change password</Button>

@@ -44,6 +44,7 @@ public static class Problems
             StatusCodes.Status422UnprocessableEntity,
         RefusalCode.WaitTooLong or RefusalCode.TooMany => StatusCodes.Status422UnprocessableEntity,
         RefusalCode.SmtpNotConfigured => StatusCodes.Status422UnprocessableEntity,
+        RefusalCode.LoginThrottled => StatusCodes.Status429TooManyRequests,
         RefusalCode.Internal => StatusCodes.Status500InternalServerError,
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a status."),
     };
@@ -84,6 +85,7 @@ public static class Problems
         RefusalCode.DeviceDenied => "This login was refused, or is no longer yours to decide",
         RefusalCode.DeviceExpired => "This login is expired or has already been collected",
         RefusalCode.LastAdministrator => "The instance must keep one active administrator",
+        RefusalCode.LoginThrottled => "Too many attempts; try again later",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),
     };
@@ -122,6 +124,18 @@ public static class Problems
     public static IResult Result(
         RefusalCode code, string? detail, IReadOnlyDictionary<string, object?>? extensions = null) =>
         Results.Problem(Document(code, detail, instance: null, extensions));
+
+    /// <summary>
+    /// The <c>login-throttled</c> document, with <c>Retry-After</c> in whole
+    /// seconds and the same wait in the sentence a person reads.
+    /// </summary>
+    public static IResult Throttled(HttpContext context, TimeSpan retryAfter, string what)
+    {
+        var seconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+        context.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var wait = seconds < 120 ? $"{seconds} seconds" : $"{(seconds + 59) / 60} minutes";
+        return Result(RefusalCode.LoginThrottled, $"{what} Try again in {wait}.");
+    }
 
     /// <summary>
     /// The <c>validation</c> document: <c>errors</c> maps field to messages.

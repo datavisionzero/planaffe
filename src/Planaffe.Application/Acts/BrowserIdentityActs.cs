@@ -134,13 +134,26 @@ public sealed class ListBrowserSessions(ICallerIdentity caller, IBrowserSessions
 public sealed class ChangePassword(ICallerIdentity caller, IIdentities identities, IPasswordHasher passwords,
     IBrowserSessions sessions, TimeProvider clock)
 {
+    /// <summary>The field a wrong current password is refused on, as <c>validation</c>.</summary>
+    public const string CurrentPasswordField = "current_password";
+
+    /// <summary>Whether <paramref name="refusal"/> is the one for a wrong current password.</summary>
+    public static bool IsWrongCurrentPassword(Refusal refusal) =>
+        refusal.Code == RefusalCode.Validation
+        && refusal.Extensions.GetValueOrDefault("errors") is IReadOnlyDictionary<string, string[]> errors
+        && errors.ContainsKey(CurrentPasswordField);
+
     public async Task ExecuteAsync(string? currentPassword, string? password, CancellationToken cancellationToken)
     {
         ExchangeBootstrapToken.ValidatePassword(password);
         var identity = caller.Caller.RequireUser("change a password");
         var user = await identities.FindUserAsync(identity.Id, cancellationToken) ?? throw new InvalidOperationException("The caller user is missing.");
-        if (user.PasswordHash is null || !await passwords.VerifyAsync(user.PasswordHash, currentPassword ?? string.Empty, cancellationToken))
-            throw new Refusal(RefusalCode.Unauthenticated, "The current password is not correct.");
+        // A wrong current password is a field of this form that is wrong, not
+        // a caller who is unknown: the session that sent it is as good as it
+        // was, and a 401 would have told the browser it had been signed out.
+        if (user.PasswordHash is null || currentPassword is not { Length: >= 12 }
+            || !await passwords.VerifyAsync(user.PasswordHash, currentPassword, cancellationToken))
+            throw Refusal.Validation(CurrentPasswordField, "The current password is not correct.");
         user.SetPassword(await passwords.HashAsync(password!, cancellationToken));
         await identities.RecordUserAsync(user, cancellationToken);
         await sessions.RevokeAllAsync(user.Id, identity.SessionId, clock.GetUtcNow(), cancellationToken);
