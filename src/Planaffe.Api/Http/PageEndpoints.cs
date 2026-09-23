@@ -37,10 +37,10 @@ public sealed class ChangePageRequestConverter : JsonConverter<ChangePageRequest
         }
 
         return new ChangePageRequest(
-            Text(body, "slug"),
-            Text(body, "title"),
-            body.TryGetProperty("body", out _),
-            Text(body, "body"));
+            PatchBody.Text(body, "slug"),
+            PatchBody.Text(body, "title"),
+            PatchBody.Given(body, "body"),
+            PatchBody.Text(body, "body"));
     }
 
     public override void Write(Utf8JsonWriter writer, ChangePageRequest value, JsonSerializerOptions options)
@@ -67,8 +67,6 @@ public sealed class ChangePageRequestConverter : JsonConverter<ChangePageRequest
         writer.WriteEndObject();
     }
 
-    private static string? Text(JsonElement body, string property) =>
-        body.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.String ? value.GetString() : null;
 }
 
 /// <summary>
@@ -146,12 +144,15 @@ public static class PageEndpoints
             .Produces<PageShape>();
 
         door.MapPatch("/{*path}", (string name, string path, ChangePageRequest? request, HttpRequest http, ChangePage change, CancellationToken cancellationToken) =>
-                change.ExecuteAsync(
+            {
+                var given = PatchBody.Required(request, "A page change");
+                return change.ExecuteAsync(
                     name,
                     path,
-                    new PageChanges(request?.Slug, request?.Title, request?.BodyGiven ?? false, request?.Body),
+                    new PageChanges(given.Slug, given.Title, given.BodyGiven, given.Body),
                     http.Headers.IfMatch.ToString(),
-                    cancellationToken))
+                    cancellationToken);
+            })
             .WithName("ChangePage")
             .WithSummary("Change the title, the Markdown or the slug; `If-Match` with the `updated_at` last read guards the document. The parent is not here: moving is an act of its own.")
             .Produces<PageShape>()

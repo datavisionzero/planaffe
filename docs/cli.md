@@ -49,8 +49,12 @@ silently did nothing would send every command to the wrong project.
   from `next` — and nothing else on stdout.
 - **Never interactive.** No prompt, no editor, no pager; stdin is read only where
   a flag says so.
-- **Every write carries an `Idempotency-Key`** `pa` generates itself, one per
-  invocation, so a retry after a lost connection is safe (docs/api.md).
+- **Every write carries an `Idempotency-Key`** `pa` generates itself: 32 hex
+  characters per invocation, numbered `-1`, `-2`, … per write. A write whose
+  connection fails before any answer is sent again with the same key, up to
+  three times in all, and the instance answers the repetition from what it kept
+  of the first (docs/api.md, Idempotency). Running the command again is a new
+  key and a new request: after exit 10 on a write, look before repeating it.
 - **`User-Agent: pa/<version> (<os>/<arch>)`** on every request, and the
   instance's `Planaffe-Version` compared on every answer: a `pa` of another major,
   or older than the instance's minor, stops with exit 9 and says which of the two
@@ -71,8 +75,8 @@ The table of `docs/api.md`, derived from the status and the problem document:
 | 1 | unexpected: a 500, an answer `pa` cannot parse, a bug in `pa` |
 | 2 | usage: bad arguments, no instance and no login, no token anywhere, a `.planaffe` file `pa` cannot read |
 | 3 | not found, deleted included |
-| 4 | refused: validation, every 422, and the 410 of a one-time thing that is gone — a used link, a device login that ran out |
-| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `release-exists`, `device-pending` |
+| 4 | refused: validation, every 422, the 410 of a one-time thing that is gone — a used link, a device login that ran out — and the 429 of `login-throttled`, whose message says how long to wait |
+| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `idempotency-pending`, `already-shown`, `release-exists`, `device-pending` |
 | 6 | stale |
 | 7 | denied: 401, 403 |
 | 8 | empty: `next` found nothing, or another waiting command reached its deadline |

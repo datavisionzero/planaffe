@@ -40,20 +40,12 @@ public static class EpicEndpoints
 
         door.MapPatch("/{key}", async (string key, HttpRequest http, ChangeEpic change, CancellationToken cancellationToken) =>
             {
-                var body = await JsonDocument.ParseAsync(http.Body, cancellationToken: cancellationToken);
-                var root = body.RootElement;
-                if (root.ValueKind is not JsonValueKind.Object)
-                {
-                    throw Domain.Refusal.Validation("body", "A change is an object.");
-                }
-
+                var root = await PatchBody.ReadObjectAsync(http, "A change", cancellationToken);
                 var changes = new EpicChanges(
-                    Text(root, "title"),
-                    root.TryGetProperty("description", out _),
-                    Text(root, "description"),
-                    root.TryGetProperty("labels", out var labels) && labels.ValueKind is JsonValueKind.Array
-                        ? [.. labels.EnumerateArray().Select(l => l.GetString() ?? string.Empty)]
-                        : null);
+                    PatchBody.Text(root, "title"),
+                    PatchBody.Given(root, "description"),
+                    PatchBody.Text(root, "description"),
+                    PatchBody.Texts(root, "labels"));
 
                 return await change.ExecuteAsync(key, changes, http.Headers.IfMatch.ToString(), cancellationToken);
             })
@@ -100,6 +92,4 @@ public static class EpicEndpoints
         return endpoints;
     }
 
-    private static string? Text(JsonElement body, string property) =>
-        body.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.String ? value.GetString() : null;
 }

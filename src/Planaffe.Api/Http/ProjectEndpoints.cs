@@ -26,7 +26,8 @@ public static class ProjectEndpoints
                 list.ExecuteAsync(deleted, ct))
             .RequireAuthorization().WithName("ListAdminProjects")
             .WithSummary("Every project, optionally including deleted projects. Administrators only.")
-            .ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status403Forbidden);
+            .ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         // Outside the /projects group and outside the project-scope door: the
         // one read that answers across projects, and so the one with no key in
@@ -64,8 +65,8 @@ public static class ProjectEndpoints
 
         door.MapPatch("/{key}", async (string key, HttpRequest http, ChangeProject change, CancellationToken cancellationToken) =>
             {
-                var body = await JsonDocument.ParseAsync(http.Body, cancellationToken: cancellationToken);
-                return await change.ExecuteAsync(key, Changes(body.RootElement), cancellationToken);
+                var body = await PatchBody.ReadObjectAsync(http, "A change", cancellationToken);
+                return await change.ExecuteAsync(key, Changes(body), cancellationToken);
             })
             .WithName("ChangeProject")
             .WithSummary("Change the name, the switches or the instructions. Users only; the key is immutable.")
@@ -164,26 +165,16 @@ public static class ProjectEndpoints
     // away, and leaving it out leaves it alone.
     private static ProjectChanges Changes(JsonElement body)
     {
-        if (body.ValueKind is not JsonValueKind.Object)
-        {
-            throw Domain.Refusal.Validation("body", "A change is an object.");
-        }
+        PatchBody.Object(body, "A change");
 
         return new ProjectChanges(
-            Text(body, "name"),
-            Flag(body, "triage_required"),
-            Flag(body, "review_required"),
-            body.TryGetProperty("instructions", out _),
-            Text(body, "instructions"));
+            PatchBody.Text(body, "name"),
+            PatchBody.Flag(body, "triage_required"),
+            PatchBody.Flag(body, "review_required"),
+            PatchBody.Given(body, "instructions"),
+            PatchBody.Text(body, "instructions"));
     }
 
-    private static string? Text(JsonElement body, string property) =>
-        body.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.String ? value.GetString() : null;
-
-    private static bool? Flag(JsonElement body, string property) =>
-        body.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False
-            ? value.GetBoolean()
-            : null;
 
     private static Task NeedsYouValidator(
         OpenApiOperation operation,

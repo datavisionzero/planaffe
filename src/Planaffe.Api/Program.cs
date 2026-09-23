@@ -210,6 +210,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 // Every refusal is one document (docs/api.md, Errors), and this is the one
 // place that writes it.
 builder.Services.AddExceptionHandler<Problems.Handler>();
+
+// A body the binding cannot read is thrown rather than answered with a bare
+// 400 in production and a thrown one in development, so that the handler
+// above makes it the same `validation` document in both.
+builder.Services.Configure<Microsoft.AspNetCore.Routing.RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();

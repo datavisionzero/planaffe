@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -12,9 +13,11 @@ using Planaffe.Infrastructure.Persistence;
 namespace Planaffe.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PlanaffeDbContext))]
-    partial class PlanaffeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260923192758_WithholdSecretsFromIdempotency")]
+    partial class WithholdSecretsFromIdempotency
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1180,20 +1183,12 @@ namespace Planaffe.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("ETag")
-                        .HasColumnType("text")
-                        .HasColumnName("etag");
-
-                    b.Property<string>("Location")
-                        .HasColumnType("text")
-                        .HasColumnName("location");
-
                     b.Property<byte[]>("RequestHash")
                         .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("request_hash");
 
-                    b.Property<short?>("Status")
+                    b.Property<short>("Status")
                         .HasColumnType("smallint")
                         .HasColumnName("status");
 
@@ -1205,9 +1200,6 @@ namespace Planaffe.Infrastructure.Persistence.Migrations
 
                     b.HasKey("IdentityId", "Key")
                         .HasName("pk_idempotency");
-
-                    b.HasIndex("CreatedAt")
-                        .HasDatabaseName("idempotency_created_at");
 
                     b.ToTable("idempotency", (string)null);
                 });

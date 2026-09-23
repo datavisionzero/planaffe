@@ -190,7 +190,7 @@ public sealed class BrowserIdentityEndpointTests(PostgresFixture postgres)
     private static readonly CancellationToken Ct = TestContext.Current.CancellationToken;
 
     /// <summary>An instance with transactional email switched off entirely (ADR 0018).</summary>
-    private static readonly Dictionary<string, string?> WithoutSmtp = new()
+    internal static readonly Dictionary<string, string?> WithoutSmtp = new()
     {
         ["PLANAFFE_PUBLIC_URL"] = string.Empty,
         ["PLANAFFE_SMTP_HOST"] = string.Empty,

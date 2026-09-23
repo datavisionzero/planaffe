@@ -37,8 +37,10 @@ open blockers and other gates. A ticket may have an epic or none. Do not pick
 the oldest row from `pa issue list`, claim a different issue by key, or pull
 another issue after finishing this one. Exit 8 means no issue is workable in
 scope; report the returned reasons and stop without creating an empty goal.
-If the claim response is uncertain, inspect your claims before proceeding;
-never blindly repeat `next --claim` and risk taking a second issue.
+`pa` itself repeats a claim whose connection dropped, with the same key, and
+the instance answers that repetition with the issue it already claimed. If
+`next --claim` still ends with exit 10, a new invocation is a new request:
+inspect your claims before calling it again rather than risk a second issue.
 
 Read `pa issue view ISSUE --json` before editing. Announce the selected issue
 and its completion condition. Create one goal with `create_goal`; its objective

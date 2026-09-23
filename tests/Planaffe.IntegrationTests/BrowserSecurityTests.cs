@@ -162,7 +162,7 @@ public sealed class LoginThrottleAddressTests(PostgresFixture postgres)
         }
 
         using var locked = await SignInAsync(client, "maintainer@example.test", Password, forwardedFor: null);
-        Assert.Equal(HttpStatusCode.Unauthorized, locked.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
     }
 
     [Fact]

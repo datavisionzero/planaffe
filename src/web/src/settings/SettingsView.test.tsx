@@ -47,6 +47,19 @@ it("reports a changed password as saved and clears the fields", async () => {
   expect(screen.getByLabelText("New password")).toHaveValue("");
 });
 
+it("says a wrong current password in the field's words and stays signed in", async () => {
+  settings({ "POST /me/password": { status: 400, body: { type: "/problems/validation", title: "A field is missing, malformed or over its limit", status: 400,
+    detail: "current_password: The current password is not correct.", errors: { current_password: ["The current password is not correct."] } } } }, "/settings/security");
+  const user = userEvent.setup();
+
+  await user.type(await screen.findByLabelText("Current password"), "not the password at all");
+  await user.type(screen.getByLabelText("New password"), "a long second password");
+  await user.click(screen.getByRole("button", { name: "Change password" }));
+
+  expect(await screen.findByText("The current password is not correct.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Current password")).toHaveValue("not the password at all");
+});
+
 it("reports a created agent as saved, shows its secret once and clears the name", async () => {
   settings({ "POST /agents": { status: 201, body: { ...anAgent, token: { ...anAgent.token, secret: "pa_thesecret" } } } }, "/settings/agents");
   const user = userEvent.setup();

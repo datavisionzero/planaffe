@@ -550,17 +550,36 @@ create table idempotency (
     identity_id   uuid        not null references identity (id),
     key           text        not null,
     request_hash  bytea       not null,    -- sha-256 of method, path and body
-    status        smallint    not null,
+    status        smallint,                -- null while the request is being answered
     body          jsonb,
+    withheld      boolean     not null default false,  -- the answer carried a secret shown once
+    location      text,                    -- the answer's Location header
+    etag          text,                    -- the answer's ETag header
     created_at    timestamptz not null,
     primary key (identity_id, key)
 );
+
+create index idempotency_created_at on idempotency (created_at);
 ```
 
 A replayed write is answered from here for 24 hours ([`api.md`](./api.md),
 Idempotency). The key is scoped to the identity, so two agents choosing the same
 key cannot answer each other's requests; the request hash is what tells a
 replay from a reuse of the key for a different request, which is refused.
+
+**The row comes first.** A write inserts its row pending — no status — before it
+runs, with `on conflict do nothing`, so that of two requests with one key only
+one runs; the other waits for the row to be completed and replays it. A 500
+deletes the pending row again. A pending row older than 65 minutes belongs to a
+request that can no longer be running and is replaced. The purge finds rows
+older than 24 hours by `idempotency_created_at`.
+
+**No secret is kept here.** A write whose answer carries one that is shown once
+— a user or agent token, a device code, an invitation or recovery link — keeps
+its status with `withheld` set and `body` empty, and its replay is refused as
+`already-shown` rather than answered with a copy. The tokens and one-time
+secrets themselves are stored only as hashes (ADR 0018); a replay store that
+kept the answer would have been the one place they were not.
 
 ## Deletion and the purge
 
@@ -916,8 +935,13 @@ blocker as an anonymous open reference.
 ### Login throttling
 
 Failed sign-ins are limited in a rolling 15-minute window: five attempts per
-normalized email and 20 per source address. A successful login clears the
-account window, not the address window. Counters live in a small bounded
+normalized email and 20 per source address, where an IPv6 source is its /64.
+An attempt is reserved before the password is checked; a successful login
+gives it back and clears the account window, not the address window. The same
+store limits a user's wrong current passwords (five in 15 minutes), device
+logins begun from a source (20 in 15 minutes) and recovery emails (one per
+normalized address in five minutes, 20 requests per source in 15). Counters
+live in a small bounded
 in-memory store. They are deliberately not durable product data: a restart
 forgiving attempts is safer than making authentication depend on a cleanup table
 or another service. Deployments with several application replicas are outside

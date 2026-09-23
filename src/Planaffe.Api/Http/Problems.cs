@@ -32,7 +32,8 @@ public static class Problems
         RefusalCode.Csrf or RefusalCode.Forbidden or RefusalCode.ClaimProtected or RefusalCode.DeviceDenied =>
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.Deleted => StatusCodes.Status404NotFound,
-        RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.ReleaseExists
+        RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.IdempotencyPending or RefusalCode.AlreadyShown
+            or RefusalCode.ReleaseExists
             or RefusalCode.EmailExists or RefusalCode.LastAdministrator or RefusalCode.DevicePending =>
             StatusCodes.Status409Conflict,
         RefusalCode.SecretExpired or RefusalCode.DeviceExpired => StatusCodes.Status410Gone,
@@ -43,6 +44,7 @@ public static class Problems
             StatusCodes.Status422UnprocessableEntity,
         RefusalCode.WaitTooLong or RefusalCode.TooMany => StatusCodes.Status422UnprocessableEntity,
         RefusalCode.SmtpNotConfigured => StatusCodes.Status422UnprocessableEntity,
+        RefusalCode.LoginThrottled => StatusCodes.Status429TooManyRequests,
         RefusalCode.Internal => StatusCodes.Status500InternalServerError,
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a status."),
     };
@@ -63,6 +65,8 @@ public static class Problems
         RefusalCode.ClaimHeld => "The issue is claimed by somebody else",
         RefusalCode.ClaimLost => "The claim has expired and somebody else holds the issue now",
         RefusalCode.IdempotencyMismatch => "The Idempotency-Key was used for a different request",
+        RefusalCode.IdempotencyPending => "A request with this Idempotency-Key is still being answered",
+        RefusalCode.AlreadyShown => "The secret this request produced was shown once and is not shown again",
         RefusalCode.Stale => "The object has changed since it was read",
         RefusalCode.Transition => "The status does not allow this act",
         RefusalCode.Cycle => "The blocker would close a cycle",
@@ -82,6 +86,7 @@ public static class Problems
         RefusalCode.DeviceDenied => "This login was refused, or is no longer yours to decide",
         RefusalCode.DeviceExpired => "This login is expired or has already been collected",
         RefusalCode.LastAdministrator => "The instance must keep one active administrator",
+        RefusalCode.LoginThrottled => "Too many attempts; try again later",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),
     };
@@ -122,6 +127,18 @@ public static class Problems
         Results.Problem(Document(code, detail, instance: null, extensions));
 
     /// <summary>
+    /// The <c>login-throttled</c> document, with <c>Retry-After</c> in whole
+    /// seconds and the same wait in the sentence a person reads.
+    /// </summary>
+    public static IResult Throttled(HttpContext context, TimeSpan retryAfter, string what)
+    {
+        var seconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+        context.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var wait = seconds < 120 ? $"{seconds} seconds" : $"{(seconds + 59) / 60} minutes";
+        return Result(RefusalCode.LoginThrottled, $"{what} Try again in {wait}.");
+    }
+
+    /// <summary>
     /// The <c>validation</c> document: <c>errors</c> maps field to messages.
     /// </summary>
     public static IResult Validation(IReadOnlyDictionary<string, string[]> errors) =>
@@ -156,7 +173,8 @@ public static class Problems
 
     /// <summary>
     /// What turns a <see cref="Refusal"/> thrown by an act into its document,
-    /// and anything else into <c>internal</c> with nothing else in it.
+    /// a body nobody could read into <c>validation</c>, and anything else into
+    /// <c>internal</c> with nothing else in it.
     /// </summary>
     public sealed class Handler(ILogger<Handler> logger) : IExceptionHandler
     {
@@ -166,6 +184,14 @@ public static class Problems
             var document = exception switch
             {
                 Refusal refusal => Document(refusal, context.Request.Path),
+
+                // A body that is not the JSON its endpoint reads is the
+                // caller's mistake and not a bug: the binding throws the one,
+                // a document read by hand the other.
+                BadHttpRequestException { InnerException: not JsonException } bad => Document(
+                    Refusal.Validation("request", bad.Message), context.Request.Path),
+                BadHttpRequestException or JsonException => Document(
+                    Refusal.Validation("body", "The body is not the JSON this endpoint reads."), context.Request.Path),
                 _ => Document(RefusalCode.Internal, detail: null, context.Request.Path),
             };
 

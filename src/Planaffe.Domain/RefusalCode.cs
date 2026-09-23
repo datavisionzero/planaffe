@@ -11,6 +11,7 @@ namespace Planaffe.Domain;
 /// spelling on the wire is the kebab case of the name — <c>ClaimHeld</c> is
 /// <c>claim-held</c>. Some of these the Domain never raises —
 /// <see cref="Unauthenticated"/>, <see cref="IdempotencyMismatch"/>,
+/// <see cref="IdempotencyPending"/>, <see cref="AlreadyShown"/>,
 /// <see cref="CursorInvalid"/> are the adapters' — and they are here anyway,
 /// because a second list somewhere else would be the one nobody keeps.
 /// </remarks>
@@ -57,6 +58,18 @@ public enum RefusalCode
 
     /// <summary>The <c>Idempotency-Key</c> was used for a different request.</summary>
     IdempotencyMismatch,
+
+    /// <summary>
+    /// A request with this <c>Idempotency-Key</c> is still being answered, and
+    /// did not finish while its twin waited.
+    /// </summary>
+    IdempotencyPending,
+
+    /// <summary>
+    /// The <c>Idempotency-Key</c> names a write whose answer carried a secret,
+    /// which is shown once and so is not kept to be replayed.
+    /// </summary>
+    AlreadyShown,
 
     /// <summary><c>If-Match</c> does not match the object's <c>updated_at</c>; <c>current</c> carries the object.</summary>
     Stale,
@@ -115,6 +128,13 @@ public enum RefusalCode
 
     /// <summary>The device login ran out, or its token has already been collected.</summary>
     DeviceExpired,
+
+    /// <summary>
+    /// Too many attempts at a door a stranger can knock on — a sign-in, a
+    /// device login, a recovery email, a current password — from this account
+    /// or source; <c>Retry-After</c> says when to try again.
+    /// </summary>
+    LoginThrottled,
 
     /// <summary>Deactivation or demotion would leave no active administrator.</summary>
     LastAdministrator,
