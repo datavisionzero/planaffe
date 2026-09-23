@@ -45,7 +45,8 @@ public static class DeviceLoginEndpoints
             .WithName("BeginDeviceLogin")
             .WithSummary("Begin a device login: the code the CLI prints, and the code it polls with.")
             .Produces<DeviceLoginBegun>()
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ShownOnce();
 
         endpoints.MapPost("/device-logins/redeem", async (RedeemDeviceLoginRequest? request,
                 RedeemDeviceLogin redeem, CancellationToken ct) =>
@@ -57,7 +58,8 @@ public static class DeviceLoginEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
-            .ProducesProblem(StatusCodes.Status410Gone);
+            .ProducesProblem(StatusCodes.Status410Gone)
+            .ShownOnce();
 
         var door = endpoints.MapGroup(string.Empty)
             .RequireAuthorization()

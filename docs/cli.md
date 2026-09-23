@@ -72,7 +72,7 @@ The table of `docs/api.md`, derived from the status and the problem document:
 | 2 | usage: bad arguments, no instance and no login, no token anywhere, a `.planaffe` file `pa` cannot read |
 | 3 | not found, deleted included |
 | 4 | refused: validation, every 422, and the 410 of a one-time thing that is gone — a used link, a device login that ran out |
-| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `release-exists`, `device-pending` |
+| 5 | conflict: `claim-held`, `claim-lost`, `idempotency-mismatch`, `already-shown`, `release-exists`, `device-pending` |
 | 6 | stale |
 | 7 | denied: 401, 403 |
 | 8 | empty: `next` found nothing, or another waiting command reached its deadline |

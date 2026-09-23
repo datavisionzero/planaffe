@@ -24,6 +24,7 @@ public sealed class IdempotencyRecord
         byte[] requestHash,
         short status,
         string? body,
+        bool withheld,
         DateTimeOffset createdAt)
     {
         IdentityId = identityId;
@@ -31,6 +32,7 @@ public sealed class IdempotencyRecord
         RequestHash = requestHash;
         Status = status;
         Body = body;
+        Withheld = withheld;
         CreatedAt = createdAt;
     }
 
@@ -47,6 +49,12 @@ public sealed class IdempotencyRecord
     /// <summary>The first answer's body, as JSON, or nothing.</summary>
     public string? Body { get; private init; }
 
+    /// <summary>
+    /// The first answer carried a secret that is shown once, and its body was
+    /// not kept: a replay is refused as <c>already-shown</c>.
+    /// </summary>
+    public bool Withheld { get; private init; }
+
     public DateTimeOffset CreatedAt { get; private init; }
 
     public static IdempotencyRecord Of(
@@ -55,6 +63,7 @@ public sealed class IdempotencyRecord
         byte[] requestHash,
         short status,
         string? body,
-        DateTimeOffset createdAt) =>
-        new(identityId, key, requestHash, status, body, createdAt);
+        DateTimeOffset createdAt,
+        bool withheld = false) =>
+        new(identityId, key, requestHash, status, body, withheld, createdAt);
 }

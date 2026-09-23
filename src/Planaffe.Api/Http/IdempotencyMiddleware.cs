@@ -25,6 +25,14 @@ namespace Planaffe.Api.Http;
 /// that never got past the door has no identity to keep it under. Answers of
 /// 500 are not stored either — a retry after a bug should get to try.
 /// </para>
+/// <para>
+/// A write whose answer carries a secret that is shown once — a token, a
+/// device code, an access link — says so with <see cref="ShownOnce"/>, and of
+/// its success only the status is kept. The store holds nothing a copy of the
+/// database could sign in with, and a replay is refused as
+/// <c>already-shown</c>: the secret exists, the first answer was the one
+/// chance to see it, and whoever lost it revokes it and asks for another.
+/// </para>
 /// </remarks>
 public sealed class IdempotencyMiddleware(RequestDelegate next, TimeProvider clock)
 {
@@ -62,6 +70,13 @@ public sealed class IdempotencyMiddleware(RequestDelegate next, TimeProvider clo
                     $"The {Header} {key} was used for a different request; a key names one request.");
             }
 
+            if (stored.Withheld)
+            {
+                throw new Refusal(
+                    RefusalCode.AlreadyShown,
+                    $"The request with {Header} {key} was answered with a secret, which is shown once and was not kept; revoke what it created if the answer was lost, and ask for another.");
+            }
+
             await ReplayAsync(context, stored);
             return;
         }
@@ -84,10 +99,14 @@ public sealed class IdempotencyMiddleware(RequestDelegate next, TimeProvider clo
                 await Problems.WriteAsync(context, refusal);
             }
 
-            if (context.Response.StatusCode < StatusCodes.Status500InternalServerError)
+            var status = context.Response.StatusCode;
+            if (status < StatusCodes.Status500InternalServerError)
             {
-                var body = buffer.Length == 0 ? null : Encoding.UTF8.GetString(buffer.ToArray());
-                await store.StoreAsync(caller.Id, key, new StoredReply(hash, (short)context.Response.StatusCode, body, now), context.RequestAborted);
+                // A refusal carries no secret and is kept like any other.
+                var withheld = status < StatusCodes.Status400BadRequest
+                    && context.GetEndpoint()?.Metadata.GetMetadata<ShownOnce>() is not null;
+                var body = withheld || buffer.Length == 0 ? null : Encoding.UTF8.GetString(buffer.ToArray());
+                await store.StoreAsync(caller.Id, key, new StoredReply(hash, (short)status, body, now, withheld), context.RequestAborted);
             }
         }
         finally
@@ -139,8 +158,28 @@ public sealed class IdempotencyMiddleware(RequestDelegate next, TimeProvider clo
     }
 }
 
+/// <summary>
+/// Endpoint metadata: the success of this write carries a secret that is shown
+/// once, so the idempotency store keeps its status and not its body.
+/// </summary>
+public sealed class ShownOnce
+{
+    public static readonly ShownOnce Instance = new();
+
+    private ShownOnce()
+    {
+    }
+}
+
 public static class IdempotencyMiddlewareExtensions
 {
+    /// <summary>
+    /// Marks a write whose success carries a secret shown once
+    /// (<see cref="ShownOnce"/>); its replay is the 409 <c>already-shown</c>.
+    /// </summary>
+    public static RouteHandlerBuilder ShownOnce(this RouteHandlerBuilder builder) =>
+        builder.WithMetadata(Http.ShownOnce.Instance).ProducesProblem(StatusCodes.Status409Conflict);
+
     /// <summary>After authentication — the key is half identity — and before the endpoints.</summary>
     public static IApplicationBuilder UsePlanaffeIdempotency(this IApplicationBuilder app) => app.UseMiddleware<IdempotencyMiddleware>();
 }

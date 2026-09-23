@@ -13,7 +13,7 @@ public sealed class Idempotency(PlanaffeDbContext context) : IIdempotency
             .AsNoTracking()
             .SingleOrDefaultAsync(r => r.IdentityId == identityId && r.Key == key, cancellationToken);
 
-        return row is null ? null : new StoredReply(row.RequestHash, row.Status, row.Body, row.CreatedAt);
+        return row is null ? null : new StoredReply(row.RequestHash, row.Status, row.Body, row.CreatedAt, row.Withheld);
     }
 
     public async Task StoreAsync(Guid identityId, string key, StoredReply reply, CancellationToken cancellationToken)
@@ -25,7 +25,7 @@ public sealed class Idempotency(PlanaffeDbContext context) : IIdempotency
             .Where(r => r.IdentityId == identityId && r.Key == key && r.CreatedAt <= reply.CreatedAt.AddHours(-24))
             .ExecuteDeleteAsync(cancellationToken);
 
-        context.Idempotency.Add(IdempotencyRecord.Of(identityId, key, reply.RequestHash, reply.Status, reply.Body, reply.CreatedAt));
+        context.Idempotency.Add(IdempotencyRecord.Of(identityId, key, reply.RequestHash, reply.Status, reply.Body, reply.CreatedAt, reply.Withheld));
         try
         {
             await context.SaveChangesAsync(cancellationToken);

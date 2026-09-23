@@ -529,6 +529,7 @@ create table idempotency (
     request_hash  bytea       not null,    -- sha-256 of method, path and body
     status        smallint    not null,
     body          jsonb,
+    withheld      boolean     not null default false,  -- the answer carried a secret shown once
     created_at    timestamptz not null,
     primary key (identity_id, key)
 );
@@ -538,6 +539,13 @@ A replayed write is answered from here for 24 hours ([`api.md`](./api.md),
 Idempotency). The key is scoped to the identity, so two agents choosing the same
 key cannot answer each other's requests; the request hash is what tells a
 replay from a reuse of the key for a different request, which is refused.
+
+**No secret is kept here.** A write whose answer carries one that is shown once
+— a user or agent token, a device code, an invitation or recovery link — keeps
+its status with `withheld` set and `body` empty, and its replay is refused as
+`already-shown` rather than answered with a copy. The tokens and one-time
+secrets themselves are stored only as hashes (ADR 0018); a replay store that
+kept the answer would have been the one place they were not.
 
 ## Deletion and the purge
 

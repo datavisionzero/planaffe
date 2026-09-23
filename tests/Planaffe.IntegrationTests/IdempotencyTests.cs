@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
 
 namespace Planaffe.IntegrationTests;
 
@@ -97,6 +98,74 @@ public sealed class IdempotencyTests(PostgresFixture postgres)
         using var refused = await Send(anonymous, HttpMethod.Post, "/issues", bad, "no-caller");
         Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
     }
+
+    /// <summary>
+    /// A secret shown once is shown once: the store keeps the status of the
+    /// answer that carried it and not the answer, so that nothing a copy of the
+    /// database holds signs anybody in, and a replay is told it is too late
+    /// rather than handed a second copy.
+    /// </summary>
+    [Fact]
+    public async Task A_secret_shown_once_is_not_kept_and_its_replay_is_refused()
+    {
+        await using var instance = await AnInstance.ConfiguredAsync(postgres, BrowserIdentityEndpointTests.WithoutSmtp);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        using var invited = await admin.PostAsJsonAsync("/users", new { name = "invited", email = "invited@example.test" }, Ct);
+        Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
+        await instance.AddActiveUserAsync("active");
+
+        (string Path, object? Body)[] writes =
+        [
+            ("/tokens", null),
+            ("/agents", new { name = "one" }),
+            ("/agents/one/token", null),
+            ("/users/invited/invitation-link", null),
+            ("/users/active/recovery-link", null),
+            ("/device-logins", null),
+        ];
+
+        var shown = new List<string>();
+        foreach (var (path, body) in writes)
+        {
+            using var first = await Send(admin, HttpMethod.Post, path, body ?? new { }, $"once{path}");
+            Assert.True(first.IsSuccessStatusCode, $"{path}: {first.StatusCode} {await first.Content.ReadAsStringAsync(Ct)}");
+            shown.AddRange(Strings(JsonNode.Parse(await first.Content.ReadAsStringAsync(Ct))).Where(value => value.Length >= 20));
+
+            var refused = await ProjectEndpointTests.Problem(
+                await Send(admin, HttpMethod.Post, path, body ?? new { }, $"once{path}"),
+                HttpStatusCode.Conflict, "already-shown");
+            Assert.Contains($"once{path}", refused.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        }
+
+        await using var context = Migrated.ContextFor(instance.ConnectionString);
+        var rows = await context.Idempotency.Where(r => r.Key.StartsWith("once/")).ToListAsync(Ct);
+        Assert.Equal(writes.Length, rows.Count);
+        Assert.All(rows, row => Assert.True(row.Withheld && row.Body is null, row.Key));
+
+        var stored = await context.Database.SqlQueryRaw<string>("select coalesce(body::text, '') as \"Value\" from idempotency").ToListAsync(Ct);
+        Assert.NotEmpty(shown);
+        Assert.DoesNotContain(shown, secret => stored.Any(body => body.Contains(secret, StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task A_refusal_of_a_write_that_would_show_a_secret_is_kept_and_replayed()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+
+        await ProjectEndpointTests.Problem(await Send(admin, HttpMethod.Post, "/agents/nobody/token", new { }, "rotate-nobody"), HttpStatusCode.NotFound, "not-found");
+        using var replayed = await Send(admin, HttpMethod.Post, "/agents/nobody/token", new { }, "rotate-nobody");
+        Assert.Equal(HttpStatusCode.NotFound, replayed.StatusCode);
+        Assert.Equal("true", Assert.Single(replayed.Headers.GetValues("Idempotent-Replayed")));
+    }
+
+    private static IEnumerable<string> Strings(JsonNode? node) => node switch
+    {
+        JsonObject o => o.SelectMany(p => Strings(p.Value)),
+        JsonArray a => a.SelectMany(Strings),
+        JsonValue v when v.TryGetValue<string>(out var text) => [text],
+        _ => [],
+    };
 
     private static Task<HttpResponseMessage> Send(HttpClient client, HttpMethod method, string url, object? body, string key)
     {

@@ -1,7 +1,12 @@
 namespace Planaffe.Application.Ports;
 
 /// <summary>What was answered to a write, kept for a replay (<c>docs/api.md</c>, Idempotency).</summary>
-public sealed record StoredReply(byte[] RequestHash, short Status, string? Body, DateTimeOffset CreatedAt);
+/// <param name="Withheld">
+/// The answer carried a secret that is shown once, so only its status was
+/// kept and <paramref name="Body"/> is empty: a replay is refused rather than
+/// handed a copy of the secret.
+/// </param>
+public sealed record StoredReply(byte[] RequestHash, short Status, string? Body, DateTimeOffset CreatedAt, bool Withheld = false);
 
 /// <summary>
 /// The idempotency store: one reply per identity and key, for 24 hours. Keys

@@ -11,8 +11,9 @@ namespace Planaffe.Domain;
 /// spelling on the wire is the kebab case of the name — <c>ClaimHeld</c> is
 /// <c>claim-held</c>. Some of these the Domain never raises —
 /// <see cref="Unauthenticated"/>, <see cref="IdempotencyMismatch"/>,
-/// <see cref="CursorInvalid"/> are the adapters' — and they are here anyway,
-/// because a second list somewhere else would be the one nobody keeps.
+/// <see cref="AlreadyShown"/>, <see cref="CursorInvalid"/> are the adapters' —
+/// and they are here anyway, because a second list somewhere else would be the
+/// one nobody keeps.
 /// </remarks>
 public enum RefusalCode
 {
@@ -57,6 +58,12 @@ public enum RefusalCode
 
     /// <summary>The <c>Idempotency-Key</c> was used for a different request.</summary>
     IdempotencyMismatch,
+
+    /// <summary>
+    /// The <c>Idempotency-Key</c> names a write whose answer carried a secret,
+    /// which is shown once and so is not kept to be replayed.
+    /// </summary>
+    AlreadyShown,
 
     /// <summary><c>If-Match</c> does not match the object's <c>updated_at</c>; <c>current</c> carries the object.</summary>
     Stale,

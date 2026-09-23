@@ -24,6 +24,7 @@ public sealed class IdempotencyRecordConfiguration : IEntityTypeConfiguration<Id
         builder.Property(r => r.RequestHash).HasColumnName("request_hash").IsRequired();
         builder.Property(r => r.Status).HasColumnName("status").IsRequired();
         builder.Property(r => r.Body).HasColumnName("body").HasColumnType("jsonb");
+        builder.Property(r => r.Withheld).HasColumnName("withheld").IsRequired().HasDefaultValue(false);
         builder.Property(r => r.CreatedAt).HasColumnName("created_at").IsRequired();
     }
 }
