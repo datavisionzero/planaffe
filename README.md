@@ -18,7 +18,10 @@ helpdesk work are not what this is for.
 
 ## Status
 
-**Pre-release, nothing published yet.** The product is being built in three cuts
+**Before 1.0, and released.** Tagged versions are published as
+[GitHub releases](https://github.com/datavisionzero/planaffe/releases), with
+the image under `ghcr.io/datavisionzero/planaffe` and the `pa` binaries;
+`:latest` is the newest stable one. The product is being built in three cuts
 ([ADR 0009](docs/adr/0009-the-mvp-is-built-in-three-cuts.md)), and all three
 are standing:
 
@@ -85,21 +88,26 @@ backup.
 
 ## Agent skills
 
-Four optional [agent skills](docs/skills.md) cover a read-only project overview
+Six optional [agent skills](docs/skills.md) cover a read-only project overview
 with a next-step recommendation, planning an epic into issues, answering open
-questions together with a user, and delivering an epic through
-implementation, commits and merge. Install them into the agent working on your
-project; the skill folders are versioned here alongside the CLI.
+questions together with a user, and delivery through implementation, commits
+and merge — of a whole epic, of the next workable issue, or of the ready issues
+that belong to no epic. Install them into the agent working on your project;
+the skill folders are versioned here alongside the CLI.
 
 ## Working on it
 
-The .NET 10 SDK and Docker. The integration tests bring up their own Postgres
-with Testcontainers; the unit tests need nothing installed.
+The .NET 10 SDK and Docker for the server, Node 24 for the web application in
+`src/web`, and Go at the version `src/cli/go.mod` names for the CLI. The
+integration tests bring up their own Postgres with Testcontainers; the unit
+tests need nothing installed.
 
 ```
 dotnet build Planaffe.slnx
 dotnet test tests/Planaffe.UnitTests
 dotnet test tests/Planaffe.IntegrationTests
+(cd src/web && npm ci && npm run test)
+(cd src/cli && go generate ./... && go test ./...)
 ```
 
 [`docs/codebase.md`](docs/codebase.md) says where everything lives and which way

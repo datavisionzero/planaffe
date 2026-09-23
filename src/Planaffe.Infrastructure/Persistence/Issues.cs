@@ -733,11 +733,26 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         where p.DeletedAt == null
         select new IssueRow
         {
-            Id = i.Id, ProjectId = i.ProjectId, ProjectKey = p.Key, Number = i.Number, Title = i.Title,
-            Description = i.Description, Result = i.Result, Status = i.Status, Ready = i.Ready, Priority = i.Priority,
-            AssigneeId = i.AssigneeId, EpicId = i.EpicId, EpicNumber = e == null ? null : e.Number, ParentId = i.ParentId,
-            ClaimedBy = i.ClaimedBy, ClaimedAt = i.ClaimedAt,
-            ClaimExpiresAt = i.ClaimExpiresAt, AuthorId = i.AuthorId, CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
+            Id = i.Id,
+            ProjectId = i.ProjectId,
+            ProjectKey = p.Key,
+            Number = i.Number,
+            Title = i.Title,
+            Description = i.Description,
+            Result = i.Result,
+            Status = i.Status,
+            Ready = i.Ready,
+            Priority = i.Priority,
+            AssigneeId = i.AssigneeId,
+            EpicId = i.EpicId,
+            EpicNumber = e == null ? null : e.Number,
+            ParentId = i.ParentId,
+            ClaimedBy = i.ClaimedBy,
+            ClaimedAt = i.ClaimedAt,
+            ClaimExpiresAt = i.ClaimExpiresAt,
+            AuthorId = i.AuthorId,
+            CreatedAt = i.CreatedAt,
+            UpdatedAt = i.UpdatedAt,
             ClosedAt = i.ClosedAt,
         };
 
@@ -751,12 +766,29 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
         where i.DeletedAt != null
         select new IssueRow
         {
-            Id = i.Id, ProjectId = i.ProjectId, ProjectKey = p.Key, Number = i.Number, Title = i.Title,
-            Description = i.Description, Result = i.Result, Status = i.Status, Ready = i.Ready, Priority = i.Priority,
-            AssigneeId = i.AssigneeId, EpicId = i.EpicId, EpicNumber = e == null ? null : e.Number, ParentId = i.ParentId,
-            ClaimedBy = i.Claim!.HolderId, ClaimedAt = i.Claim!.ClaimedAt,
-            ClaimExpiresAt = i.Claim!.ExpiresAt, AuthorId = i.AuthorId, CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
-            ClosedAt = i.ClosedAt, DeletedAt = i.DeletedAt, DeletedBy = i.DeletedBy,
+            Id = i.Id,
+            ProjectId = i.ProjectId,
+            ProjectKey = p.Key,
+            Number = i.Number,
+            Title = i.Title,
+            Description = i.Description,
+            Result = i.Result,
+            Status = i.Status,
+            Ready = i.Ready,
+            Priority = i.Priority,
+            AssigneeId = i.AssigneeId,
+            EpicId = i.EpicId,
+            EpicNumber = e == null ? null : e.Number,
+            ParentId = i.ParentId,
+            ClaimedBy = i.Claim!.HolderId,
+            ClaimedAt = i.Claim!.ClaimedAt,
+            ClaimExpiresAt = i.Claim!.ExpiresAt,
+            AuthorId = i.AuthorId,
+            CreatedAt = i.CreatedAt,
+            UpdatedAt = i.UpdatedAt,
+            ClosedAt = i.ClosedAt,
+            DeletedAt = i.DeletedAt,
+            DeletedBy = i.DeletedBy,
         };
 
     private IQueryable<IssueRow> Filtered(IQueryable<IssueRow> rows, IssueQuery query)

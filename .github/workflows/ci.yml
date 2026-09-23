@@ -18,16 +18,21 @@ permissions:
 # stay fast enough that nobody is tempted to push past it, which is why the four
 # toolchains run beside each other rather than in one job.
 
-# One run at a time, across every branch, and nothing is cancelled. The reason
-# is the registry: the `image` job moves `ghcr.io/datavisionzero/planaffe:main`,
-# and two runs overlapping would leave that tag wherever the slower one
-# finished, which can be the older commit. Serialising keeps it moving in the
-# order the commits were pushed. With a single maintainer pushing there is
-# nothing to gain from two racing, and a pull request waiting a few minutes
-# behind the trunk costs less than a tag that points backwards.
+# One run at a time per ref. The trunk's runs queue behind each other and are
+# never cancelled halfway, because `image-index` moves
+# `ghcr.io/datavisionzero/planaffe:main`, and two runs overlapping would leave
+# that tag wherever the slower one finished, which can be the older commit.
+#
+# The group is per ref rather than one for everything, because GitHub keeps at
+# most one waiting run in a group and cancels the older one when a newer one
+# arrives. With a single group, a pull request pushed from a fork while the
+# trunk was busy cancelled the trunk run that was waiting — a commit that then
+# never got a green run, never moved `:main`, and could not be released. A
+# pull request's own runs are cancelled when it is pushed again, because the
+# older commit is nobody's business any more.
 concurrency:
-  group: ci
-  cancel-in-progress: false
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The one registry. GHCR is public, pullable anonymously and has no pull limit;
 # a second one would be a second place a tag can stand wrong.
@@ -54,6 +59,7 @@ jobs:
   subjects:
     name: What there is to build, and whether it is published
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       web: ${{ steps.look.outputs.web }}
       cli: ${{ steps.look.outputs.cli }}
@@ -61,7 +67,7 @@ jobs:
       image: ${{ steps.look.outputs.image }}
       publish: ${{ steps.look.outputs.publish }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: look
         env:
           # A pull request's ref is `refs/pull/<n>/merge` and never this, so the
@@ -87,12 +93,19 @@ jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
       - run: dotnet restore Planaffe.slnx
+      # The whitespace half of `.editorconfig`, which the SDK ships the tool
+      # for. The migrations are excluded because EF writes them, byte order
+      # mark and all, and they are never edited by hand.
+      - run: >-
+          dotnet format whitespace Planaffe.slnx --verify-no-changes
+          --exclude src/Planaffe.Infrastructure/Persistence/Migrations
       - run: dotnet build Planaffe.slnx -c Release --no-restore
       - run: dotnet test tests/Planaffe.UnitTests -c Release --no-build
 
@@ -104,9 +117,10 @@ jobs:
   integration:
     name: Integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
       - run: dotnet restore Planaffe.slnx
@@ -123,12 +137,13 @@ jobs:
     needs: subjects
     if: needs.subjects.outputs.web == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: src/web
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -152,12 +167,13 @@ jobs:
     needs: subjects
     if: needs.subjects.outputs.cli == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: src/cli
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: src/cli/go.mod
           cache-dependency-path: src/cli/go.sum
@@ -168,11 +184,35 @@ jobs:
       # would compile without it: the output is not committed (ADR 0005).
       - run: go generate ./...
 
+      # gofmt comes with the toolchain and has no opinions to configure. The
+      # generated client is formatted by its generator, so it is checked too.
+      - name: gofmt has nothing to say
+        run: |
+          set -euo pipefail
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would change these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - run: go vet ./...
       - run: go test ./...
       # Compilation of every package, not the release binaries. Those are cut
       # per platform from a tag, and a trunk build has no tag to be named after.
       - run: go build ./...
+
+  # The scripts the other workflows run. The registry prune deletes, and the
+  # rule that keeps it from deleting a live release is worth a test that runs
+  # before the rule is changed rather than on the Monday after. Standard
+  # library only: the runner's Python is all it needs.
+  scripts:
+    name: Workflow scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 -m unittest discover -s .github/scripts -v
 
   # ADR 0005 asks for a contract kept honest by a test rather than by a
   # compiler, because the server shares no types with either of its two clients.
@@ -184,6 +224,7 @@ jobs:
     needs: subjects
     if: needs.subjects.outputs.contract == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       db:
         image: postgres:18
@@ -199,8 +240,8 @@ jobs:
           --health-timeout 3s
           --health-retries 12
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -247,7 +288,7 @@ jobs:
   # tag set here would point at one architecture for as long as the other took.
   image:
     name: Image (${{ matrix.arch }})
-    needs: [subjects, unit, integration, web, cli, contract]
+    needs: [subjects, unit, integration, web, cli, scripts, contract]
     # `needs` alone would skip this job for every job above that skipped itself,
     # which for a while is most of them. What has to hold is that nothing
     # failed — a skipped job did not fail.
@@ -266,20 +307,43 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Sign in to the registry
         if: needs.subjects.outputs.publish == 'true'
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The image is started once before anything is pushed, on the amd64 leg,
+      # which is the runner's own architecture and the one nearly every
+      # installation runs. Built into the local Docker here and pushed by the
+      # step below from the same builder, so the second build is the cache
+      # answering and the image that was started is the image that goes out.
+      - name: Build it into the local Docker
+        if: matrix.arch == 'amd64'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            REVISION=${{ github.sha }}
+          load: true
+          tags: planaffe:smoke
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+
+      - name: It starts, answers, and serves the web application
+        if: matrix.arch == 'amd64'
+        run: .github/scripts/smoke-image.sh planaffe:smoke
 
       # No `VERSION` build argument, deliberately. `Directory.Build.props` keeps
       # `0.0.0-dev` for a build nobody released, and a trunk build is not a
@@ -289,7 +353,7 @@ jobs:
       # apart, and the container cannot work it out on its own.
       - id: build
         name: Build, and push the digest from the trunk
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: deploy/Dockerfile
@@ -323,7 +387,7 @@ jobs:
           mkdir -p /tmp/digests
           touch "/tmp/digests/${DIGEST#sha256:}"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: needs.subjects.outputs.publish == 'true'
         with:
           name: digest-${{ matrix.arch }}
@@ -346,21 +410,28 @@ jobs:
       && !contains(needs.*.result, 'failure')
       && needs.subjects.outputs.image == 'true'
       && needs.subjects.outputs.publish == 'true'
+    # The trunk's runs already queue in the workflow's group, but this is the
+    # job the ordering is for, so it names a group of its own rather than
+    # depending on the workflow's staying what it is.
+    concurrency:
+      group: registry-main
+      cancel-in-progress: false
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: digest-*
           merge-multiple: true
           path: /tmp/digests
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Sign in to the registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

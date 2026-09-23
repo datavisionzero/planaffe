@@ -207,14 +207,21 @@ pa space search "vertrag" --space personal  # one space by name
 pa space search "claim-held" --limit 5 --json
 
 pa release list
-pa release view unreleased | pa release view v1.2.0
-pa release publish v1.2.0 [--description-file notes.md]
-pa release notes v1.2.0                 # Markdown, with sub-issues indented under their parent
+pa release view unreleased | pa release view 1.2.0
+pa release publish 1.2.0 [--description-file notes.md]
+pa release notes 1.2.0                  # Markdown, with sub-issues indented under their parent
+pa release notes 1.2.0 --description-file -   # replace its annotation first, then print the notes
 pa release add PLAN-42                  # into the open release by hand
 pa release remove PLAN-42               # out of it: it has not shipped yet
-pa release rename v1.2.O v1.2.0         # the newest publication only
-pa release retract v1.2.0               # take the publication back; it is the open release again
+pa release rename 1.2.O 1.2.0           # the newest publication only
+pa release retract 1.2.0                # take the publication back; it is the open release again
 ```
+
+A release in the tracker is named without the `v` its git tag carries: the tag
+`v1.2.0` is the release `1.2.0`. `notes` with `--description-file` replaces the
+Markdown annotation the release carries above its issues — the same text
+`publish --description-file` sets — and then prints the notes as they now read,
+so that a publication made without one can be finished afterwards.
 
 Signing in (ADR 0025) — the device-code flow, because SSH sessions, CI jobs,
 containers and agent sandboxes have no browser of their own:
@@ -353,13 +360,6 @@ it are not on the console.** They are a human's acts, the one border VISION 18
 draws around what an agent does in the knowledge base, and they are done in the
 browser. The CLI deliberately does not mirror the whole interface here: the
 border is the bracket, not the work inside it.
-
-A page is addressed by its slug, which is given and never derived from the
-title. Renaming is its own verb rather than a flag on `edit`, because moving an
-address is not the same kind of act as editing a text: nothing forwards, and
-every reference written to the old address stops working. `pa page view` prints
-the head and then the body unchanged, so that the output pipes straight back
-into `--body-file -`.
 
 `pa standing` is the one verb with no project in it: it is the overview
 (`human-interface.md`), and everything the caller can see is the point. Each

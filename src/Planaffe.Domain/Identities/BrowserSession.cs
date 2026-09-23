@@ -17,7 +17,7 @@ public sealed class BrowserSession
     public DateTimeOffset LastUsedAt { get; private set; }
     public DateTimeOffset ExpiresAt { get; private init; }
     public DateTimeOffset? RevokedAt { get; private set; }
-    public static (BrowserSession Session, string Secret) Create(Guid userId, DateTimeOffset now) { var bytes = RandomNumberGenerator.GetBytes(32); return (new(userId, SHA256.HashData(bytes), now), Convert.ToBase64String(bytes).TrimEnd('=').Replace('+','-').Replace('/','_')); }
+    public static (BrowserSession Session, string Secret) Create(Guid userId, DateTimeOffset now) { var bytes = RandomNumberGenerator.GetBytes(32); return (new(userId, SHA256.HashData(bytes), now), Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')); }
     public static byte[] Hash(string secret) => OneTimeSecret.Hash(secret);
     public bool IsValid(DateTimeOffset now) => RevokedAt is null && ExpiresAt > now && LastUsedAt.Add(IdleLifetime) > now;
     public bool Touch(DateTimeOffset now) { if (!IsValid(now) || now - LastUsedAt < TouchInterval) return false; LastUsedAt = now; return true; }

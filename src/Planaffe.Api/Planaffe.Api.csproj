@@ -20,4 +20,12 @@
     <PackageReference Include="Logaffe.Extensions.Logging" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The settings of a development run carry a known bootstrap token and
+         the development database's password. They only apply under
+         `ASPNETCORE_ENVIRONMENT=Development`, and they still have no business
+         in an image somebody else runs. -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
 </Project>
