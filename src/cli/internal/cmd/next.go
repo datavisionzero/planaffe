@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"context"
-	"net/http"
-
 	"github.com/spf13/cobra"
 
 	"github.com/datavisionzero/planaffe/src/cli/internal/api"
@@ -19,6 +16,22 @@ type emptyResult struct{}
 func (emptyResult) Error() string { return "nothing arrived before the deadline" }
 
 const maximumServerWait = 3600
+
+// waitRound checks --wait and answers the first round of it. The three
+// waiting commands take any positive number of seconds; the instance holds a
+// request for at most an hour, so a longer wait is split into rounds.
+func waitRound(cmd *cobra.Command, wait int) (waiting bool, round int, err error) {
+	waiting = cmd.Flags().Changed("wait")
+	if waiting && wait <= 0 {
+		return false, 0, &config.UsageError{Message: "--wait must be a positive number of seconds"}
+	}
+	return waiting, serverRound(wait), nil
+}
+
+// serverRound is the part of what is left of a wait one request may hold.
+func serverRound(remaining int) int {
+	return min(remaining, maximumServerWait)
+}
 
 func newNext(g *globals) *cobra.Command {
 	var (
@@ -40,18 +53,14 @@ highest-ranked workable issue is handed out and claimed in one transaction that
 cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			waiting := cmd.Flags().Changed("wait")
-			if waiting && !claim {
+			if cmd.Flags().Changed("wait") && !claim {
 				return &config.UsageError{Message: "--wait requires --claim"}
 			}
-			if waiting && wait <= 0 {
-				return &config.UsageError{Message: "--wait must be a positive number of seconds"}
+			waiting, round, err := waitRound(cmd, wait)
+			if err != nil {
+				return err
 			}
 
-			round := wait
-			if round > maximumServerWait {
-				round = maximumServerWait
-			}
 			cfg, c, err := g.loadForWait(round)
 			if err != nil {
 				return err
@@ -96,12 +105,9 @@ cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 			if !claim {
 				// The generated params carry no `label`; the query is built by
 				// the editor so that `label` repeats the way the API reads it.
-				resp, err := c.PreviewNextWithResponse(ctx, project, &api.PreviewNextParams{Ready: readyPtr, Epic: epicPtr, Repo: repoPtr},
-					withLabels(labels))
+				resp, err := client.Checked(c.PreviewNextWithResponse(ctx, project, &api.PreviewNextParams{Ready: readyPtr, Epic: epicPtr, Repo: repoPtr},
+					repeated("label", labels)))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 				if g.json {
@@ -120,18 +126,13 @@ cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 				var waitPtr *int32
 				seconds := remaining
 				if waiting {
-					if seconds > maximumServerWait {
-						seconds = maximumServerWait
-					}
+					seconds = serverRound(remaining)
 					value := int32(seconds)
 					waitPtr = &value
 				}
 
-				resp, err := c.TakeNextWithResponse(ctx, project, api.NextRequest{Ready: readyPtr, Epic: epicPtr, Repo: repoPtr, Label: labelPtr, Wait: waitPtr})
+				resp, err := client.Checked(c.TakeNextWithResponse(ctx, project, api.NextRequest{Ready: readyPtr, Epic: epicPtr, Repo: repoPtr, Label: labelPtr, Wait: waitPtr}))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 
@@ -165,20 +166,4 @@ cannot be split. Exit 8 when nothing is workable, with the reasons.`,
 	cmd.Flags().IntVar(&wait, "wait", 0, "wait this many seconds for a workable issue; requires --claim")
 
 	return cmd
-}
-
-// withLabels adds `label=` once per label to a GET, which the generated
-// parameters cannot express as an array.
-func withLabels(labels []string) api.RequestEditorFn {
-	return func(_ context.Context, req *http.Request) error {
-		if len(labels) == 0 {
-			return nil
-		}
-		q := req.URL.Query()
-		for _, l := range labels {
-			q.Add("label", l)
-		}
-		req.URL.RawQuery = q.Encode()
-		return nil
-	}
 }

@@ -250,7 +250,7 @@ Identities (ADR 0015) — a secret is printed once, to stdout, and nowhere else:
 pa me                                      # who the token says you are, and where pa read the token
 pa me set --kind codex --harness cli --environment container --version 1.2.3
                                            # agents report stable metadata; `none` clears a field
-pa version                                 # pa's version and the instance's; exit 9 when they do not fit
+pa version                                 # pa's version and the instance's; exit 9 when they do not fit; needs no token
 pa export --json                           # one readable document containing the current project
 pa user create NAME --email ADDRESS [--administrator] # administrators only; sends an invitation
 pa user list
@@ -258,7 +258,7 @@ pa user resend USER                        # the user by name or id, here and be
 pa user invitation-link USER               # print the activation link instead of mailing it
 pa user password-link USER                 # print a password link; the way in without SMTP
 pa user deactivate USER · pa user reactivate USER
-pa user administrator USER --enabled=true|false
+pa user administrator USER --enabled=true|false   # --enabled is required: saying nothing grants nothing
 pa me email ADDRESS                         # sends confirmation to the new address
 pa agent create [--name NAME]              # users only; the agent's one token, once
 pa agent list · pa agent view AGENT · pa agent rename AGENT --name NAME
@@ -371,13 +371,16 @@ prints no counts, and an instance with no agent is told once under the list
 rather than on every line.
 
 Descriptions, results, comments, questions and answers come from an argument, a
-file or stdin (`-`), never an editor. The whole agent cycle of VISION 6.1 is
-`pa next --claim`, work, `pa issue comment`, `pa issue ask`, and `pa issue
-close --done --result-file -`; a human answers with `pa question answer`. A
-ticket the agent writes itself ends that cycle the same way it would end a
-claim: with `--ready` when it is implementable as written, and otherwise with a
-`pa issue ask` naming what a human has to decide first, because `ready` selects
-nothing where triage required is off. The three waiting commands accept any
+file or stdin (`-`), never an editor. Stdin is read once, so only one flag of
+a command may be `-`; a second is exit 2 rather than the empty text it would
+have read. Two flags where one would silently win — `--comment` and
+`--comment-file`, `--answered` and `--all` — are exit 2 as well. The whole
+agent cycle of VISION 6.1 is `pa next --claim`, work, `pa issue comment`, `pa
+issue ask`, and `pa issue close --done --result-file -`; a human answers with
+`pa question answer`. A ticket the agent writes itself ends that cycle the
+same way it would end a claim: with `--ready` when it is implementable as
+written, and otherwise with a `pa issue ask` naming what a human has to decide
+first, because `ready` selects nothing where triage required is off. The three waiting commands accept any
 positive number of seconds and split waits longer than the server's one-hour
 limit into rounds. `pa issue ask --wait` stops no later than the expiry of the
 caller's claim; `pa needs-you --wait` first reads the current page and then

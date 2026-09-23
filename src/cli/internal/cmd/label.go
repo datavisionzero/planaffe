@@ -39,11 +39,8 @@ func newLabelList(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListLabelsWithResponse(cmd.Context(), project)
+			resp, err := client.Checked(c.ListLabelsWithResponse(cmd.Context(), project))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -68,11 +65,8 @@ func newLabelCreate(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.CreateLabelWithResponse(cmd.Context(), project, api.CreateLabelRequest{Name: &args[0], Group: optional(group), Description: optional(description)})
+			resp, err := client.Checked(c.CreateLabelWithResponse(cmd.Context(), project, api.CreateLabelRequest{Name: &args[0], Group: optional(group), Description: optional(description)}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printLabel(g, cmd, *resp.JSON201)
@@ -110,11 +104,8 @@ func newLabelEdit(g *globals) *cobra.Command {
 				return &config.UsageError{Message: "nothing to change: --name, --group or --description."}
 			}
 			body, _ := json.Marshal(changes)
-			resp, err := c.ChangeLabelWithBodyWithResponse(cmd.Context(), project, args[0], "application/json", bytes.NewReader(body))
+			resp, err := client.Checked(c.ChangeLabelWithBodyWithResponse(cmd.Context(), project, args[0], "application/json", bytes.NewReader(body)))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printLabel(g, cmd, *resp.JSON200)
@@ -138,11 +129,8 @@ func newLabelDelete(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.DeleteLabelWithResponse(cmd.Context(), project, args[0])
+			_, err = client.Checked(c.DeleteLabelWithResponse(cmd.Context(), project, args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -166,11 +154,8 @@ func newLabelRestore(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RestoreLabelWithResponse(cmd.Context(), project, args[0])
+			resp, err := client.Checked(c.RestoreLabelWithResponse(cmd.Context(), project, args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printLabel(g, cmd, *resp.JSON200)

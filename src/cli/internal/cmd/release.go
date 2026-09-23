@@ -31,11 +31,8 @@ func newReleaseList(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListReleasesWithResponse(cmd.Context(), project)
+			resp, err := client.Checked(c.ListReleasesWithResponse(cmd.Context(), project))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -51,11 +48,8 @@ func readRelease(cmd *cobra.Command, g *globals, name string) (*api.Release, err
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.ReadReleaseWithResponse(cmd.Context(), project, name)
+	resp, err := client.Checked(c.ReadReleaseWithResponse(cmd.Context(), project, name))
 	if err != nil {
-		return nil, client.Transport(err)
-	}
-	if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 		return nil, err
 	}
 	return resp.JSON200, nil
@@ -89,11 +83,8 @@ func newReleasePublish(g *globals) *cobra.Command {
 				return err
 			}
 			body := api.PublishReleaseRequest{Name: &args[0], Description: description}
-			resp, err := c.PublishReleaseWithResponse(cmd.Context(), project, body)
+			resp, err := client.Checked(c.PublishReleaseWithResponse(cmd.Context(), project, body))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -119,11 +110,8 @@ func newReleaseNotes(g *globals) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				resp, err := c.ChangeReleaseWithResponse(cmd.Context(), project, args[0], api.ChangeReleaseRequest{Description: description})
+				resp, err := client.Checked(c.ChangeReleaseWithResponse(cmd.Context(), project, args[0], api.ChangeReleaseRequest{Description: description}))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 				if g.json {
@@ -157,11 +145,8 @@ func newReleaseAdd(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.AddIssueToReleaseWithResponse(cmd.Context(), project, openRelease, args[0])
+			resp, err := client.Checked(c.AddIssueToReleaseWithResponse(cmd.Context(), project, openRelease, args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -179,11 +164,8 @@ func newReleaseRemove(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RemoveIssueFromReleaseWithResponse(cmd.Context(), project, openRelease, args[0])
+			resp, err := client.Checked(c.RemoveIssueFromReleaseWithResponse(cmd.Context(), project, openRelease, args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -201,11 +183,8 @@ func newReleaseRename(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ChangeReleaseWithResponse(cmd.Context(), project, args[0], api.ChangeReleaseRequest{Name: &args[1]})
+			resp, err := client.Checked(c.ChangeReleaseWithResponse(cmd.Context(), project, args[0], api.ChangeReleaseRequest{Name: &args[1]}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -223,11 +202,8 @@ func newReleaseRetract(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RetractReleaseWithResponse(cmd.Context(), project, args[0])
+			resp, err := client.Checked(c.RetractReleaseWithResponse(cmd.Context(), project, args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {

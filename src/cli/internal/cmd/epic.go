@@ -54,11 +54,8 @@ func newEpicCreate(g *globals) *cobra.Command {
 			if len(labels) > 0 {
 				body.Labels = &labels
 			}
-			resp, err := c.CreateEpicWithResponse(cmd.Context(), body)
+			resp, err := client.Checked(c.CreateEpicWithResponse(cmd.Context(), body))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printEpic(g, cmd, *resp.JSON201)
@@ -85,11 +82,8 @@ func newEpicList(g *globals) *cobra.Command {
 				v := int32(limit)
 				params.Limit = &v
 			}
-			resp, err := c.ListEpicsWithResponse(cmd.Context(), params, repeated("label", labels))
+			resp, err := client.Checked(c.ListEpicsWithResponse(cmd.Context(), params, repeated("label", labels)))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -117,11 +111,8 @@ func newEpicView(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReadEpicWithResponse(cmd.Context(), args[0])
+			resp, err := client.Checked(c.ReadEpicWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printEpic(g, cmd, *resp.JSON200)
@@ -157,16 +148,13 @@ func newEpicEdit(g *globals) *cobra.Command {
 				return &config.UsageError{Message: "nothing to change: --title, --description-file or --label."}
 			}
 			body, _ := json.Marshal(changes)
-			resp, err := c.ChangeEpicWithBodyWithResponse(cmd.Context(), args[0], "application/json", bytes.NewReader(body), func(_ context.Context, req *http.Request) error {
+			resp, err := client.Checked(c.ChangeEpicWithBodyWithResponse(cmd.Context(), args[0], "application/json", bytes.NewReader(body), func(_ context.Context, req *http.Request) error {
 				if ifMatch != "" {
 					req.Header.Set("If-Match", `"`+strings.Trim(ifMatch, `"`)+`"`)
 				}
 				return nil
-			})
+			}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printEpic(g, cmd, *resp.JSON200)
@@ -201,11 +189,8 @@ func newEpicClose(g *globals) *cobra.Command {
 				return err
 			}
 
-			resp, err := c.CloseEpicWithResponse(cmd.Context(), key)
+			resp, err := client.Checked(c.CloseEpicWithResponse(cmd.Context(), key))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 
@@ -262,19 +247,13 @@ func newEpicClose(g *globals) *cobra.Command {
 func cancelWithEpic(cmd *cobra.Command, c *client.Client, issue, epic string) error {
 	status := api.IssueStatus("canceled")
 	reason := "Canceled with the epic " + epic + "."
-	r, err := c.CloseIssueWithResponse(cmd.Context(), issue, api.CloseRequest{Status: &status, Result: &reason})
-	if err != nil {
-		return client.Transport(err)
-	}
-	return client.Check(r.HTTPResponse, r.Body)
+	_, err := client.Checked(c.CloseIssueWithResponse(cmd.Context(), issue, api.CloseRequest{Status: &status, Result: &reason}))
+	return err
 }
 
 func park(cmd *cobra.Command, c *client.Client, issue string) error {
-	r, err := c.ChangeIssueWithBodyWithResponse(cmd.Context(), issue, "application/json", strings.NewReader(`{"status":"backlog"}`))
-	if err != nil {
-		return client.Transport(err)
-	}
-	return client.Check(r.HTTPResponse, r.Body)
+	_, err := client.Checked(c.ChangeIssueWithBodyWithResponse(cmd.Context(), issue, "application/json", strings.NewReader(`{"status":"backlog"}`)))
+	return err
 }
 
 // openIssuesOf lists what is still open under the epic: everything but done
@@ -285,12 +264,9 @@ func openIssuesOf(cmd *cobra.Command, c *client.Client, epic string) ([]api.Issu
 	var open []api.IssueSummary
 	var cursor *string
 	for {
-		resp, err := c.ListIssuesWithResponse(cmd.Context(), &api.ListIssuesParams{Epic: &epic, Limit: &limit, Cursor: cursor},
-			repeated("status", []string{"backlog", "todo", "in_progress", "review"}))
+		resp, err := client.Checked(c.ListIssuesWithResponse(cmd.Context(), &api.ListIssuesParams{Epic: &epic, Limit: &limit, Cursor: cursor},
+			repeated("status", []string{"backlog", "todo", "in_progress", "review"})))
 		if err != nil {
-			return nil, client.Transport(err)
-		}
-		if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 			return nil, err
 		}
 		open = append(open, resp.JSON200.Items...)
@@ -312,20 +288,14 @@ func newEpicSimple(g *globals, verb, short string) *cobra.Command {
 			var epic *api.Epic
 			switch verb {
 			case "reopen":
-				resp, err := c.ReopenEpicWithResponse(cmd.Context(), args[0])
+				resp, err := client.Checked(c.ReopenEpicWithResponse(cmd.Context(), args[0]))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 				epic = resp.JSON200
 			case "restore":
-				resp, err := c.RestoreEpicWithResponse(cmd.Context(), args[0])
+				resp, err := client.Checked(c.RestoreEpicWithResponse(cmd.Context(), args[0]))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 					return err
 				}
 				epic = resp.JSON200
@@ -343,11 +313,8 @@ func newEpicDelete(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.DeleteEpicWithResponse(cmd.Context(), args[0])
+			_, err = client.Checked(c.DeleteEpicWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			key := strings.ToUpper(args[0])

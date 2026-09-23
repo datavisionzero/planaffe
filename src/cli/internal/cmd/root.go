@@ -57,7 +57,11 @@ func Run(ctx context.Context, args []string, env Env) (code int) {
 
 	root := newRoot(env)
 	root.SetArgs(args)
-	root.SetIn(env.Stdin)
+	in := env.Stdin
+	if in == nil {
+		in = os.Stdin
+	}
+	root.SetIn(&stdin{Reader: in})
 	root.SetOut(env.Stdout)
 	root.SetErr(env.Stderr)
 

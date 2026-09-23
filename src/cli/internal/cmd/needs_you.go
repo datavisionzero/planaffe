@@ -11,7 +11,6 @@ import (
 
 	"github.com/datavisionzero/planaffe/src/cli/internal/api"
 	"github.com/datavisionzero/planaffe/src/cli/internal/client"
-	"github.com/datavisionzero/planaffe/src/cli/internal/config"
 	"github.com/datavisionzero/planaffe/src/cli/internal/render"
 )
 
@@ -26,13 +25,9 @@ func newNeedsYou(g *globals) *cobra.Command {
 		Short: "What only a human can resolve: questions, review, unready work and stuck blocker chains.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			waiting := cmd.Flags().Changed("wait")
-			if waiting && wait <= 0 {
-				return &config.UsageError{Message: "--wait must be a positive number of seconds"}
-			}
-			round := wait
-			if round > maximumServerWait {
-				round = maximumServerWait
+			waiting, round, err := waitRound(cmd, wait)
+			if err != nil {
+				return err
 			}
 			cfg, c, err := g.loadForWait(round)
 			if err != nil {
@@ -48,11 +43,8 @@ func newNeedsYou(g *globals) *cobra.Command {
 				value := int32(limit)
 				params.Limit = &value
 			}
-			resp, err := c.ListNeedsYouWithResponse(cmd.Context(), project, params)
+			resp, err := client.Checked(c.ListNeedsYouWithResponse(cmd.Context(), project, params))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			page := resp.JSON200
@@ -60,10 +52,7 @@ func newNeedsYou(g *globals) *cobra.Command {
 				etag := resp.HTTPResponse.Header.Get("ETag")
 				remaining := wait
 				for {
-					seconds := remaining
-					if seconds > maximumServerWait {
-						seconds = maximumServerWait
-					}
+					seconds := serverRound(remaining)
 					value := int32(seconds)
 					params.Wait = &value
 					params.IfNoneMatch = optional(etag)

@@ -184,11 +184,8 @@ func takeOrCreate(cmd *cobra.Command, c *client.Client, key, name, dir string) (
 	if name == "" {
 		name = filepath.Base(dir)
 	}
-	created, err := c.CreateProjectWithResponse(cmd.Context(), api.CreateProjectRequest{Key: &key, Name: &name})
+	created, err := client.Checked(c.CreateProjectWithResponse(cmd.Context(), api.CreateProjectRequest{Key: &key, Name: &name}))
 	if err != nil {
-		return api.Project{}, false, client.Transport(err)
-	}
-	if err := client.Check(created.HTTPResponse, created.Body); err != nil {
 		return api.Project{}, false, err
 	}
 	return *created.JSON201, true, nil

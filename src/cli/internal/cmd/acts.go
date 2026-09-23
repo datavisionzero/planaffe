@@ -39,11 +39,8 @@ func newIssueClaim(g *globals) *cobra.Command {
 			if force {
 				body.Force = &force
 			}
-			resp, err := c.ClaimIssueWithResponse(cmd.Context(), args[0], body)
+			resp, err := client.Checked(c.ClaimIssueWithResponse(cmd.Context(), args[0], body))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printIssue(g, cmd, *resp.JSON200)
@@ -63,11 +60,8 @@ func newIssueRelease(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReleaseIssueWithResponse(cmd.Context(), args[0])
+			resp, err := client.Checked(c.ReleaseIssueWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printIssue(g, cmd, *resp.JSON200)
@@ -101,11 +95,8 @@ func newIssueClose(g *globals) *cobra.Command {
 			if canceled {
 				status = "canceled"
 			}
-			resp, err := c.CloseIssueWithResponse(cmd.Context(), args[0], api.CloseRequest{Status: &status, Result: result})
+			resp, err := client.Checked(c.CloseIssueWithResponse(cmd.Context(), args[0], api.CloseRequest{Status: &status, Result: result}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			// Expected, never enforced (VISION 8): pointed out, and that is all.
@@ -142,11 +133,8 @@ func newIssueReview(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReviewIssueWithResponse(cmd.Context(), args[0], api.ReviewRequest{Result: result})
+			resp, err := client.Checked(c.ReviewIssueWithResponse(cmd.Context(), args[0], api.ReviewRequest{Result: result}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if resp.JSON200.Result == nil || *resp.JSON200.Result == "" {
@@ -166,6 +154,9 @@ func newIssueReopen(g *globals) *cobra.Command {
 		Short: "Back to todo from review, done or canceled. Back from review is the rejection and wants a comment.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := exclusive(cmd, [2]string{"comment", "comment-file"}); err != nil {
+				return err
+			}
 			_, c, err := g.load()
 			if err != nil {
 				return err
@@ -182,21 +173,15 @@ func newIssueReopen(g *globals) *cobra.Command {
 			// rejection out of review is expected to say why (VISION 9).
 			fromReview := false
 			if text == nil {
-				before, err := c.ReadIssueWithResponse(cmd.Context(), args[0])
+				before, err := client.Checked(c.ReadIssueWithResponse(cmd.Context(), args[0]))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(before.HTTPResponse, before.Body); err != nil {
 					return err
 				}
 				fromReview = before.JSON200.Status == "review"
 			}
 
-			resp, err := c.ReopenIssueWithResponse(cmd.Context(), args[0], api.ReopenRequest{Comment: text})
+			resp, err := client.Checked(c.ReopenIssueWithResponse(cmd.Context(), args[0], api.ReopenRequest{Comment: text}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if fromReview {
@@ -221,11 +206,8 @@ func newIssuePark(g *globals, use, status, short string) *cobra.Command {
 				return err
 			}
 			body := strings.NewReader(`{"status":"` + status + `"}`)
-			resp, err := c.ChangeIssueWithBodyWithResponse(cmd.Context(), args[0], "application/json", body)
+			resp, err := client.Checked(c.ChangeIssueWithBodyWithResponse(cmd.Context(), args[0], "application/json", body))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printIssue(g, cmd, *resp.JSON200)
@@ -248,11 +230,8 @@ func newIssueComment(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.CommentOnIssueWithResponse(cmd.Context(), args[0], api.CommentRequest{Body: &text})
+			resp, err := client.Checked(c.CommentOnIssueWithResponse(cmd.Context(), args[0], api.CommentRequest{Body: &text}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -276,37 +255,27 @@ func newIssueAsk(g *globals) *cobra.Command {
 		Short: "Ask: whoever cannot go on says on what. Does not release the claim.",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			waiting := cmd.Flags().Changed("wait")
-			if waiting && wait <= 0 {
-				return &config.UsageError{Message: "--wait must be a positive number of seconds"}
+			waiting, round, err := waitRound(cmd, wait)
+			if err != nil {
+				return err
 			}
 			text, err := textArg(cmd, args, file, "a question")
 			if err != nil {
 				return err
 			}
-			round := wait
-			if round > maximumServerWait {
-				round = maximumServerWait
-			}
 			_, c, err := g.loadForWait(round)
 			if err != nil {
 				return err
 			}
-			resp, err := c.AskQuestionWithResponse(cmd.Context(), args[0], api.AskRequest{Question: &text})
+			resp, err := client.Checked(c.AskQuestionWithResponse(cmd.Context(), args[0], api.AskRequest{Question: &text}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			question := resp.JSON201
 			if waiting {
 				remaining := wait
-				issue, err := c.ReadIssueWithResponse(cmd.Context(), args[0])
+				issue, err := client.Checked(c.ReadIssueWithResponse(cmd.Context(), args[0]))
 				if err != nil {
-					return client.Transport(err)
-				}
-				if err := client.Check(issue.HTTPResponse, issue.Body); err != nil {
 					return err
 				}
 				if issue.JSON200.Claim != nil && issue.JSON200.Claim.Holder.Id == question.AskedBy.Id && issue.JSON200.Claim.ExpiresAt != nil {
@@ -317,16 +286,10 @@ func newIssueAsk(g *globals) *cobra.Command {
 				}
 
 				for remaining > 0 && question.Answer == nil {
-					seconds := remaining
-					if seconds > maximumServerWait {
-						seconds = maximumServerWait
-					}
+					seconds := serverRound(remaining)
 					value := int32(seconds)
-					read, err := c.ReadQuestionWithResponse(cmd.Context(), question.Id, &api.ReadQuestionParams{Wait: &value})
+					read, err := client.Checked(c.ReadQuestionWithResponse(cmd.Context(), question.Id, &api.ReadQuestionParams{Wait: &value}))
 					if err != nil {
-						return client.Transport(err)
-					}
-					if err := client.Check(read.HTTPResponse, read.Body); err != nil {
 						return err
 					}
 					question = read.JSON200

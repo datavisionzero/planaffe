@@ -91,11 +91,8 @@ func newPageList(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ListPagesWithResponse(cmd.Context(), args[0])
+			resp, err := client.Checked(c.ListPagesWithResponse(cmd.Context(), args[0]))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -123,11 +120,8 @@ func newPageView(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.ReadPageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress)
+			resp, err := client.Checked(c.ReadPageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printPage(g, cmd, *resp.JSON200)
@@ -162,11 +156,8 @@ func newPageCreate(g *globals) *cobra.Command {
 
 			parent, slug := at.under()
 			request := api.CreatePageBody{Slug: &slug, Title: &title, Body: body, Parent: optional(parent)}
-			resp, err := c.CreatePageWithResponse(cmd.Context(), at.space, request)
+			resp, err := client.Checked(c.CreatePageWithResponse(cmd.Context(), at.space, request))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printPage(g, cmd, *resp.JSON201)
@@ -244,18 +235,15 @@ func changePage(g *globals, cmd *cobra.Command, at address, changes map[string]a
 		return err
 	}
 	body, _ := json.Marshal(changes)
-	resp, err := c.ChangePageWithBodyWithResponse(cmd.Context(), at.space, at.path, "application/json", bytes.NewReader(body),
+	resp, err := client.Checked(c.ChangePageWithBodyWithResponse(cmd.Context(), at.space, at.path, "application/json", bytes.NewReader(body),
 		client.ByAddress,
 		func(_ context.Context, req *http.Request) error {
 			if ifMatch != "" {
 				req.Header.Set("If-Match", `"`+strings.Trim(ifMatch, `"`)+`"`)
 			}
 			return nil
-		})
+		}))
 	if err != nil {
-		return client.Transport(err)
-	}
-	if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 		return err
 	}
 	return printPage(g, cmd, *resp.JSON200)
@@ -298,11 +286,8 @@ func newPageMove(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.MovePageWithResponse(cmd.Context(), at.space, request)
+			resp, err := client.Checked(c.MovePageWithResponse(cmd.Context(), at.space, request))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printPage(g, cmd, *resp.JSON200)
@@ -327,11 +312,8 @@ func newPageDelete(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.DeletePageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress)
+			resp, err := client.Checked(c.DeletePageWithResponse(cmd.Context(), at.space, at.path, client.ByAddress))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if g.json {
@@ -369,11 +351,8 @@ func newPageRestore(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.RestorePageWithResponse(cmd.Context(), at.space, api.RestorePageBody{Path: &at.path})
+			resp, err := client.Checked(c.RestorePageWithResponse(cmd.Context(), at.space, api.RestorePageBody{Path: &at.path}))
 			if err != nil {
-				return client.Transport(err)
-			}
-			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			return printPage(g, cmd, *resp.JSON200)

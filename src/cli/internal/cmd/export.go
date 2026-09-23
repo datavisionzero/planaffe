@@ -58,25 +58,16 @@ func newExport(g *globals) *cobra.Command {
 func readProjectExport(cmd *cobra.Command, c *client.Client, key string) (projectExport, error) {
 	var result projectExport
 
-	versionResponse, err := c.ReadVersionWithResponse(cmd.Context())
+	versionResponse, err := client.Checked(c.ReadVersionWithResponse(cmd.Context()))
 	if err != nil {
-		return result, client.Transport(err)
-	}
-	if err := client.Check(versionResponse.HTTPResponse, versionResponse.Body); err != nil {
 		return result, err
 	}
-	projectResponse, err := c.ReadProjectWithResponse(cmd.Context(), key)
+	projectResponse, err := client.Checked(c.ReadProjectWithResponse(cmd.Context(), key))
 	if err != nil {
-		return result, client.Transport(err)
-	}
-	if err := client.Check(projectResponse.HTTPResponse, projectResponse.Body); err != nil {
 		return result, err
 	}
-	labelsResponse, err := c.ListLabelsWithResponse(cmd.Context(), key)
+	labelsResponse, err := client.Checked(c.ListLabelsWithResponse(cmd.Context(), key))
 	if err != nil {
-		return result, client.Transport(err)
-	}
-	if err := client.Check(labelsResponse.HTTPResponse, labelsResponse.Body); err != nil {
 		return result, err
 	}
 	epics, err := readAllEpics(cmd, c, key)
@@ -105,19 +96,13 @@ func readAllEpics(cmd *cobra.Command, c *client.Client, project string) ([]api.E
 	var cursor *string
 	status := "all"
 	for {
-		response, err := c.ListEpicsWithResponse(cmd.Context(), &api.ListEpicsParams{Project: &project, Status: &status, Cursor: cursor, Limit: pointer(exportPageSize)})
+		response, err := client.Checked(c.ListEpicsWithResponse(cmd.Context(), &api.ListEpicsParams{Project: &project, Status: &status, Cursor: cursor, Limit: pointer(exportPageSize)}))
 		if err != nil {
-			return nil, client.Transport(err)
-		}
-		if err := client.Check(response.HTTPResponse, response.Body); err != nil {
 			return nil, err
 		}
 		for _, summary := range response.JSON200.Items {
-			full, err := c.ReadEpicWithResponse(cmd.Context(), summary.Key)
+			full, err := client.Checked(c.ReadEpicWithResponse(cmd.Context(), summary.Key))
 			if err != nil {
-				return nil, client.Transport(err)
-			}
-			if err := client.Check(full.HTTPResponse, full.Body); err != nil {
 				return nil, err
 			}
 			result = append(result, *full.JSON200)
@@ -130,20 +115,14 @@ func readAllEpics(cmd *cobra.Command, c *client.Client, project string) ([]api.E
 }
 
 func readAllReleases(cmd *cobra.Command, c *client.Client, project string) ([]api.Release, error) {
-	response, err := c.ListReleasesWithResponse(cmd.Context(), project)
+	response, err := client.Checked(c.ListReleasesWithResponse(cmd.Context(), project))
 	if err != nil {
-		return nil, client.Transport(err)
-	}
-	if err := client.Check(response.HTTPResponse, response.Body); err != nil {
 		return nil, err
 	}
 	result := make([]api.Release, 0, len(*response.JSON200))
 	for _, summary := range *response.JSON200 {
-		full, err := c.ReadReleaseWithResponse(cmd.Context(), project, summary.Name)
+		full, err := client.Checked(c.ReadReleaseWithResponse(cmd.Context(), project, summary.Name))
 		if err != nil {
-			return nil, client.Transport(err)
-		}
-		if err := client.Check(full.HTTPResponse, full.Body); err != nil {
 			return nil, err
 		}
 		result = append(result, *full.JSON200)
@@ -156,26 +135,17 @@ func readAllIssues(cmd *cobra.Command, c *client.Client, project string) ([]expo
 	var cursor *string
 	statuses := []string{"backlog", "todo", "in_progress", "review", "done", "canceled"}
 	for {
-		response, err := c.ListIssuesWithResponse(cmd.Context(), &api.ListIssuesParams{Project: &project, Cursor: cursor, Limit: pointer(exportPageSize)}, repeated("status", statuses))
+		response, err := client.Checked(c.ListIssuesWithResponse(cmd.Context(), &api.ListIssuesParams{Project: &project, Cursor: cursor, Limit: pointer(exportPageSize)}, repeated("status", statuses)))
 		if err != nil {
-			return nil, client.Transport(err)
-		}
-		if err := client.Check(response.HTTPResponse, response.Body); err != nil {
 			return nil, err
 		}
 		for _, summary := range response.JSON200.Items {
-			full, err := c.ReadIssueWithResponse(cmd.Context(), summary.Key)
+			full, err := client.Checked(c.ReadIssueWithResponse(cmd.Context(), summary.Key))
 			if err != nil {
-				return nil, client.Transport(err)
-			}
-			if err := client.Check(full.HTTPResponse, full.Body); err != nil {
 				return nil, err
 			}
-			history, err := c.ReadHistoryWithResponse(cmd.Context(), summary.Key)
+			history, err := client.Checked(c.ReadHistoryWithResponse(cmd.Context(), summary.Key))
 			if err != nil {
-				return nil, client.Transport(err)
-			}
-			if err := client.Check(history.HTTPResponse, history.Body); err != nil {
 				return nil, err
 			}
 			result = append(result, exportIssue{Issue: *full.JSON200, History: *history.JSON200})

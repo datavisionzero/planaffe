@@ -69,19 +69,13 @@ func (g *globals) login(ctx context.Context, address, tokenFile string) error {
 	// Before a code is printed, let alone a token collected: is this a planaffe
 	// instance, and do the two of us fit (ADR 0011). A wrong address should
 	// fail here, not after somebody has walked to another machine.
-	handshake, err := c.ReadVersionWithResponse(ctx)
+	_, err = client.Checked(c.ReadVersionWithResponse(ctx))
 	if err != nil {
-		return client.Transport(err)
-	}
-	if err := client.Check(handshake.HTTPResponse, handshake.Body); err != nil {
 		return err
 	}
 
-	begun, err := c.BeginDeviceLoginWithResponse(ctx)
+	begun, err := client.Checked(c.BeginDeviceLoginWithResponse(ctx))
 	if err != nil {
-		return client.Transport(err)
-	}
-	if err := client.Check(begun.HTTPResponse, begun.Body); err != nil {
 		return err
 	}
 	if begun.JSON200 == nil {
