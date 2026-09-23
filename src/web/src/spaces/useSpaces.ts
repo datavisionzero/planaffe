@@ -60,37 +60,47 @@ export function useSpaceList(): SpaceList {
  */
 export function useTreeState(space: string | undefined): PageTree {
   const [state, setState] = useState<{ of: string; tree: Tree }>();
-  const live = useRef(true);
+  // Only the latest read may answer. One flag shared by every read let the
+  // late answer of the space just left overwrite the one walked into: from A
+  // to B, A's tree arrived after B's and stood under B's name. Every read now
+  // takes a number, and a read that is no longer the latest drops its answer —
+  // as does every read once the frame has gone.
+  const latest = useRef(0);
 
   const reload = useCallback(async () => {
     if (space === undefined) {
       return;
     }
 
+    const mine = ++latest.current;
+
     try {
       const { data, error, response } = await api.GET("/spaces/{name}/pages", { params: { path: { name: space } } });
 
-      if (live.current) {
+      if (mine === latest.current) {
         setState({
           of: space,
           tree: data === undefined ? { at: "failed", why: describe(error, response.status) } : { at: "known", pages: data },
         });
       }
     } catch {
-      if (live.current) {
+      if (mine === latest.current) {
         setState({ of: space, tree: { at: "failed", why: "The instance did not answer." } });
       }
     }
   }, [space]);
 
   useEffect(() => {
-    live.current = true;
+    // The counter itself, not a value read from it: the cleanup moves it on
+    // past whatever read is running then.
+    const reads = latest;
+
     void (async () => {
       await reload();
     })();
 
     return () => {
-      live.current = false;
+      reads.current++;
     };
   }, [reload]);
 

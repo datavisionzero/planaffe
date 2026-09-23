@@ -67,8 +67,16 @@ export type Labels = {
   create: (name: string) => Promise<Label>;
 };
 
+/** One empty set, so that a consumer's memo does not see a new one on every render. */
+const none: Label[] = [];
+
 export function useLabels(project: string | undefined): Labels {
-  const [labels, setLabels] = useState<Label[]>([]);
+  // What is held belongs to the project it was asked for: a screen that stays
+  // mounted while the address moves on offers none rather than the labels of
+  // the project it came from.
+  const [held, setHeld] = useState<{ of: string; labels: Label[] }>();
+  const labels = held !== undefined && held.of === project ? held.labels : none;
+  const setLabels = useCallback((of: string, known: Label[]) => setHeld({ of, labels: known }), []);
 
   useEffect(() => {
     if (project === undefined) {
@@ -79,17 +87,17 @@ export function useLabels(project: string | undefined): Labels {
 
     void labelsOf(project).then(
       (known) => {
-        if (current) setLabels(known);
+        if (current) setLabels(project, known);
       },
       () => {
-        if (current) setLabels([]);
+        if (current) setLabels(project, []);
       },
     );
 
     return () => {
       current = false;
     };
-  }, [project]);
+  }, [project, setLabels]);
 
   const create = useCallback(
     async (name: string): Promise<Label> => {
@@ -107,11 +115,11 @@ export function useLabels(project: string | undefined): Labels {
       // without a second round trip.
       const known = [...(asked.has(key) ? await labelsOf(key) : []), data];
       asked.set(key, Promise.resolve(known));
-      setLabels(known);
+      setLabels(key, known);
 
       return data;
     },
-    [project],
+    [project, setLabels],
   );
 
   return { labels, create };

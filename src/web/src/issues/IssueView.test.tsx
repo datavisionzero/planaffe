@@ -265,6 +265,43 @@ describe("the human-first issue detail", () => {
     expect(screen.getByRole("link", { name: /Back to Needs you/ })).toBeInTheDocument();
   });
 
+  // The flow used to read every candidate on every wake to find one that
+  // still opens. It lists them from Needs you and asks only when somebody goes
+  // on — and then it still skips the one that is gone.
+  it("asks which waiting issue still opens only when going on, and skips one that is gone", async () => {
+    const waiting = { ...free, questions: issue.questions, open_questions: 1 };
+    const gone = { ...free, key: "PLAN-11", title: "Deleted meanwhile" };
+    const next = { ...free, key: "PLAN-10", title: "Next decision", questions: issue.questions, open_questions: 1 };
+    const answered = { ...issue.questions[0], answer: "Use the browser path.", answered_by: person, answered_at: "2026-09-04T11:00:00Z" };
+    let items = [{ issue: waiting, because: "question" }, { issue: gone, because: "question" }, { issue: next, because: "question" }];
+    const instance = installInstance({
+      "GET /issues/PLAN-9": waiting,
+      "GET /issues/PLAN-9/history": [],
+      "GET /issues/PLAN-11": { status: 404, body: { detail: "No issue PLAN-11." } },
+      "GET /issues/PLAN-10": next,
+      "GET /issues/PLAN-10/history": [],
+      "GET /projects/PLAN/needs-you": () => ({ items, total: items.length, next_cursor: null, has_more: false, agents: 1 }),
+      "POST /questions/0199a000-0000-7000-8000-000000000004/answer": () => {
+        items = items.slice(1);
+        return { body: answered };
+      },
+    });
+    renderAt("/PLAN/issues/9?from=needs-you", routedIssue);
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByLabelText("Answer"), "Use the browser path.");
+    await user.click(screen.getByRole("button", { name: "Answer" }));
+    const onward = await screen.findByRole("button", { name: "Next waiting issue" });
+
+    const candidates = () => instance.calls.filter((call) => /\/issues\/PLAN-1[01]$/.test(new URL(call.url).pathname));
+    expect(candidates()).toHaveLength(0);
+
+    await user.click(onward);
+
+    expect(await screen.findByRole("heading", { name: /Next decision/ })).toBeInTheDocument();
+    expect(candidates().map((call) => new URL(call.url).pathname).slice(0, 2)).toEqual(["/issues/PLAN-11", "/issues/PLAN-10"]);
+  });
+
   it("leaves a direct issue link outside the Needs you workflow", async () => {
     installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [] });
     renderAt("/PLAN/issues/9", routedIssue);
@@ -357,7 +394,15 @@ describe("the human-first issue detail", () => {
 
   it("answers the action that needs attention without leaving the issue", async () => {
     const answered = { ...issue.questions[0], answer: "Use the browser path.", answered_by: person, answered_at: "2026-09-04T11:00:00Z" };
-    const instance = installInstance({ "GET /issues/PLAN-9": issue, "GET /issues/PLAN-9/history": [], "POST /questions/0199a000-0000-7000-8000-000000000004/answer": { body: answered } });
+    let current: Record<string, unknown> = issue;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": () => current,
+      "GET /issues/PLAN-9/history": [],
+      "POST /questions/0199a000-0000-7000-8000-000000000004/answer": () => {
+        current = { ...issue, questions: [answered], open_questions: 0, updated_at: "2026-09-04T11:00:00Z" };
+        return { body: answered };
+      },
+    });
     renderAt("/PLAN/issues/9", routedIssue);
     const user = userEvent.setup();
 
@@ -439,10 +484,14 @@ describe("the human-first issue detail", () => {
   // offered — the check itself is the instance's.
   it("corrects its author's own comment in place and says that it was edited", async () => {
     const corrected = { ...issue.comments[0], body: "A corrected comment.", edited_at: "2026-09-05T11:00:00Z" };
+    let current: Record<string, unknown> = free;
     const instance = installInstance({
-      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9": () => current,
       "GET /issues/PLAN-9/history": [],
-      "PATCH /comments/0199a000-0000-7000-8000-000000000003": { body: corrected },
+      "PATCH /comments/0199a000-0000-7000-8000-000000000003": () => {
+        current = { ...free, comments: [corrected], updated_at: "2026-09-05T11:00:00Z" };
+        return { body: corrected };
+      },
     });
     renderAt("/PLAN/issues/9", routedIssue);
     const user = userEvent.setup();
@@ -464,10 +513,14 @@ describe("the human-first issue detail", () => {
   });
 
   it("takes a comment away for good, once it has been confirmed", async () => {
+    let current: Record<string, unknown> = free;
     const instance = installInstance({
-      "GET /issues/PLAN-9": free,
+      "GET /issues/PLAN-9": () => current,
       "GET /issues/PLAN-9/history": [],
-      "DELETE /comments/0199a000-0000-7000-8000-000000000003": { status: 204 },
+      "DELETE /comments/0199a000-0000-7000-8000-000000000003": () => {
+        current = { ...free, comments: [], updated_at: "2026-09-05T11:00:00Z" };
+        return { status: 204 };
+      },
     });
     renderAt("/PLAN/issues/9", routedIssue);
     const user = userEvent.setup();
@@ -483,6 +536,9 @@ describe("the human-first issue detail", () => {
 
     await waitFor(() => expect(screen.queryByText("A comment.")).toBeNull());
     expect(instance.calls.some((call) => call.method === "DELETE")).toBe(true);
+    // The menu that opened the dialog went with the comment; the focus lands on
+    // what the conversation offers next rather than on the page.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add comment" })).toHaveFocus());
   });
 
   // A comment somebody else wrote: a user may clear it up, and nobody but its
@@ -505,7 +561,15 @@ describe("the human-first issue detail", () => {
   // under the actions rather than under the thread it belongs to.
   it("opens the comment field on a button, inside the conversation", async () => {
     const comment = { id: "0199a000-0000-7000-8000-000000000005", author: person, body: "Looked at it.", created_at: "2026-09-05T10:00:00Z" };
-    const instance = installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [], "POST /issues/PLAN-9/comments": { body: comment } });
+    let current: Record<string, unknown> = free;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": () => current,
+      "GET /issues/PLAN-9/history": [],
+      "POST /issues/PLAN-9/comments": () => {
+        current = { ...free, comments: [...free.comments, comment], updated_at: "2026-09-05T10:00:00Z" };
+        return { body: comment };
+      },
+    });
     renderAt("/PLAN/issues/9", routedIssue);
     const user = userEvent.setup();
 
@@ -518,6 +582,36 @@ describe("the human-first issue detail", () => {
 
     expect(await screen.findByText("Looked at it.")).toBeInTheDocument();
     expect(await instance.calls.find((call) => call.url.endsWith("/comments"))!.json()).toEqual({ body: "Looked at it." });
+  });
+
+  // A comment moves the issue's `updated_at` (ADR 0022). The screen used to
+  // patch the comment into the issue it held and keep the old version, so the
+  // next guarded write was refused for the writer's own comment.
+  it("writes against the version its own comment left behind", async () => {
+    const comment = { id: "0199a000-0000-7000-8000-000000000005", author: person, body: "Looked at it.", created_at: "2026-09-05T10:00:00Z" };
+    let current: Record<string, unknown> = free;
+    const instance = installInstance({
+      "GET /issues/PLAN-9": () => current,
+      "GET /issues/PLAN-9/history": [],
+      "GET /projects/PLAN/users": [],
+      "POST /issues/PLAN-9/comments": () => {
+        current = { ...free, comments: [...free.comments, comment], updated_at: "2026-09-05T10:00:00Z" };
+        return { body: comment };
+      },
+      "PATCH /issues/PLAN-9": () => ({ ...current, priority: 4, updated_at: "2026-09-05T10:05:00Z" }),
+    });
+    renderAt("/PLAN/issues/9", routedIssue);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Add comment" }));
+    await user.type(await screen.findByLabelText("Add comment"), "Looked at it.");
+    await user.click(screen.getByRole("button", { name: "Add comment" }));
+    expect(await screen.findByText("Looked at it.")).toBeInTheDocument();
+
+    await user.selectOptions(within(screen.getByLabelText("Issue details")).getByRole("combobox", { name: "Priority" }), "4");
+    await screen.findByText("Priority saved.");
+
+    expect(instance.calls.find((call) => call.method === "PATCH")!.headers.get("If-Match")).toBe("2026-09-05T10:00:00Z");
   });
 
   // `GET /issues/{key}` answers 404 `deleted` in the grace period and the view

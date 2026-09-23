@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { api, describe, type IssueSummary, type Release } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { failure } from "@/shared/act";
 import {
   Dialog,
   DialogClose,
@@ -16,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownField } from "@/shared/MarkdownField";
-import { useAbandon } from "@/shared/abandon";
+import { LeaveScope, useAbandon } from "@/shared/abandon";
 import { useDraft } from "@/shared/useDraft";
 import { StatusDot } from "@/issues/status";
 import { ActionDialog } from "@/shared/ActionDialog";
@@ -109,8 +110,10 @@ export function ReleaseView() {
   const changed = (value: Release) => setKnown({ of: address, loaded: { at: "known", release: value } });
   const correctable = release.status === "published" && newest?.of === address && newest.name === release.name;
 
+  // The notes and the publication are both written on this screen, and the
+  // router heeds one blocker: the scope holds it for the two of them.
   return (
-    <>
+    <LeaveScope>
       <PageHeader
         title={
           <span className="flex items-center gap-2">
@@ -174,7 +177,7 @@ export function ReleaseView() {
           )}
         </Section>
       </div>
-    </>
+    </LeaveScope>
   );
 }
 
@@ -258,7 +261,7 @@ function Membership({ issues, onRemove }: { issues: IssueSummary[]; onRemove?: (
               <Button
                 size="xs"
                 variant="ghost"
-                onClick={() => void onRemove(issue.key).then(() => setWhy(undefined), (reason: unknown) => setWhy(reason instanceof Error ? reason.message : "The instance did not answer."))}
+                onClick={() => void onRemove(issue.key).then(() => setWhy(undefined), (reason: unknown) => setWhy(failure(reason)))}
               >
                 Remove
               </Button>

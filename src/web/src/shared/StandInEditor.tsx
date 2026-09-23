@@ -3,7 +3,8 @@ import { is } from "@/shell/shortcuts";
 import type { Selected } from "./markdownCommands";
 
 /** The plain text area every test writes into in place of CodeMirror. */
-export default function StandInEditor({ value, onChange, onSubmit, onReady, label, hint, autoFocus, minHeight }: {
+export default function StandInEditor({ id: given, value, onChange, onSubmit, onReady, label, hint, autoFocus, minHeight }: {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   onSubmit?: () => void;
@@ -13,7 +14,8 @@ export default function StandInEditor({ value, onChange, onSubmit, onReady, labe
   autoFocus?: boolean;
   minHeight: string;
 }) {
-  const id = useId();
+  const own = useId();
+  const id = given ?? own;
   const area = useRef<HTMLTextAreaElement>(null);
   const latest = useRef(onChange);
 

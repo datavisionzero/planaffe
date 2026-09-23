@@ -231,6 +231,54 @@ it("says once that no agent can pick anything up, rather than per issue", async 
   expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(4);
 });
 
+// Everywhere else what is known stays standing when a refresh fails; here the
+// failure used to replace the list.
+it("keeps the known list when a refresh after a pulse fails, and says so beside it", async () => {
+  let asked = 0;
+  installInstance({
+    "GET /projects/PLAN/needs-you": () => (++asked === 1 ? fourReasons : { status: 503, body: { detail: "The instance is busy." } }),
+  });
+  const pulse = renderNeedsYou();
+
+  expect(await screen.findByText("Never triaged")).toBeInTheDocument();
+  pulse(1);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not refresh: The instance is busy.");
+  expect(screen.getByText("Never triaged")).toBeInTheDocument();
+});
+
+// A pulse reads from the top; a page still on its way from before it is a page
+// of a list that is gone, and it used to be appended to the new one.
+it("drops a page that was still loading when a pulse read the list again", async () => {
+  let answerPage2!: () => void;
+  const heldPage2 = new Promise<void>((resolve) => { answerPage2 = resolve; });
+  let top = 0;
+  installInstance({
+    "GET /projects/PLAN/needs-you": async (request) => {
+      if (new URL(request.url).searchParams.get("cursor") === "c2") {
+        await heldPage2;
+        return { items: [{ issue: anIssue("PLAN-8", "From the old page two"), because: "unready" }], total: 2, has_more: false, next_cursor: null, agents: 1 };
+      }
+      top += 1;
+      return top === 1
+        ? { items: fourReasons.items.slice(0, 1), total: 2, has_more: true, next_cursor: "c2", agents: 1 }
+        : { items: fourReasons.items.slice(1, 2), total: 1, has_more: false, next_cursor: null, agents: 1 };
+    },
+  });
+  const pulse = renderNeedsYou();
+  const user = userEvent.setup();
+
+  await user.click(await screen.findByRole("button", { name: "Show more" }));
+  pulse(1);
+  expect(await screen.findByText("Handed in")).toBeInTheDocument();
+
+  answerPage2();
+  await act(async () => { await heldPage2; await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+  expect(screen.queryByText("From the old page two")).not.toBeInTheDocument();
+  expect(screen.getByText("Handed in")).toBeInTheDocument();
+});
+
 it("says nothing about agents where there is one", async () => {
   installInstance({ "GET /projects/PLAN/needs-you": fourReasons });
   renderNeedsYou();

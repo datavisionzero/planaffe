@@ -1,33 +1,32 @@
-import { CopyIcon, LinkIcon, MoreHorizontalIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { CopyIcon, LinkIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useParams } from "react-router";
 import { api, codeOf, describe, type HistoryEntry, type Issue, type Problem } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { LabelPicker } from "@/components/ui/label-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { celebrateIfCleared } from "@/projects/celebrate";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAct } from "@/shared/act";
 import { Markdown } from "@/shared/Markdown";
-import { ActionDialog } from "@/shared/ActionDialog";
 import { PageHeader } from "@/shared/PageHeader";
-import { useSession } from "@/session/useSession";
-import { stale } from "@/shared/stale";
-import { keyPath, needsYouIssuePath, pathKey, viewOf, viewPath } from "@/shell/views";
+import { keyPath, pathKey } from "@/shell/views";
 import { useAttention } from "@/shell/useAttention";
 import { PriorityMark } from "./priority";
 import { StatusDot } from "./status";
-import { MarkdownField } from "@/shared/MarkdownField";
 import { DraftGuard } from "@/shared/abandon";
-import { useDraft } from "@/shared/useDraft";
+import { ActionBar, IssueAction } from "./ActionBar";
+import { issueRequest, reread } from "./acts";
+import { Conversation } from "./Conversation";
 import { EditIssueForm } from "./IssueEditor";
 import { IssueWorkability } from "./IssueWorkability";
-import { AssigneePicker, IssuePicker } from "./pickers";
-import { priorityLabel } from "./priorityLabel";
+import { Metadata } from "./Metadata";
+import { NeedsYouFlow } from "./NeedsYouFlow";
+import { Byline, Eyebrow } from "./parts";
+import { IssuePicker } from "./pickers";
+import { TextAction } from "./TextAction";
 
 type Load<T> = { at: "asking" } | { at: "failed"; why: string } | { at: "known"; value: T };
 /** The issue alone can also be gone: deleted, and restorable until a moment. */
@@ -61,78 +60,11 @@ export function IssueView() {
   return <IssueContent key={key} issueKey={key} />;
 }
 
-type NextAttention = { at: "current" | "done" } | { at: "next"; key: string };
-type AttentionStep = NextAttention | { at: "checking" } | { at: "failed"; why: string };
-
-/** Resolve the next step against the current server order, not a saved row number. */
-async function nextAttention(issueKey: string, signal: AbortSignal): Promise<NextAttention> {
-  const project = issueKey.slice(0, issueKey.indexOf("-"));
-  const candidates: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const { data, error, response } = await api.GET("/projects/{key}/needs-you", {
-      params: { path: { key: project }, query: { cursor, limit: 50 } }, signal,
-    });
-    if (!data) throw new Error(describe(error, response.status));
-    for (const item of data.items) {
-      if (item.issue.key === issueKey) return { at: "current" };
-      candidates.push(item.issue.key);
-    }
-    cursor = data.next_cursor ?? undefined;
-  } while (cursor !== undefined && !signal.aborted);
-
-  for (const key of candidates) {
-    const { data, error, response } = await api.GET("/issues/{key}", { params: { path: { key } }, signal });
-    if (data) return { at: "next", key };
-    if (response.status !== 403 && response.status !== 404) throw new Error(describe(error, response.status));
-  }
-  return { at: "done" };
-}
-
-/** The source list stays one click away, and a completed act offers the next live item. */
-function NeedsYouFlow({ issueKey, revision, pulse }: { issueKey: string; revision: number; pulse: number }) {
-  const navigate = useNavigate();
-  const project = issueKey.slice(0, issueKey.indexOf("-"));
-  const back = viewPath(project, viewOf("needs-you"));
-  const [step, setStep] = useState<AttentionStep>({ at: "checking" });
-  const [retry, setRetry] = useState(0);
-
-  useEffect(() => {
-    const stop = new AbortController();
-    void nextAttention(issueKey, stop.signal).then((value) => {
-      if (!stop.signal.aborted) setStep(value);
-    }, (reason) => {
-      if (!stop.signal.aborted) setStep({ at: "failed", why: reason instanceof Error ? reason.message : "The instance did not answer." });
-    });
-    return () => stop.abort();
-  }, [issueKey, revision, pulse, retry]);
-
-  async function advance() {
-    setStep({ at: "checking" });
-    const stop = new AbortController();
-    try {
-      const value = await nextAttention(issueKey, stop.signal);
-      if (value.at === "next") void navigate(needsYouIssuePath(value.key));
-      else setStep(value);
-    } catch (reason) {
-      setStep({ at: "failed", why: reason instanceof Error ? reason.message : "The instance did not answer." });
-    }
-  }
-
-  return <div className="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-4 py-2 text-sm" aria-label="Needs you workflow">
-    <Link className="text-brand hover:underline" to={back}>← Back to Needs you</Link>
-    {step.at === "next" && <Button size="sm" variant="outline" onClick={() => void advance()}>Next waiting issue</Button>}
-    {step.at === "done" && <span role="status">All caught up. Nothing else needs you.</span>}
-    {step.at === "current" && revision > 0 && <span role="status">This issue still needs your attention.</span>}
-    {step.at === "failed" && <span role="alert">Could not find the next issue: {step.why} <button className="underline" onClick={() => setRetry((value) => value + 1)}>Try again</button></span>}
-  </div>;
-}
-
 function IssueContent({ issueKey: key }: { issueKey: string }) {
   const location = useLocation();
   const narrow = useIsMobile();
   const fromNeedsYou = new URLSearchParams(location.search).get("from") === "needs-you";
-  const { issuesPulse } = useAttention();
+  const { issuesPulse, pulse } = useAttention();
   const [state, setState] = useState<{ key: string; issue: IssueLoad; history: Load<HistoryEntry[]> }>();
   const [editing, setEditing] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<{ text: string; failed: boolean }>();
@@ -182,7 +114,14 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
   useEffect(() => {
     let live = true;
     const stop = new AbortController();
-    void api.GET("/issues/{key}/history", { params: { path: { key } }, signal: stop.signal }).then(({ data, error, response }) => live && setState((old) => ({ key, issue: old !== undefined && old.key === key ? old.issue : asking, history: data ? { at: "known", value: data } : { at: "failed", why: describe(error, response.status) } })), () => live && !stop.signal.aborted && setState((old) => ({ key, issue: old?.issue ?? asking, history: { at: "failed", why: "The instance did not answer." } })));
+    void api.GET("/issues/{key}/history", { params: { path: { key } }, signal: stop.signal }).then(
+      ({ data, error, response }) => live && setState((old) => ({
+        key,
+        issue: old !== undefined && old.key === key ? old.issue : asking,
+        history: data ? { at: "known", value: data } : { at: "failed", why: describe(error, response.status) },
+      })),
+      () => live && !stop.signal.aborted && setState((old) => ({ key, issue: old?.issue ?? asking, history: { at: "failed", why: "The instance did not answer." } })),
+    );
     return () => { live = false; stop.abort(); };
   }, [key, issuesPulse, historyRevision]);
 
@@ -208,7 +147,7 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
     setContentRevision((value) => value + 1);
   };
   const restored = (value: Issue) => { setDeleted(undefined); changed(value); };
-  const flow = fromNeedsYou ? <NeedsYouFlow issueKey={key} revision={flowRevision} pulse={issuesPulse} /> : null;
+  const flow = fromNeedsYou ? <NeedsYouFlow issueKey={key} revision={flowRevision} pulse={pulse} /> : null;
 
   if (current.issue.at === "asking") return <><PageHeader title={<Skeleton className="h-4 w-64" />} /><div className="space-y-3 p-4"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></>;
   // Deleted just now, or deleted long before this browser asked for it: the
@@ -233,7 +172,15 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
     }
   }
 
-  return <><PageHeader className="sticky top-0 z-20 bg-background" headingLabel={`${issue.key} ${issue.title}`} title={<span className="flex items-center gap-2"><button type="button" aria-label={`Copy issue key ${issue.key}`} title="Copy issue key" onClick={() => void copy("key")} className="inline-flex shrink-0 items-center gap-1 rounded px-1 font-mono text-xs font-normal text-brand hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">{issue.key}<CopyIcon className="size-3" aria-hidden /></button>{issue.title}</span>}><Button size="sm" variant="outline" onClick={() => void copy("link")}><LinkIcon aria-hidden />Copy link</Button><ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} /></PageHeader>
+  const title = <span className="flex items-center gap-2">
+    <button type="button" aria-label={`Copy issue key ${issue.key}`} title="Copy issue key" onClick={() => void copy("key")} className="inline-flex shrink-0 items-center gap-1 rounded px-1 font-mono text-xs font-normal text-brand hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">{issue.key}<CopyIcon className="size-3" aria-hidden /></button>
+    {issue.title}
+  </span>;
+
+  return <><PageHeader className="sticky top-0 z-20 bg-background" headingLabel={`${issue.key} ${issue.title}`} title={title}>
+      <Button size="sm" variant="outline" onClick={() => void copy("link")}><LinkIcon aria-hidden />Copy link</Button>
+      <ActionBar issue={issue} onEdit={() => setEditing(true)} onChanged={changed} onDeleted={() => setDeleted({ until: null })} />
+    </PageHeader>
     {copyFeedback && <p role={copyFeedback.failed ? "alert" : "status"} className={cn("border-b px-4 py-1 text-xs", copyFeedback.failed ? "text-destructive" : "text-muted-foreground")}>{copyFeedback.text}</p>}
     {flow}
     {refreshError && <div role="alert" className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm text-destructive">Could not refresh: {refreshError}<Button size="sm" variant="outline" onClick={() => setRefreshRevision((x) => x + 1)}>Try again</Button></div>}
@@ -260,23 +207,15 @@ function IssueContent({ issueKey: key }: { issueKey: string }) {
  */
 function Gone({ issueKey, until, onRestored }: { issueKey: string; until: string | null; onRestored: (issue: Issue) => void }) {
   const restore = useRef<HTMLButtonElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run: act } = useAct();
 
   useEffect(() => { restore.current?.focus(); }, []);
 
-  async function run() {
-    setBusy(true); setError(undefined);
-    try {
-      const result = await api.POST("/issues/{key}/restore", { params: { path: { key: issueKey } } });
-      if (!result.data) throw new Error(describe(result.error, result.response.status));
-      onRestored(result.data);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The instance did not answer.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const run = () => act(async () => {
+    const result = await api.POST("/issues/{key}/restore", { params: { path: { key: issueKey } } });
+    if (!result.data) throw new Error(describe(result.error, result.response.status));
+    onRestored(result.data);
+  });
 
   return <><PageHeader title={issueKey} /><div className="m-auto grid max-w-md justify-items-center gap-3 p-8 text-center">
     <p role="status">This issue is deleted and hidden from the project.</p>
@@ -284,78 +223,6 @@ function Gone({ issueKey, until, onRestored }: { issueKey: string; until: string
     <Button ref={restore} disabled={busy} onClick={() => void run()}>{busy ? "Working…" : "Restore issue"}</Button>
     {error !== undefined && <p role="alert" className="text-sm text-destructive">{error}</p>}
   </div></>;
-}
-
-/**
- * The header's action bar: the one move this status makes sense of, `Edit`
- * beside it, everything else behind the overflow — including the delete, whose
- * dialog is held here rather than under the menu item that opens it, because
- * the menu closes on that click and would take its own trigger down with it.
- */
-function ActionBar({ issue, onEdit, onChanged, onDeleted }: { issue: Issue; onEdit: () => void; onChanged: (issue: Issue) => void; onDeleted: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [deleting, setDeleting] = useState(false);
-  const open = !["review", "done", "canceled"].includes(issue.status);
-
-  async function run(act: () => Promise<Issue>) {
-    setBusy(true); setError(undefined);
-    try { onChanged(await act()); } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); } finally { setBusy(false); }
-  }
-
-  const close = (status: "done" | "canceled") => () => run(() => issueRequest("/issues/{key}/close", issue, { status, result: issue.result }));
-  const hand = () => run(() => issueRequest("/issues/{key}/review", issue, { result: issue.result }));
-  // Nothing is typed here, so a stale refusal has nothing to merge — but it
-  // still may not be a dead end. The screen takes the version the refusal
-  // carried, says what happened, and the same press writes against that one.
-  const ready = () => run(async () => {
-    const result = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: { ready: !issue.ready } as never });
-    const current = stale<Issue>(result);
-    if (current !== undefined) { onChanged(current); throw new Error(`${issue.key} changed while it was open. It is shown as it is now; set it again to write against that version.`); }
-    if (!result.data) throw new Error(describe(result.error, result.response.status));
-    return result.data;
-  });
-  // "Moving a ticket by hand still works — a ticket that has not shipped yet
-  // simply does not belong" (VISION 7). The act is the release's; the answer is
-  // the release, so the issue is read again.
-  const shipped = issue.release !== null && issue.release !== "unreleased";
-  const moveRelease = (into: boolean) => run(async () => {
-    const path = { key: issue.project, name: "unreleased", issue: issue.key };
-    const result = into
-      ? await api.PUT("/projects/{key}/releases/{name}/issues/{issue}", { params: { path } })
-      : await api.DELETE("/projects/{key}/releases/{name}/issues/{issue}", { params: { path } });
-    if (!result.data) throw new Error(describe(result.error, result.response.status));
-    const read = await api.GET("/issues/{key}", { params: { path: { key: issue.key } } });
-    if (!read.data) throw new Error(describe(read.error, read.response.status));
-    return read.data;
-  });
-
-  // One primary per status, and only one: accept what was handed in, hand in
-  // what is being worked on, take what is free, reopen what is closed.
-  const primary = issue.status === "review" ? { label: "Accept as done", act: close("done") }
-    : ["done", "canceled"].includes(issue.status) ? { label: "Reopen", act: () => run(() => issueRequest("/issues/{key}/reopen", issue, { comment: null })) }
-    : issue.claim === null ? { label: "Claim", act: () => run(() => issueRequest("/issues/{key}/claim", issue, { force: false })) }
-    : { label: "Hand in for review", act: hand };
-
-  return <>
-    {error !== undefined && <span role="alert" className="text-xs text-destructive">{error}</span>}
-    <Button size="sm" disabled={busy} onClick={() => void primary.act()}>{busy ? "Working…" : primary.label}</Button>
-    <Button variant="outline" size="sm" onClick={onEdit}>Edit</Button>
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}><MoreHorizontalIcon /></DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-48">
-        {issue.claim !== null && <DropdownMenuItem onClick={() => void run(() => issueRequest("/issues/{key}/release", issue))}>Release claim</DropdownMenuItem>}
-        {open && issue.claim === null && <DropdownMenuItem onClick={() => void hand()}>Hand in for review</DropdownMenuItem>}
-        {open && <DropdownMenuItem onClick={() => void close("done")()}>Close as done</DropdownMenuItem>}
-        {open && <DropdownMenuItem onClick={() => void close("canceled")()}>Close as canceled</DropdownMenuItem>}
-        <DropdownMenuItem onClick={() => void ready()}>{issue.ready ? "Clear ready" : "Set ready"}</DropdownMenuItem>
-        {!shipped && <DropdownMenuItem onClick={() => void moveRelease(issue.release === null)}>{issue.release === null ? "Put into the open release" : "Take out of the open release"}</DropdownMenuItem>}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>Delete issue</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-    <ActionDialog open={deleting} onOpenChange={setDeleting} title={`Delete ${issue.key}?`} description="The issue will be hidden from the project, but can be restored during the grace period." confirmLabel="Delete issue" onConfirm={async () => { const result = await api.DELETE("/issues/{key}", { params: { path: { key: issue.key } } }); if (!result.response.ok) throw new Error(describe(result.error, result.response.status)); onDeleted(); }} />
-  </>;
 }
 
 /**
@@ -373,11 +240,28 @@ function Chips({ issue }: { issue: Issue }) {
 }
 
 function Attention({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
+  async function answer(question: Issue["questions"][number], text: string) {
+    const result = await api.POST("/questions/{id}/answer", { params: { path: { id: question.id } }, body: { answer: text } });
+    if (!result.data) throw new Error(describe(result.error, result.response.status));
+    return reread(issue.key, { ...issue, questions: issue.questions.map((x) => x.id === question.id ? result.data! : x), open_questions: issue.open_questions - 1 });
+  }
+
   return <div className="mb-6 space-y-3" aria-label="Needs attention">
-    {issue.questions.filter((q) => q.answer === null).map((q) => <aside key={q.id} id={`question-${q.id}`} className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Answer needed</Eyebrow><Markdown className="mt-2">{q.question}</Markdown><Byline name={q.asked_by.name} at={q.asked_at} /><TextAction draftKey={`issue:${issue.key}:answer:${q.id}`} version={issue.updated_at} label="Answer" onRun={async (text) => { const result = await api.POST("/questions/{id}/answer", { params: { path: { id: q.id } }, body: { answer: text } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); const latest = await api.GET("/issues/{key}", { params: { path: { key: issue.key } } }).catch(() => undefined); return latest?.data?.questions.some((answer) => answer.id === q.id && answer.answer !== null) ? latest.data : { ...issue, questions: issue.questions.map((x) => x.id === q.id ? result.data! : x), open_questions: issue.open_questions - 1 }; }} onChanged={onChanged} /></aside>)}
+    {issue.questions.filter((q) => q.answer === null).map((q) => <aside key={q.id} id={`question-${q.id}`} className="rounded-lg border border-brand bg-accent p-4">
+      <Eyebrow>Answer needed</Eyebrow>
+      <Markdown className="mt-2">{q.question}</Markdown>
+      <Byline name={q.asked_by.name} at={q.asked_at} />
+      <TextAction draftKey={`issue:${issue.key}:answer:${q.id}`} version={issue.updated_at} label="Answer" onRun={(text) => answer(q, text)} onChanged={onChanged} />
+    </aside>)}
     {/* Accepting is the header's primary in this status, so this box carries
         the result and the two decisions that are not it. */}
-    {issue.status === "review" && <aside className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Review needed</Eyebrow><p className="mt-1 text-sm">Decide whether this work is done, canceled, or should return to todo.</p>{issue.result !== null && <Markdown className="mt-3">{issue.result}</Markdown>}<div className="mt-3 flex flex-wrap gap-2"><IssueAction label="Accept as canceled" variant="outline" path="/issues/{key}/close" issue={issue} body={{ status: "canceled", result: issue.result }} onChanged={onChanged} /></div><TextAction draftKey={`issue:${issue.key}:review-return`} version={issue.updated_at} label="Return to todo" placeholder="What needs to change?" onRun={(comment) => issueRequest("/issues/{key}/reopen", issue, { comment })} onChanged={onChanged} /></aside>}
+    {issue.status === "review" && <aside className="rounded-lg border border-brand bg-accent p-4">
+      <Eyebrow>Review needed</Eyebrow>
+      <p className="mt-1 text-sm">Decide whether this work is done, canceled, or should return to todo.</p>
+      {issue.result !== null && <Markdown className="mt-3">{issue.result}</Markdown>}
+      <div className="mt-3 flex flex-wrap gap-2"><IssueAction label="Accept as canceled" variant="outline" path="/issues/{key}/close" issue={issue} body={{ status: "canceled", result: issue.result }} onChanged={onChanged} /></div>
+      <TextAction draftKey={`issue:${issue.key}:review-return`} version={issue.updated_at} label="Return to todo" placeholder="What needs to change?" onRun={(comment) => issueRequest("/issues/{key}/reopen", issue, { comment })} onChanged={onChanged} />
+    </aside>}
     {issue.open_blockers > 0 && <aside id="open-blockers" className="rounded-lg border bg-muted p-4"><Eyebrow>Blocked</Eyebrow><p className="mt-1 text-sm">Waiting for:</p><IssueLinks links={issue.blocked_by.filter((x) => x.open)} /></aside>}
     {issue.claim !== null && <aside className="rounded-lg border bg-muted p-4"><Eyebrow>In progress</Eyebrow><p className="mt-1 text-sm"><strong>{issue.claim.holder.name}</strong> claimed this {relativeTime(issue.claim.since)}.</p></aside>}
   </div>;
@@ -418,132 +302,48 @@ function Relationships({ issue, onChanged }: { issue: Issue; onChanged: (issue: 
 }
 
 function IssueLinks({ links }: { links: Array<{ key: string | null; title?: string | null; open: boolean }> }) {
-  return <ul className="mt-2 space-y-1">{links.map((x, i) => <li key={x.key ?? i}>{x.key === null ? <span className="text-muted-foreground">Issue outside your project access</span> : <Link className="text-brand hover:underline" to={keyPath(x.key)}><span className="font-mono text-xs">{x.key}</span>{x.title ? ` · ${x.title}` : ""}</Link>}{!x.open && <span className="text-muted-foreground"> · closed</span>}</li>)}</ul>;
-}
-
-/**
- * The conversation, and the two ways to add to it. The fields open on a
- * button: a comment box that stands open on every issue invites the comment
- * nobody needed, and it sat under the actions rather than under the thread it
- * belongs to.
- */
-function Conversation({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
-  const [writing, setWriting] = useState<"comment" | "question">();
-  const entries = [...issue.questions.map((value) => ({ kind: "question" as const, at: value.asked_at, value })), ...issue.comments.map((value) => ({ kind: "comment" as const, at: value.created_at, value }))].sort((a, b) => a.at.localeCompare(b.at));
-  const added = (issue: Issue) => { setWriting(undefined); onChanged(issue); };
-  return <div className="space-y-5">
-    {entries.length === 0 ? <p className="text-sm text-muted-foreground">Nothing has been said on this issue yet.</p> : entries.map((entry) => entry.kind === "comment" ? <CommentEntry key={entry.value.id} issue={issue} comment={entry.value} onChanged={onChanged} /> : <article key={entry.value.id}><Eyebrow>{entry.value.answer === null ? "Open question" : "Question"}</Eyebrow><Markdown className="mt-1">{entry.value.question}</Markdown><Byline name={entry.value.asked_by.name} at={entry.value.asked_at} />{entry.value.answer !== null && <div className="mt-3 border-l-2 pl-3"><Markdown>{entry.value.answer}</Markdown><Byline name={entry.value.answered_by?.name ?? "Unknown"} at={entry.value.answered_at!} /></div>}</article>)}
-    {writing === undefined && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => setWriting("comment")}>Add comment</Button><Button variant="outline" size="sm" onClick={() => setWriting("question")}>Ask question</Button></div>}
-    {writing === "comment" && <TextAction draftKey={`issue:${issue.key}:new-comment`} version={issue.updated_at} label="Add comment" multiline onCancel={() => setWriting(undefined)} onRun={async (body) => { const result = await api.POST("/issues/{key}/comments", { params: { path: { key: issue.key } }, body: { body } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, comments: [...issue.comments, result.data] }; }} onChanged={added} />}
-    {writing === "question" && <TextAction draftKey={`issue:${issue.key}:new-question`} version={issue.updated_at} label="Ask question" multiline onCancel={() => setWriting(undefined)} onRun={async (question) => { const result = await api.POST("/issues/{key}/questions", { params: { path: { key: issue.key } }, body: { question } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, questions: [...issue.questions, result.data], open_questions: issue.open_questions + 1 }; }} onChanged={added} />}
-  </div>;
-}
-
-/**
- * One comment, with the two things its author can do to it (ADR 0022). The
- * acts sit in the same overflow menu the issue header uses rather than as two
- * text links under every paragraph: a conversation is read, and a row of verbs
- * under each entry is read too.
- *
- * Shown only where they are allowed, because a menu that offers what the
- * instance refuses teaches the reader nothing. Hiding is not the check — the
- * instance makes it, and it is `forbidden` there.
- */
-function CommentEntry({ issue, comment, onChanged }: { issue: Issue; comment: Issue["comments"][number]; onChanged: (issue: Issue) => void }) {
-  const { me } = useSession();
-  const [editing, setEditing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const mine = comment.author.id === me.id;
-  // The author rewrites; the author or any user clears up, on anybody's.
-  const removable = mine || me.kind === "user";
-  const without = (issue: Issue) => ({ ...issue, comments: issue.comments.filter((x) => x.id !== comment.id) });
-
-  return <article>
-    <div className="flex items-start justify-between gap-2">
-      <Byline name={comment.author.name} at={comment.created_at} edited={comment.edited_at} />
-      {(mine || removable) && <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Actions on the comment by ${comment.author.name}`} />}><MoreHorizontalIcon /></DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {mine && <DropdownMenuItem onClick={() => setEditing(true)}>Edit comment</DropdownMenuItem>}
-          {removable && <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>Delete comment</DropdownMenuItem>}
-        </DropdownMenuContent>
-      </DropdownMenu>}
-    </div>
-    {editing
-      ? <TextAction draftKey={`issue:${issue.key}:comment:${comment.id}`} version={comment.edited_at ?? comment.created_at} label="Save comment" multiline initial={comment.body} onCancel={() => setEditing(false)} onRun={async (body) => {
-          const result = await api.PATCH("/comments/{id}", { params: { path: { id: comment.id } }, body: { body } });
-          if (!result.data) throw new Error(describe(result.error, result.response.status));
-          return { ...issue, comments: issue.comments.map((x) => x.id === comment.id ? result.data! : x) };
-        }} onChanged={(next) => { setEditing(false); onChanged(next); }} />
-      : <Markdown className="mt-1">{comment.body}</Markdown>}
-    <ActionDialog open={deleting} onOpenChange={setDeleting} title="Delete this comment?" description="It is gone for good — there is no grace period for a comment. The history keeps that it was taken away." confirmLabel="Delete comment" onConfirm={async () => {
-      const result = await api.DELETE("/comments/{id}", { params: { path: { id: comment.id } } });
-      if (!result.response.ok) throw new Error(describe(result.error, result.response.status));
-      onChanged(without(issue));
-    }} />
-  </article>;
+  return <ul className="mt-2 space-y-1">{links.map((x, i) => <li key={x.key ?? i}>
+    {x.key === null
+      ? <span className="text-muted-foreground">Issue outside your project access</span>
+      : <Link className="text-brand hover:underline" to={keyPath(x.key)}><span className="font-mono text-xs">{x.key}</span>{x.title ? ` · ${x.title}` : ""}</Link>}
+    {!x.open && <span className="text-muted-foreground"> · closed</span>}
+  </li>)}</ul>;
 }
 
 function EdgeAction({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
   const [selected, setSelected] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [removing, setRemoving] = useState<string>();
-  const [error, setError] = useState("");
+  // One act at a time, adding or removing, and one place the refusal is said:
+  // at the picker. `doing` is "add" or the key of the blocker being removed.
+  const { doing, error, setError, run } = useAct();
+  const busy = doing === "add";
+  const removing = doing !== null && doing !== "add" ? doing : undefined;
 
   async function add() {
-    if (!selected || busy) return;
-    setBusy(true); setError("");
-    try {
+    if (!selected || doing !== null) return;
+    await run(async () => {
       const result = await api.POST("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: selected } } });
       if (!result.data) throw new Error(describe(result.error, result.response.status));
       setSelected("");
       onChanged(result.data);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
-    finally { setBusy(false); }
+    }, "add");
   }
 
   async function remove(key: string) {
-    if (removing || busy) return;
-    setRemoving(key); setError("");
-    try {
+    if (doing !== null) return;
+    await run(async () => {
       const result = await api.DELETE("/issues/{key}/blocked-by/{blockerKey}", { params: { path: { key: issue.key, blockerKey: key } } });
       if (!result.data) throw new Error(describe(result.error, result.response.status));
       onChanged(result.data);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
-    finally { setRemoving(undefined); }
+    }, key);
   }
 
   return <div className="grid gap-2 border-t pt-5">
     <div className="flex max-w-md flex-wrap items-end gap-2">
-      <div className="min-w-56 flex-1"><IssuePicker label="Add blocker" project={issue.project} crossProject exclude={[issue.key, ...issue.blocked_by.flatMap((edge) => edge.key ?? [])]} value={selected ? [selected] : []} onChange={(keys) => { setSelected(keys[0] ?? ""); setError(""); }} error={error || undefined} /></div>
+      <div className="min-w-56 flex-1"><IssuePicker label="Add blocker" project={issue.project} crossProject exclude={[issue.key, ...issue.blocked_by.flatMap((edge) => edge.key ?? [])]} value={selected ? [selected] : []} onChange={(keys) => { setSelected(keys[0] ?? ""); setError(undefined); }} error={error || undefined} /></div>
       <Button variant="outline" disabled={!selected || busy || removing !== undefined} onClick={() => void add()}>{busy ? "Adding…" : "Add"}</Button>
     </div>
     <div className="flex flex-wrap gap-2">{issue.blocked_by.filter((edge) => edge.key !== null).map((edge) => <Button key={edge.key} size="xs" variant="ghost" disabled={busy || removing !== undefined} onClick={() => void remove(edge.key!)}>{removing === edge.key ? "Removing…" : `Remove ${edge.key}`}</Button>)}</div>
   </div>;
-}
-
-type ActPath = "/issues/{key}/claim" | "/issues/{key}/release" | "/issues/{key}/close" | "/issues/{key}/review" | "/issues/{key}/reopen" | "/issues/{key}/restore";
-async function issueRequest(path: ActPath, issue: Issue, body?: object): Promise<Issue> {
-  const result = await api.POST(path as "/issues/{key}/claim", { params: { path: { key: issue.key } }, body: body as never });
-  if (!result.data) throw new Error(describe(result.error, result.response.status));
-  return result.data;
-}
-
-function IssueAction({ label, path, issue, body, onChanged, variant = "default" }: { label: string; path: ActPath; issue: Issue; body?: object; onChanged: (issue: Issue) => void; variant?: "default" | "outline" }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState<string>();
-  async function run() { setBusy(true); setError(undefined); try { onChanged(await issueRequest(path, issue, body)); } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); } finally { setBusy(false); } }
-  return <span><Button variant={variant} disabled={busy} onClick={() => void run()}>{busy ? "Working…" : label}</Button>{error && <span role="alert" className="ml-2 text-xs text-destructive">{error}</span>}</span>;
-}
-
-function TextAction({ draftKey, version, label, placeholder, multiline, initial, onRun, onChanged, onCancel }: { draftKey: string; version: string; label: string; placeholder?: string; multiline?: boolean; initial?: string; onRun: (text: string) => Promise<Issue>; onChanged: (issue: Issue) => void; onCancel?: () => void }) {
-  // A correction opens in the text it is correcting, in the same field it was
-  // written in — not in an empty box that makes the author type it again.
-  const { value: text, setValue: setText, clear, recovery } = useDraft(draftKey, initial ?? "", version);
-  const [busy, setBusy] = useState(false); const [error, setError] = useState<string>(); const [discarding, setDiscarding] = useState(false);
-  const id = useId();
-  async function run() { if (!text.trim()) return; setBusy(true); setError(undefined); try { const next = await onRun(text); clear(); onChanged(next); setText(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); } finally { setBusy(false); } }
-  const cancel = () => { if (text !== (initial ?? "")) setDiscarding(true); else onCancel?.(); };
-  return <div className="mt-3 grid max-w-xl gap-2">{recovery}{multiline ? <MarkdownField label={label} value={text} onChange={setText} size="compact" hint={placeholder} onSubmit={() => void run()} /> : <label className="grid gap-1 text-sm font-medium">{label}<Input id={id} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} /></label>}<div className="flex gap-2"><Button size="sm" disabled={busy || !text.trim()} onClick={() => void run()}>{busy ? "Saving…" : label}</Button>{onCancel && <Button size="sm" variant="ghost" disabled={busy} onClick={cancel}>Cancel</Button>}</div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<ActionDialog open={discarding} onOpenChange={setDiscarding} title="Discard what you wrote?" description="Your changes have not been saved." confirmLabel="Discard" onConfirm={async () => { clear(); onCancel?.(); }} /></div>;
 }
 
 function History({ loaded }: { loaded: Load<HistoryEntry[]> }) {
@@ -563,41 +363,6 @@ function historyText(x: HistoryEntry) {
 }
 function value(x: unknown) { if (x == null) return null; if (typeof x === "object" && "name" in x && typeof x.name === "string") return x.name; return String(x); }
 
-function Metadata({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
-  const [busy, setBusy] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-
-  async function write(field: string, body: object) {
-    if (busy) return;
-    setBusy(field); setMessage(""); setError("");
-    try {
-      const answer = await api.PATCH("/issues/{key}", { params: { path: { key: issue.key } }, headers: { "If-Match": issue.updated_at }, body: body as never });
-      const current = stale<Issue>(answer);
-      if (current) { onChanged(current); setError(`${field} changed elsewhere. Review the latest value and choose again.`); return; }
-      if (!answer.data) throw new Error(describe(answer.error, answer.response.status));
-      onChanged(answer.data);
-      setMessage(`${field} saved.`);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "The instance did not answer."); }
-    finally { setBusy(""); }
-  }
-
-  return <aside className="shrink-0 space-y-3 border-t p-4 text-sm md:w-64 md:border-t-0 md:border-l" aria-label="Issue details">
-    <h2 className="font-medium">Details</h2>
-    <Field name="Status"><StatusDot status={issue.status} withLabel /></Field>
-    <Field name="Priority"><select name="priority" aria-label="Priority" value={issue.priority} disabled={!!busy} onChange={(event) => void write("Priority", { priority: Number(event.target.value) })} className="mt-1 h-8 w-full rounded-lg border bg-background px-2 text-sm">{[0, 1, 2, 3, 4].map((priority) => <option key={priority} value={priority}>{priorityLabel(priority)}</option>)}</select></Field>
-    <Field name="Ready">{issue.ready ? "yes" : "no"}</Field>
-    {issue.epic && <Field name="Epic"><Link to={keyPath(issue.epic.key)} className="text-brand hover:underline">{issue.epic.key}</Link> <span className="text-muted-foreground">{issue.epic.title}</span></Field>}
-    {issue.claim && <Field name="Claimed by">{issue.claim.holder.name}<span className="text-muted-foreground">{issue.claim.expires_at === null ? " · does not expire" : ` · until ${date(issue.claim.expires_at)}`}</span></Field>}
-    <fieldset disabled={!!busy}><AssigneePicker project={issue.project} value={issue.assignee?.name ?? ""} onChange={(name) => void write("Assignee", { assignee: name || null })} /></fieldset>
-    <fieldset disabled={!!busy}><LabelPicker label="Labels" labels={issue.project_context.labels} value={issue.labels.map((label) => label.name)} onChange={(names) => void write("Labels", { labels: names })} /></fieldset>
-    {busy && <p role="status" className="text-xs text-muted-foreground">Saving {busy.toLowerCase()}…</p>}
-    {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
-    {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-    <Field name="Author">{issue.author.name}</Field><Field name="Created">{date(issue.created_at)}</Field><Field name="Updated">{date(issue.updated_at)}</Field><Field name="Release">{issue.release === null ? <span className="text-muted-foreground">not in a release</span> : issue.release}</Field>
-  </aside>;
-}
-
 /**
  * A body that is allowed to be long. Nothing is folded away — a description is
  * hidden exactly when it has something to say — but a very long one is cut off
@@ -616,10 +381,6 @@ function Long({ children }: { children: string }) {
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) { return <section className="border-t py-5 first:border-t-0 first:pt-0"><h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>{children}</section>; }
-function Field({ name, className, children }: { name: string; className?: string; children: React.ReactNode }) { return <div className={className}><div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{name}</div><div className="mt-0.5">{children}</div></div>; }
-function Eyebrow({ children }: { children: React.ReactNode }) { return <h2 className="text-xs font-semibold tracking-wide uppercase">{children}</h2>; }
-function Byline({ name, at, edited }: { name?: string; at: string; edited?: string | null }) { return <p className="mt-1 text-xs text-muted-foreground">{name && <>{name} · </>}<time dateTime={at}>{date(at)}</time>{edited != null && <> · <span title={date(edited)}>edited</span></>}</p>; }
-function date(x: string) { return new Date(x).toLocaleString(); }
 function relativeTime(x: string) { const hours = Math.max(0, Math.floor((Date.now() - new Date(x).getTime()) / 3_600_000)); return hours < 24 ? `${hours} hour${hours === 1 ? "" : "s"} ago` : `${Math.floor(hours / 24)} days ago`; }
 /** How much of the grace period is left, in the words the deadline is read in. */
 function timeLeft(x: string) { const hours = Math.floor((new Date(x).getTime() - Date.now()) / 3_600_000); if (hours < 1) return "less than an hour left"; return hours < 48 ? `${hours} hour${hours === 1 ? "" : "s"} left` : `${Math.floor(hours / 24)} days left`; }

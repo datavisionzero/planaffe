@@ -11,10 +11,11 @@ import { AttentionContext } from "@/shell/attention";
 /**
  * An instance to stand in front of the generated client: a route table of
  * `METHOD /path` to what it answers. Anything not listed answers 404 with a
- * problem document, the way the real one would.
+ * problem document, the way the real one would. A route may answer with a
+ * promise, for a test that holds one read back while another overtakes it.
  */
 export type Answer = { status?: number; body?: unknown } | Record<string, unknown> | unknown[];
-export type Route = Answer | ((request: Request) => Answer);
+export type Route = Answer | ((request: Request) => Answer | Promise<Answer>);
 
 export function installInstance(routes: Record<string, Route>) {
   const calls: Request[] = [];
@@ -35,7 +36,7 @@ export function installInstance(routes: Record<string, Route>) {
       return problem(404, `no route ${route}`);
     }
 
-    const resolved = typeof answer === "function" ? answer(request) : answer;
+    const resolved = await (typeof answer === "function" ? answer(request) : answer);
     const { status, body } = isEnvelope(resolved) ? resolved : { status: 200, body: resolved };
 
     return new Response(body === undefined ? null : JSON.stringify(body), {

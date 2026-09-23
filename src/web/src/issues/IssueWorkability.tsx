@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { api, describe, type Issue } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { failure } from "@/shared/act";
 import { stale } from "@/shared/stale";
 import { keyPath } from "@/shell/views";
 
@@ -32,7 +33,7 @@ export function IssueWorkability({ issue, onChanged }: { issue: Issue; onChanged
       if (!answer.data) throw new Error(describe(answer.error, answer.response.status));
       onChanged(answer.data);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The instance did not answer.");
+      setError(failure(reason));
     } finally { setBusy(false); }
   }
 

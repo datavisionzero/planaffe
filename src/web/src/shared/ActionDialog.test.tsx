@@ -1,5 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
 import { renderAt } from "@/shared/testing";
@@ -61,4 +62,27 @@ it("allows an optional value to be cleared", async () => {
   await user.click(within(dialog).getByRole("button", { name: "Save label" }));
 
   expect(onSubmit).toHaveBeenCalledWith("");
+});
+
+// Opened from a menu, the dialog is controlled by its caller. It used to reset
+// its value only when it opened itself, and showed the canceled text again.
+it("starts a controlled dialog from its value every time it opens", async () => {
+  function Controlled() {
+    const [open, setOpen] = useState(false);
+    return <>
+      <Button onClick={() => setOpen(true)}>Rename</Button>
+      <TextActionDialog open={open} onOpenChange={setOpen} title="Rename agent" label="Agent name" initialValue="codex" submitLabel="Save name" onSubmit={vi.fn().mockResolvedValue(undefined)} />
+    </>;
+  }
+  renderAt("/", <Controlled />);
+  const user = userEvent.setup();
+
+  await user.click(screen.getByRole("button", { name: "Rename" }));
+  const input = within(screen.getByRole("dialog", { name: "Rename agent" })).getByLabelText("Agent name");
+  await user.clear(input);
+  await user.type(input, "thrown away");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  await user.click(screen.getByRole("button", { name: "Rename" }));
+  expect(within(screen.getByRole("dialog", { name: "Rename agent" })).getByLabelText("Agent name")).toHaveValue("codex");
 });

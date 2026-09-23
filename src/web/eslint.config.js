@@ -18,6 +18,12 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Taking a prop out before spreading the rest onto an element — the
+      // `node` react-markdown always passes, for one — is the point of the
+      // destructuring, not a variable somebody forgot.
+      '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
+    },
   },
   {
     // Generated once by the shadcn CLI and owned here (ADR 0017); they export

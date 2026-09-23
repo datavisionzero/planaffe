@@ -5,6 +5,7 @@ import { SessionProvider } from "@/session/Session";
 import { Activate } from "@/session/Activate";
 import { Recover } from "@/session/Recover";
 import { DeviceLogin } from "@/session/DeviceLogin";
+import { forgetDrafts } from "@/shared/storage";
 import { Shell } from "@/shell/Shell";
 import { useLocation, useNavigate } from "react-router";
 
@@ -116,7 +117,12 @@ export function App() {
           value={{
             me: standing.me,
             signOut: () => {
-              void api.DELETE("/session").finally(() => setStanding({ at: "stranger" }));
+              // The drafts go with the session, whatever the instance answers:
+              // this browser is being left to whoever comes next. A network
+              // failure on the way out is no reason to stay signed in here,
+              // nor a rejection nobody handles.
+              forgetDrafts();
+              void api.DELETE("/session").catch(() => undefined).finally(() => setStanding({ at: "stranger" }));
             },
           }}
         >

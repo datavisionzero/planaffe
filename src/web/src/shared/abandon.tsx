@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- The hook returns the shared confirmation dialog and the context keeps issue drafts under one guard. */
-import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,20 +24,25 @@ import { useBlocker, useBeforeUnload } from "react-router";
  * Escape is also what a picker's list and an open dialog answer to. Those are
  * nearer to the keyboard than the form is: a list stops the event itself, and
  * anything overlaid is skipped here.
+ *
+ * Navigating away is guarded by React Router's blocker, and the router heeds
+ * only the blocker registered last. A screen with two forms open at once
+ * therefore puts them under one `LeaveScope`, which holds the one blocker for
+ * both; a form outside a scope holds its own.
  */
 export function useAbandon(changed: boolean, onCancel: () => void, onDiscard?: () => void, escape = true): { leave: () => void; permit: () => void; dialog: ReactNode } {
   const [asking, setAsking] = useState(false);
   const permitted = useRef(false);
-  const blocker = useBlocker(useCallback(() => changed && !permitted.current, [changed]));
-  const blocked = blocker.state === "blocked";
+  const scope = useContext(LeaveScopeContext);
+  const id = useId();
 
   useEffect(() => { if (!changed) permitted.current = false; }, [changed]);
 
-  useBeforeUnload(useCallback((event) => {
-    if (!changed) return;
-    event.preventDefault();
-    event.returnValue = "";
-  }, [changed]));
+  useEffect(() => {
+    if (scope === null) return;
+    scope(id, { changed, permitted, discard: onDiscard });
+    return () => scope(id, null);
+  }, [changed, id, onDiscard, scope]);
 
   const leave = useCallback(() => {
     if (changed) {
@@ -59,36 +64,112 @@ export function useAbandon(changed: boolean, onCancel: () => void, onDiscard?: (
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [escape, leave]);
 
-  const keep = () => {
-    setAsking(false);
-    if (blocker.state === "blocked") blocker.reset();
-  };
+  const keep = () => setAsking(false);
   const discard = () => {
     onDiscard?.();
     permitted.current = true;
     setAsking(false);
-    if (blocker.state === "blocked") blocker.proceed();
-    else onCancel();
+    onCancel();
   };
 
   return {
     leave,
     permit: () => { permitted.current = true; },
-    dialog: (
-      <Dialog open={asking || blocked} onOpenChange={(open) => { if (!open) keep(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Discard what you wrote?</DialogTitle>
-            <DialogDescription>Your changes have not been saved. You can keep writing or discard them.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={keep}>Keep writing</Button>
-            <Button variant="destructive" onClick={discard}>Discard</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    ),
+    dialog: scope === null
+      ? <GuardedLeave changed={changed} permittedRef={permitted} asking={asking} onKeep={keep} onDiscard={discard} onDiscardDraft={onDiscard} />
+      : <LeaveDialog open={asking} onKeep={keep} onDiscard={discard} />,
   };
+}
+
+/** A form's own blocker, where no scope holds one for it. */
+function GuardedLeave({ changed, permittedRef, asking, onKeep, onDiscard, onDiscardDraft }: { changed: boolean; permittedRef: RefObject<boolean>; asking: boolean; onKeep: () => void; onDiscard: () => void; onDiscardDraft?: () => void }) {
+  const blocker = useBlocker(useCallback(() => changed && !permittedRef.current, [changed, permittedRef]));
+  const blocked = blocker.state === "blocked";
+
+  useBeforeUnload(useCallback((event) => {
+    if (!changed) return;
+    event.preventDefault();
+    event.returnValue = "";
+  }, [changed]));
+
+  const keep = () => {
+    onKeep();
+    if (blocker.state === "blocked") blocker.reset();
+  };
+  const discard = () => {
+    if (blocker.state === "blocked") {
+      onDiscardDraft?.();
+      permittedRef.current = true;
+      onKeep();
+      blocker.proceed();
+    } else {
+      onDiscard();
+    }
+  };
+
+  return <LeaveDialog open={asking || blocked} onKeep={keep} onDiscard={discard} />;
+}
+
+function LeaveDialog({ open, onKeep, onDiscard }: { open: boolean; onKeep: () => void; onDiscard: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onKeep(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Discard what you wrote?</DialogTitle>
+          <DialogDescription>Your changes have not been saved. You can keep writing or discard them.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onKeep}>Keep writing</Button>
+          <Button variant="destructive" onClick={onDiscard}>Discard</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type Leaving = { changed: boolean; permitted: RefObject<boolean>; discard?: () => void };
+type RegisterLeaving = (id: string, leaving: Leaving | null) => void;
+const LeaveScopeContext = createContext<RegisterLeaving | null>(null);
+
+/**
+ * The one blocker for every form on a screen that can hold several at once —
+ * the open release, whose notes and whose publication are both written on it.
+ * Leaving is held while any of them was written in and not saved, and
+ * discarding throws away what each of them had.
+ */
+export function LeaveScope({ children }: { children: ReactNode }) {
+  const forms = useRef(new Map<string, Leaving>());
+  const [changed, setChanged] = useState(false);
+  const register = useCallback<RegisterLeaving>((id, leaving) => {
+    if (leaving === null) forms.current.delete(id);
+    else forms.current.set(id, leaving);
+    setChanged([...forms.current.values()].some((form) => form.changed));
+  }, []);
+  const blocker = useBlocker(useCallback(
+    () => [...forms.current.values()].some((form) => form.changed && !form.permitted.current),
+    [],
+  ));
+
+  useBeforeUnload(useCallback((event) => {
+    if (!changed) return;
+    event.preventDefault();
+    event.returnValue = "";
+  }, [changed]));
+
+  const keep = () => { if (blocker.state === "blocked") blocker.reset(); };
+  const discard = () => {
+    for (const form of forms.current.values()) {
+      if (!form.changed) continue;
+      form.discard?.();
+      form.permitted.current = true;
+    }
+    if (blocker.state === "blocked") blocker.proceed();
+  };
+
+  return <LeaveScopeContext.Provider value={register}>
+    {children}
+    <LeaveDialog open={blocker.state === "blocked"} onKeep={keep} onDiscard={discard} />
+  </LeaveScopeContext.Provider>;
 }
 
 type RegisterDraft = (key: string, changed: boolean, clear: () => void) => () => void;

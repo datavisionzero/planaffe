@@ -7,8 +7,12 @@ import "./index.css";
 import { App } from "./App";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { RootError } from "@/shell/RootError";
+import { installStaleChunkRecovery } from "@/shell/staleChunk";
 
-const router = createBrowserRouter([{ path: "*", element: <App /> }]);
+installStaleChunkRecovery();
+
+const router = createBrowserRouter([{ path: "*", element: <App />, errorElement: <RootError /> }]);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
