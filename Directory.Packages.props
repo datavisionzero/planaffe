@@ -36,7 +36,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
     <!-- ADR 0029: structured console logs and optional logaffe delivery use
          Microsoft.Extensions.Logging providers. -->
-    <PackageVersion Include="Logaffe.Extensions.Logging" Version="0.5.0" />
+    <PackageVersion Include="Logaffe.Extensions.Logging" Version="0.9.0" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
