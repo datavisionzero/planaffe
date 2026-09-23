@@ -22,9 +22,14 @@ public sealed class IdempotencyRecordConfiguration : IEntityTypeConfiguration<Id
             .OnDelete(DeleteBehavior.NoAction);
 
         builder.Property(r => r.RequestHash).HasColumnName("request_hash").IsRequired();
-        builder.Property(r => r.Status).HasColumnName("status").IsRequired();
+        builder.Property(r => r.Status).HasColumnName("status");
         builder.Property(r => r.Body).HasColumnName("body").HasColumnType("jsonb");
         builder.Property(r => r.Withheld).HasColumnName("withheld").IsRequired().HasDefaultValue(false);
+        builder.Property(r => r.Location).HasColumnName("location");
+        builder.Property(r => r.ETag).HasColumnName("etag");
         builder.Property(r => r.CreatedAt).HasColumnName("created_at").IsRequired();
+
+        // The purge looks for rows older than a day, across every identity.
+        builder.HasIndex(r => r.CreatedAt).HasDatabaseName("idempotency_created_at");
     }
 }

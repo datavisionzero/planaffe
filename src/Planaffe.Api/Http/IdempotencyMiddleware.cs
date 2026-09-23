@@ -26,6 +26,14 @@ namespace Planaffe.Api.Http;
 /// 500 are not stored either — a retry after a bug should get to try.
 /// </para>
 /// <para>
+/// The row is written before the write runs, pending, and conditionally on the
+/// key: of two twins sent at once — a client that retried while the first was
+/// still being answered — exactly one runs, and the other waits for its answer
+/// and replays it, or is told <c>idempotency-pending</c> when that takes longer
+/// than <see cref="TwinWait"/>. <c>Location</c> and <c>ETag</c> are kept with
+/// the answer and replayed with it.
+/// </para>
+/// <para>
 /// A write whose answer carries a secret that is shown once — a token, a
 /// device code, an access link — says so with <see cref="ShownOnce"/>, and of
 /// its success only the status is kept. The store holds nothing a copy of the
@@ -41,6 +49,18 @@ public sealed class IdempotencyMiddleware(RequestDelegate next, TimeProvider clo
     public const int MaximumKeyLength = 200;
 
     public static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// How long a pending row holds its key: longer than any request runs —
+    /// the longest is a <c>next</c> waiting its hour — so that only the row of
+    /// a process that went away mid-request is ever taken over.
+    /// </summary>
+    public static readonly TimeSpan PendingLifetime = TimeSpan.FromMinutes(65);
+
+    /// <summary>How long a twin waits for the first request's answer before it is <c>idempotency-pending</c>.</summary>
+    public static readonly TimeSpan TwinWait = TimeSpan.FromSeconds(10);
+
+    private static readonly TimeSpan TwinPoll = TimeSpan.FromMilliseconds(100);
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -58,32 +78,65 @@ public sealed class IdempotencyMiddleware(RequestDelegate next, TimeProvider clo
 
         var store = context.RequestServices.GetRequiredService<IIdempotency>();
         var hash = await HashAsync(context.Request, context.RequestAborted);
-        var now = clock.GetUtcNow();
+        var waitUntil = clock.GetUtcNow() + TwinWait;
 
-        var stored = await store.FindAsync(caller.Id, key, context.RequestAborted);
-        if (stored is not null && now - stored.CreatedAt < Lifetime)
+        // Either this request writes the pending row and runs, or a twin did
+        // and this one is answered with what the twin was answered — once the
+        // twin has its answer, which is what the wait is for.
+        while (true)
         {
-            if (!stored.RequestHash.AsSpan().SequenceEqual(hash))
+            var stored = await store.FindAsync(caller.Id, key, context.RequestAborted);
+            var now = clock.GetUtcNow();
+            if (stored is not null && now - stored.CreatedAt < Lifetime
+                && !(stored.Pending && now - stored.CreatedAt >= PendingLifetime))
             {
-                throw new Refusal(
-                    RefusalCode.IdempotencyMismatch,
-                    $"The {Header} {key} was used for a different request; a key names one request.");
+                if (!stored.RequestHash.AsSpan().SequenceEqual(hash))
+                {
+                    throw new Refusal(
+                        RefusalCode.IdempotencyMismatch,
+                        $"The {Header} {key} was used for a different request; a key names one request.");
+                }
+
+                if (stored.Pending)
+                {
+                    if (now >= waitUntil)
+                    {
+                        throw new Refusal(
+                            RefusalCode.IdempotencyPending,
+                            $"The request with {Header} {key} is still being answered; send it again once it is, and it is answered from the store.");
+                    }
+
+                    await Task.Delay(TwinPoll, clock, context.RequestAborted);
+                    continue;
+                }
+
+                if (stored.Withheld)
+                {
+                    throw new Refusal(
+                        RefusalCode.AlreadyShown,
+                        $"The request with {Header} {key} was answered with a secret, which is shown once and was not kept; revoke what it created if the answer was lost, and ask for another.",
+                        stored.Location is null ? null : new Dictionary<string, object?> { ["location"] = stored.Location });
+                }
+
+                await ReplayAsync(context, stored);
+                return;
             }
 
-            if (stored.Withheld)
+            if (await store.TryBeginAsync(caller.Id, key, hash, now, Lifetime, PendingLifetime, context.RequestAborted))
             {
-                throw new Refusal(
-                    RefusalCode.AlreadyShown,
-                    $"The request with {Header} {key} was answered with a secret, which is shown once and was not kept; revoke what it created if the answer was lost, and ask for another.");
+                break;
             }
-
-            await ReplayAsync(context, stored);
-            return;
         }
 
+        await RunAsync(context, store, caller, key, hash);
+    }
+
+    private async Task RunAsync(HttpContext context, IIdempotency store, Caller caller, string key, byte[] hash)
+    {
         var original = context.Response.Body;
         await using var buffer = new MemoryStream();
         context.Response.Body = buffer;
+        var kept = false;
 
         try
         {
@@ -106,16 +159,30 @@ public sealed class IdempotencyMiddleware(RequestDelegate next, TimeProvider clo
                 var withheld = status < StatusCodes.Status400BadRequest
                     && context.GetEndpoint()?.Metadata.GetMetadata<ShownOnce>() is not null;
                 var body = withheld || buffer.Length == 0 ? null : Encoding.UTF8.GetString(buffer.ToArray());
-                await store.StoreAsync(caller.Id, key, new StoredReply(hash, (short)status, body, now, withheld), context.RequestAborted);
+                var headers = context.Response.Headers;
+                var reply = new StoredReply(hash, (short)status, body, clock.GetUtcNow(), withheld,
+                    NullIfEmpty(headers.Location.ToString()), NullIfEmpty(headers.ETag.ToString()));
+
+                // Not the request's token: a caller that went away after the
+                // write committed is exactly the one whose retry must find it.
+                await store.CompleteAsync(caller.Id, key, reply, CancellationToken.None);
+                kept = true;
             }
         }
         finally
         {
+            if (!kept)
+            {
+                await store.AbandonAsync(caller.Id, key, CancellationToken.None);
+            }
+
             context.Response.Body = original;
             buffer.Position = 0;
             await buffer.CopyToAsync(original, context.RequestAborted);
         }
     }
+
+    private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
 
     private static bool IsWrite(string method) =>
         HttpMethods.IsPost(method) || HttpMethods.IsPatch(method) || HttpMethods.IsDelete(method) || HttpMethods.IsPut(method);
@@ -145,8 +212,17 @@ public sealed class IdempotencyMiddleware(RequestDelegate next, TimeProvider clo
 
     private static async Task ReplayAsync(HttpContext context, StoredReply stored)
     {
-        context.Response.StatusCode = stored.Status;
+        context.Response.StatusCode = stored.Status!.Value;
         context.Response.Headers["Idempotent-Replayed"] = "true";
+        if (stored.Location is not null)
+        {
+            context.Response.Headers.Location = stored.Location;
+        }
+
+        if (stored.ETag is not null)
+        {
+            context.Response.Headers.ETag = stored.ETag;
+        }
 
         if (stored.Body is null)
         {

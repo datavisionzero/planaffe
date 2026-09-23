@@ -32,7 +32,7 @@ public static class Problems
         RefusalCode.Csrf or RefusalCode.Forbidden or RefusalCode.ClaimProtected or RefusalCode.DeviceDenied =>
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.Deleted => StatusCodes.Status404NotFound,
-        RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.AlreadyShown
+        RefusalCode.ClaimHeld or RefusalCode.ClaimLost or RefusalCode.IdempotencyMismatch or RefusalCode.IdempotencyPending or RefusalCode.AlreadyShown
             or RefusalCode.ReleaseExists
             or RefusalCode.EmailExists or RefusalCode.LastAdministrator or RefusalCode.DevicePending =>
             StatusCodes.Status409Conflict,
@@ -65,6 +65,7 @@ public static class Problems
         RefusalCode.ClaimHeld => "The issue is claimed by somebody else",
         RefusalCode.ClaimLost => "The claim has expired and somebody else holds the issue now",
         RefusalCode.IdempotencyMismatch => "The Idempotency-Key was used for a different request",
+        RefusalCode.IdempotencyPending => "A request with this Idempotency-Key is still being answered",
         RefusalCode.AlreadyShown => "The secret this request produced was shown once and is not shown again",
         RefusalCode.Stale => "The object has changed since it was read",
         RefusalCode.Transition => "The status does not allow this act",

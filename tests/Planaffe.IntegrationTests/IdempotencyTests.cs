@@ -1,8 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Planaffe.Infrastructure.Persistence;
 
 namespace Planaffe.IntegrationTests;
 
@@ -97,6 +100,85 @@ public sealed class IdempotencyTests(PostgresFixture postgres)
         using var anonymous = instance.ClientWith(null);
         using var refused = await Send(anonymous, HttpMethod.Post, "/issues", bad, "no-caller");
         Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+    }
+
+    /// <summary>
+    /// Two <c>next</c> with one key at the same moment — a client that retried
+    /// while the first was still being answered — are one request: one runs,
+    /// the other waits for its answer and replays it, and one issue is claimed.
+    /// </summary>
+    [Fact]
+    public async Task Two_concurrent_nexts_with_the_same_key_claim_exactly_one_issue()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = Enumerable.Range(1, 5).Select(i => new { title = $"Issue {i}" }).ToArray() }, Ct);
+        using var createdAgent = await admin.PostAsJsonAsync("/agents", new { name = "one" }, Ct);
+        using var agent = instance.ClientWith((await createdAgent.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("token").GetProperty("secret").GetString());
+
+        for (var round = 0; round < 3; round++)
+        {
+            var answers = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+            {
+                using var response = await Send(agent, HttpMethod.Post, "/projects/PLAN/next", new { }, $"twins-{round}");
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                return (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("issue").GetProperty("key").GetString();
+            }));
+
+            Assert.Single(answers.Distinct());
+            var held = await admin.GetFromJsonAsync<JsonElement>("/issues?project=PLAN&claimed=true", Ct);
+            Assert.Equal(round + 1, held.GetProperty("total").GetInt32());
+        }
+    }
+
+    [Fact]
+    public async Task A_replay_carries_the_location_of_the_first_answer()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+
+        using var first = await Send(admin, HttpMethod.Post, "/epics", new { project = "PLAN", title = "Theme" }, "epic-1");
+        using var replay = await Send(admin, HttpMethod.Post, "/epics", new { project = "PLAN", title = "Theme" }, "epic-1");
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        Assert.Equal("true", Assert.Single(replay.Headers.GetValues("Idempotent-Replayed")));
+        Assert.NotNull(first.Headers.Location);
+        Assert.Equal(first.Headers.Location, replay.Headers.Location);
+    }
+
+    /// <summary>
+    /// A pending row is a request still running, and its twin is told so once
+    /// it has waited long enough; the row of a request that can no longer be
+    /// running — its process went away — gives its key back.
+    /// </summary>
+    [Fact]
+    public async Task A_pending_twin_is_told_so_and_an_abandoned_pending_row_gives_its_key_back()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Project(instance);
+        const string body = """{"project":"PLAN","title":"Theme"}""";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes("POST\n/epics\n" + body));
+
+        await using (var context = Migrated.ContextFor(instance.ConnectionString))
+        {
+            var bootstrap = (await context.Users.SingleAsync(Ct)).Id;
+            context.Idempotency.Add(IdempotencyRecord.Of(bootstrap, "running", hash, null, null, DateTimeOffset.UtcNow));
+            context.Idempotency.Add(IdempotencyRecord.Of(bootstrap, "gone", hash, null, null, DateTimeOffset.UtcNow.AddHours(-2)));
+            await context.SaveChangesAsync(Ct);
+        }
+
+        await ProjectEndpointTests.Problem(await SendRaw(admin, "/epics", body, "running"), HttpStatusCode.Conflict, "idempotency-pending");
+
+        using var taken = await SendRaw(admin, "/epics", body, "gone");
+        Assert.Equal(HttpStatusCode.Created, taken.StatusCode);
+        using var replay = await SendRaw(admin, "/epics", body, "gone");
+        Assert.Equal("true", Assert.Single(replay.Headers.GetValues("Idempotent-Replayed")));
+    }
+
+    private static Task<HttpResponseMessage> SendRaw(HttpClient client, string url, string body, string key)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        request.Headers.TryAddWithoutValidation("Idempotency-Key", key);
+        return client.SendAsync(request, Ct);
     }
 
     /// <summary>

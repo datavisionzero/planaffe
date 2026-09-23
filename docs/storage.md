@@ -527,18 +527,29 @@ create table idempotency (
     identity_id   uuid        not null references identity (id),
     key           text        not null,
     request_hash  bytea       not null,    -- sha-256 of method, path and body
-    status        smallint    not null,
+    status        smallint,                -- null while the request is being answered
     body          jsonb,
     withheld      boolean     not null default false,  -- the answer carried a secret shown once
+    location      text,                    -- the answer's Location header
+    etag          text,                    -- the answer's ETag header
     created_at    timestamptz not null,
     primary key (identity_id, key)
 );
+
+create index idempotency_created_at on idempotency (created_at);
 ```
 
 A replayed write is answered from here for 24 hours ([`api.md`](./api.md),
 Idempotency). The key is scoped to the identity, so two agents choosing the same
 key cannot answer each other's requests; the request hash is what tells a
 replay from a reuse of the key for a different request, which is refused.
+
+**The row comes first.** A write inserts its row pending — no status — before it
+runs, with `on conflict do nothing`, so that of two requests with one key only
+one runs; the other waits for the row to be completed and replays it. A 500
+deletes the pending row again. A pending row older than 65 minutes belongs to a
+request that can no longer be running and is replaced. The purge finds rows
+older than 24 hours by `idempotency_created_at`.
 
 **No secret is kept here.** A write whose answer carries one that is shown once
 — a user or agent token, a device code, an invitation or recovery link — keeps

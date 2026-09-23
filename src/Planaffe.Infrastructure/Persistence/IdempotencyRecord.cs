@@ -8,8 +8,9 @@ namespace Planaffe.Infrastructure.Persistence;
 /// The key is scoped to the identity, so two agents choosing the same key cannot
 /// answer each other's requests; <see cref="RequestHash"/> is what tells a
 /// replay from a reuse of the key for a different request, which is refused
-/// (<c>docs/storage.md</c>, Idempotency). Rows older than a day go with the
-/// purge at the end of any write transaction.
+/// (<c>docs/storage.md</c>, Idempotency). The row is written before the write
+/// runs, pending until its answer is known, so that a twin finds it. Rows older
+/// than a day go with the purge at the end of any write transaction.
 /// </remarks>
 public sealed class IdempotencyRecord
 {
@@ -22,7 +23,7 @@ public sealed class IdempotencyRecord
         Guid identityId,
         string key,
         byte[] requestHash,
-        short status,
+        short? status,
         string? body,
         bool withheld,
         DateTimeOffset createdAt)
@@ -43,8 +44,8 @@ public sealed class IdempotencyRecord
     /// <summary>SHA-256 of method, path and body.</summary>
     public byte[] RequestHash { get; private init; } = null!;
 
-    /// <summary>The HTTP status the first answer carried.</summary>
-    public short Status { get; private init; }
+    /// <summary>The HTTP status the first answer carried, or nothing while it is being answered.</summary>
+    public short? Status { get; private init; }
 
     /// <summary>The first answer's body, as JSON, or nothing.</summary>
     public string? Body { get; private init; }
@@ -55,13 +56,19 @@ public sealed class IdempotencyRecord
     /// </summary>
     public bool Withheld { get; private init; }
 
+    /// <summary>The first answer's <c>Location</c>, or nothing.</summary>
+    public string? Location { get; private init; }
+
+    /// <summary>The first answer's <c>ETag</c>, or nothing.</summary>
+    public string? ETag { get; private init; }
+
     public DateTimeOffset CreatedAt { get; private init; }
 
     public static IdempotencyRecord Of(
         Guid identityId,
         string key,
         byte[] requestHash,
-        short status,
+        short? status,
         string? body,
         DateTimeOffset createdAt,
         bool withheld = false) =>
