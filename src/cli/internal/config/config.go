@@ -111,10 +111,17 @@ func (in Input) ResolveURL() (string, error) {
 			"no instance: set %s, or run `pa login --url https://planaffe.example`.", EnvURL)}
 	}
 
-	address = strings.TrimRight(address, "/")
+	return CheckURL(address, EnvURL)
+}
+
+// CheckURL trims a trailing slash off an address and refuses one that is not
+// an absolute http or https address; source names where it came from, so that
+// the refusal points at what has to change.
+func CheckURL(address, source string) (string, error) {
+	address = strings.TrimRight(strings.TrimSpace(address), "/")
 	if u, err := url.Parse(address); err != nil || !u.IsAbs() || (u.Scheme != "http" && u.Scheme != "https") {
 		return "", &UsageError{fmt.Sprintf(
-			"%s is %q; it has to be an absolute http or https address.", EnvURL, address)}
+			"%s is %q; it has to be an absolute http or https address.", source, address)}
 	}
 	return address, nil
 }

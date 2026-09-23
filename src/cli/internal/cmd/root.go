@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -165,6 +166,19 @@ func (g *globals) getenv(name string) string {
 		return g.env.Getenv(name)
 	}
 	return os.Getenv(name)
+}
+
+// home is the home directory of this invocation — the test's HOME, where it
+// supplied an environment.
+func (g *globals) home() string {
+	if home := strings.TrimSpace(g.getenv("HOME")); home != "" {
+		return home
+	}
+	if g.env.Getenv != nil {
+		return ""
+	}
+	home, _ := os.UserHomeDir()
+	return home
 }
 
 // requireProject is the one thing a command in a repository never has to say.

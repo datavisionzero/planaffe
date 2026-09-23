@@ -221,6 +221,17 @@ without a Secret Service, most often — it says so, **writes nothing**, and nam
 the two ways on. `logout` refuses a token that came from `PLANAFFE_TOKEN`: `pa`
 did not put it there, and it is most likely an agent's.
 
+An explicit `--url` is where the login goes, even with `PLANAFFE_URL` set:
+"the environment wins" decides which identity a run acts as, not the target of
+a login somebody typed out. Where the two differ, `login` says so on stderr —
+every later command in that environment still goes to `PLANAFFE_URL`.
+`--token-file` is stored as an absolute path, a leading `~/` expanded and a
+relative one read against the directory `login` ran in, so that the next
+command finds it wherever it starts. The file is written fresh beside the old
+one with mode 0600 and renamed over it, so a token file that was there with a
+looser mode ends up private too; a path that is there and is not a regular file
+is refused before a code is printed.
+
 Identities (ADR 0015) — a secret is printed once, to stdout, and nowhere else:
 
 ```
