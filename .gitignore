@@ -42,9 +42,6 @@ volume/
 # macOS
 .DS_Store
 
-# The rolling file of a development run (ADR 0008)
-logs/
-
 # The Go client of the contract, generated before every build (ADR 0005)
 src/cli/internal/api/client.gen.go
 

@@ -26,11 +26,14 @@ carries two of them.
 ```
 planaffe/
 ├─ .github/
-│  ├─ workflows/              ci on every push, release on every tag, the registry on a clock
-│  └─ scripts/                what a workflow step is too long to be
+│  ├─ workflows/              ci on every push, release on every tag, the registry and the advisories on a clock
+│  ├─ scripts/                what a workflow step is too long to be, and its tests
+│  └─ dependabot.yml          version updates for the actions, packages and base images
+├─ .config/dotnet-tools.json  the pinned local tools: `dotnet ef`
 ├─ docs/                      the product, the decisions, and this
 │  ├─ adr/
 │  ├─ research/
+│  ├─ install.md              from nothing to the first ticket, written for an agent to execute
 │  ├─ storage.md              the data model: tables, constraints, what is derived on read
 │  ├─ api.md                  the HTTP surface: endpoints, shapes, errors, exit codes
 │  ├─ human-interface.md      the screens, browser actions and permission matrix
@@ -46,17 +49,24 @@ planaffe/
 │  ├─ planaffe-deliver-epic/
 │  ├─ planaffe-deliver-next-issue/
 │  └─ planaffe-deliver-standalone-issues/
-├─ deploy/                    the Dockerfile, the Caddyfile, Compose (production and development), and nothing else
+├─ deploy/                    the Dockerfile and its ignore file, the Caddyfile, Compose (production and
+│                             development) and the `.env.example` it reads, and nothing else
 ├─ src/
 │  ├─ Planaffe.Domain/        the rules
 │  ├─ Planaffe.Application/   the use cases and their ports
-│  ├─ Planaffe.Infrastructure/ Postgres and the notifier
+│  ├─ Planaffe.Infrastructure/ Postgres, the notifier, SMTP and the password hash
 │  ├─ Planaffe.Api/           HTTP and the composition root
 │  ├─ cli/                    the Go CLI — `pa`
 │  └─ web/                    the single-page application
 ├─ tests/
 │  ├─ Planaffe.UnitTests/
 │  └─ Planaffe.IntegrationTests/
+├─ VISION.md                  what planaffe is and is not
+├─ CONTEXT.md                 the glossary
+├─ AGENTS.md                  the instructions for coding agents; CLAUDE.md is a link to it
+├─ SECURITY.md                how to report a vulnerability
+├─ .planaffe                  the project file (`CONTEXT.md`) that `pa` reads in this repository
+├─ .editorconfig              formatting and naming, checked by `dotnet format whitespace` in CI
 └─ Planaffe.slnx              plus global.json and the Directory.* properties
 ```
 
@@ -117,13 +127,20 @@ soft-deleted row ([ADR 0013](./adr/0013-deleting-is-a-soft-delete-with-a-floor-a
 live here in one place each, because a query that forgets either of them is how
 both decisions fail. Waiting is
 `LISTEN`/`NOTIFY` on its own connection outside any pool, with a deadline as the
-fallback (VISION 13). The logging providers are configured by the Api host
+fallback (VISION 13). Beside `Persistence/` stand the answers to two ports that
+are not about rows: `Email/SmtpEmailSender.cs`
+sends the transactional mail of ADR 0018, and
+`Identity/Argon2idPasswordHasher.cs` hashes and verifies passwords. The logging
+providers are configured by the Api host
 ([ADR 0029](./adr/0029-logging-uses-framework-providers.md)).
 
 **`Planaffe.Api` is the adapters and the composition root.** `Http/` holds the
 endpoints, bearer and browser-session authentication that answer the caller port, the version
 header and the one place a refusal becomes a problem document; `Hosting/` the
-services that run before anything is served — the migrations, the bootstrap.
+services that run before anything is served — the migrations, the bootstrap —
+and what the host is configured with around them: the logging providers
+(`LogConfiguration.cs`), the one line per request (`RequestLoggingMiddleware.cs`)
+and the version the instance reports (`InstanceVersion.cs`).
 It also owns browser-session authentication, CSRF and login rate limits, the
 central direct-key project-scope door, the static files of the built SPA and
 SMTP composition around the application's email port. That door reads the route
@@ -180,7 +197,8 @@ published output.
 Its own layout follows the shell
 ([ADR 0006](./adr/0006-the-web-application-is-a-shell-before-it-is-a-screen.md)):
 one folder per area — `shell`, `issues`, `epics`, `releases`,
-`projects`, `spaces`, `settings`, `session`, `shared`, `api` — where each area owns its screens and
+`projects`, `spaces`, `settings`, `session`, `shared`, `api`, beside the
+`components`, `hooks` and `lib` of the component layer — where each area owns its screens and
 `shell/Shell.tsx` owns the routes. `spaces` is the knowledge base, which is the
 second area of the same application rather than a second application
 ([ADR 0027](./adr/0027-the-knowledge-base-hangs-on-a-space-not-on-a-project.md)):
@@ -213,8 +231,10 @@ what the toolbar does to a selection is a set of pure functions in
 lays nothing out, so the tests write into `shared/StandInEditor.tsx` in the
 editor's place; CodeMirror itself is checked in a browser.
 `components/ui/` is what the shadcn CLI
-generated and `index.css` is the token layer; both are the repository's to
-edit. `api/client.ts` is the one way to the instance — `openapi-fetch` over the
+generated, together with what it brought along — `components/theme-provider.tsx`
+for light, dark and the system's choice, `hooks/use-mobile.ts` for the narrow
+layout and `lib/utils.ts` for joining class names — and `index.css` is the
+token layer; all of it is the repository's to edit. `api/client.ts` is the one way to the instance — `openapi-fetch` over the
 types `npm run generate` writes from the contract — and it adds the CSRF proof
 to cookie-authenticated writes.
 
@@ -267,12 +287,15 @@ The frontend carries its own tests inside `src/web/`, and the CLI its own inside
 `.github/workflows/ci.yml` runs on every push to `main`, every pull request and
 on demand. There is no review step and no environment between a commit and a
 release ([ADR 0001](./adr/0001-the-repository-is-a-trunk.md)), so that workflow
-is the only thing standing between a mistake and the trunk: unit tests,
-integration tests on Testcontainers, the web build with the performance budget
-of [`human-interface.md`](./human-interface.md) held against what it wrote, the
-CLI build, and the
-contract check that fails when the installation serves a document other than the
-one checked in. A trunk commit that passes all of them publishes the image to
+is the only thing standing between a mistake and the trunk: unit tests behind
+`dotnet format whitespace`, integration tests on Testcontainers, the web build
+with the performance budget of [`human-interface.md`](./human-interface.md)
+held against what it wrote, the CLI build behind `gofmt`, the tests of the
+workflow scripts, and the contract check that fails when the installation
+serves a document other than the one checked in. The image is then started
+once, against a Postgres of its own, and has to answer `/version` and serve the
+web application before anything is pushed (`.github/scripts/smoke-image.sh`).
+A trunk commit that passes all of them publishes the image to
 `ghcr.io/datavisionzero/planaffe` under `:main` and under the commit, and never
 under `:latest` — a stranger's installation upgrades into that, and the trunk
 has no claim on it. A pull request builds the image and pushes nothing.
@@ -286,20 +309,34 @@ The image is built on two native runners, one per architecture, and a third job
 merges their digests into the manifest index that carries the tags — so a pull
 on an ARM machine gets the ARM image without anybody naming a platform.
 
+Runs queue per ref: the trunk's one behind the other and never cancelled, a
+pull request's replaced by its next push, and neither able to cancel the other.
+Every job has a timeout, every action is pinned to a commit with its version in
+a comment, and `.github/dependabot.yml` is what moves those pins and the
+package manifests forward — as pull requests, through the same gate.
+
 Whatever else stands in that directory is not a gate and blocks no commit.
 `registry.yml` runs on a clock and takes away the `sha-` tags nobody can still
 be pinned to, and the rule it applies is `.github/scripts/prune-registry.py`,
 which is a file rather than a step so that it can be read and run against the
-live registry without starting a workflow.
+live registry without starting a workflow; a registry that does not answer for
+a version that stays ends the run before anything is taken.
+`vulnerabilities.yml` asks once a week whether the npm packages that reach the
+browser or the NuGet packages of the solution have an advisory against them,
+and a finding makes that run red and does nothing else.
 
 `release.yml` runs on a `v*` tag, and a tag is the only thing that makes a
 version: it is the one place `Directory.Build.props` and
 `internal/version.Version` are told something other than `0.0.0-dev`
 ([ADR 0011](./adr/0011-the-api-carries-no-version-and-migrations-only-run-forward.md)).
-It refuses a tag that is not semver, refuses a commit the gate never passed,
-publishes the image under `:1.2.3`, `:1.2` and `:latest` — the last two only
-for a stable release, never a prerelease — cuts `pa` for five platforms with
-their checksums, and creates the GitHub release those hang on.
+It refuses a tag that is not semver, refuses a commit the gate never passed on
+a push to `main`, starts the image once as CI does, publishes it under `:1.2.3`,
+`:1.2` and `:latest` — `:1.2` only for the highest stable patch of its minor,
+`:latest` only for the highest stable release of all, so that neither ever
+moves backwards and a prerelease moves neither — cuts
+`pa` for five platforms with their checksums, and creates the GitHub release
+those hang on. Run again for a tag that already has one, it replaces the assets
+and leaves the notes a maintainer may have written.
 
 ## What is deliberately not here
 
