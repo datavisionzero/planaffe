@@ -121,9 +121,9 @@ public sealed class SpaceAccessActsTests
     /// <summary>One space, three identities and the grants between them, in memory.</summary>
     private sealed class World : ISpaces, ISpaceAccess, IIdentities
     {
-        public User Administrator { get; } = User.Create("maintainer", administrator: true, Now);
+        public User Administrator { get; } = User.Create("maintainer", "maintainer@example.test", administrator: true, Now);
 
-        public User Colleague { get; } = User.Create("colleague", administrator: false, Now);
+        public User Colleague { get; } = User.Create("colleague", "colleague@example.test", administrator: false, Now);
 
         public Agent Worker { get; }
 

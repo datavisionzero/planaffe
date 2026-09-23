@@ -32,11 +32,6 @@ public sealed class User : Identity
     public static User Create(string name, string email, bool administrator, DateTimeOffset createdAt) =>
         new(Guid.CreateVersion7(), NormalizeName(name), email, UserState.Active, administrator, createdAt);
 
-    // Kept while the cut-two user-creation surface is replaced by invitations
-    // in the next ticket. It never escapes as a sign-in address.
-    public static User Create(string name, bool administrator, DateTimeOffset createdAt) =>
-        Create(name, $"{Guid.CreateVersion7():N}@migration.invalid", administrator, createdAt);
-
     public static User Invite(string name, string email, bool administrator, DateTimeOffset createdAt) =>
         new(Guid.CreateVersion7(), NormalizeName(name), email, UserState.Invited, administrator, createdAt);
 

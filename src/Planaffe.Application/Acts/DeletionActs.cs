@@ -29,22 +29,11 @@ public sealed class DeleteIssue(
     /// <summary>Soft-delete several issues in one transaction: all of them or none.</summary>
     public async Task ExecuteManyAsync(IReadOnlyList<string>? keys, CancellationToken cancellationToken)
     {
-        if (keys is null || keys.Count == 0)
-        {
-            throw Refusal.Validation("keys", "At least one issue key.");
-        }
-        if (keys.Count > CreateIssues.MaximumPerRequest)
-        {
-            throw new Refusal(RefusalCode.TooMany, $"At most {CreateIssues.MaximumPerRequest} issue keys in one request.");
-        }
-        if (keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != keys.Count)
-        {
-            throw Refusal.Validation("keys", "An issue key may occur only once.");
-        }
+        var checkedKeys = Paging.BulkKeys(keys);
 
         await transactions.RunAsync(async () =>
         {
-            foreach (var key in keys)
+            foreach (var key in checkedKeys)
             {
                 try
                 {

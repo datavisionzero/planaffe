@@ -68,8 +68,6 @@ public sealed class ClaimIssue(
 
         return new Refusal(refusal.Code, holder is null ? refusal.Detail : $"{refusal.Detail} Held by {holder.Name}.", extensions);
     }
-
-    internal static string SnakeCase(IssueStatus status) => ClaimHistory.SnakeCase(status);
 }
 
 /// <summary>What a claim writes into the history, the same for `claim` and for `next`.</summary>

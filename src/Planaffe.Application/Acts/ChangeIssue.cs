@@ -61,7 +61,7 @@ public sealed class ChangeIssue(
     public async Task<ChangedIssues> ExecuteManyAsync(
         IReadOnlyList<string>? keys, IssueChanges changes, CancellationToken cancellationToken)
     {
-        ValidateKeys(keys);
+        Paging.BulkKeys(keys);
 
         return await transactions.RunAsync(async () =>
         {
@@ -310,22 +310,6 @@ public sealed class ChangeIssue(
             ?? throw new InvalidOperationException($"Issue {before.Key} vanished under its own write.");
 
         return await assembler.CompleteAsync(after, cancellationToken);
-    }
-
-    private static void ValidateKeys(IReadOnlyList<string>? keys)
-    {
-        if (keys is null || keys.Count == 0)
-        {
-            throw Refusal.Validation("keys", "At least one issue key.");
-        }
-        if (keys.Count > CreateIssues.MaximumPerRequest)
-        {
-            throw new Refusal(RefusalCode.TooMany, $"At most {CreateIssues.MaximumPerRequest} issue keys in one request.");
-        }
-        if (keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != keys.Count)
-        {
-            throw Refusal.Validation("keys", "An issue key may occur only once.");
-        }
     }
 
     /// <summary>The `If-Match` value — the `updated_at` as the client last read it, quoted or not.</summary>

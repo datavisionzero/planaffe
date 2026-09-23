@@ -207,7 +207,8 @@ update`) so that two concurrent writers cannot leave two labels of one group on
 the issue. The database does not hold this invariant, because holding it would
 mean copying the group name onto every `issue_label` row and rewriting those
 rows whenever a label changes group. Every write to an issue's labels goes
-through one place in the store, and that place is where the rule lives.
+through the acts in Application, which resolve a label set in one place and add
+a single label in another, and those are where the rule lives.
 
 **The rule is the epic's as well.** An epic carries labels through `epic_label`
 under the same group rule, and it holds through the same code: creating an epic
@@ -822,7 +823,7 @@ distinguish a session from one that vanished.
 
 ```sql
 create table project_access (
-    project_id  uuid        not null references project (id),
+    project_id  uuid        not null references project (id) on delete cascade,
     user_id     uuid        not null references identity (id),
     granted_by  uuid        not null references identity (id),
     granted_at  timestamptz not null,
@@ -836,7 +837,9 @@ those cross-row facts are held by the application transaction. Project creation
 adds the creator in the same transaction. The migration inserts the Cartesian
 product of existing users and projects before authorization starts, preserving
 all existing access. Agents have no rows: every query resolves an agent to its
-owner first, and user tokens already resolve to the user.
+owner first, and user tokens already resolve to the user. A project purged
+after its grace period takes its access rows with it, which is the cascade on
+`project_id`; the identities are never deleted (ADR 0013).
 
 A central project scope filters every content query, including direct keys,
 search, export, `next` and `needs-you`. The blocker query deliberately crosses

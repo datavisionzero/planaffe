@@ -34,7 +34,7 @@ public sealed class TokenSecretTests
     [Fact]
     public void A_token_issued_from_a_secret_keeps_the_prefix_and_the_hash_and_not_the_secret()
     {
-        var user = User.Create("maintainer", administrator: false, DateTimeOffset.UnixEpoch);
+        var user = User.Create("maintainer", "maintainer@example.test", administrator: false, DateTimeOffset.UnixEpoch);
         var secret = TokenSecret.Generate();
 
         var token = Token.Issue(user, secret, DateTimeOffset.UnixEpoch);
@@ -47,7 +47,7 @@ public sealed class TokenSecretTests
     [Fact]
     public void A_too_short_secret_is_refused_at_issue()
     {
-        var user = User.Create("maintainer", administrator: false, DateTimeOffset.UnixEpoch);
+        var user = User.Create("maintainer", "maintainer@example.test", administrator: false, DateTimeOffset.UnixEpoch);
 
         Assert.Throws<ArgumentException>(() => Token.Issue(user, "short", DateTimeOffset.UnixEpoch));
     }

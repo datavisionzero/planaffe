@@ -40,7 +40,7 @@ internal sealed class Migrated(string connectionString) : IAsyncDisposable
         var migrated = await EmptyAsync(postgres);
         var context = migrated.Context;
 
-        migrated.User = User.Create("maintainer", administrator: true, Now);
+        migrated.User = User.Create("maintainer", "maintainer@example.test", administrator: true, Now);
         migrated.Agent = Agent.Create("quiet-otter-42", migrated.User.Id, Now);
         migrated.Project = Project.Create("PLAN", "planaffe", migrated.User.Id, Now);
         migrated.Issue = Issue.Create(migrated.Project.Id, 1, "Write the schema", migrated.User.Id, Now);

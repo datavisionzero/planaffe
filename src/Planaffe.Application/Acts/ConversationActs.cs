@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Planaffe.Application.Ports;
 using Planaffe.Domain;
@@ -410,11 +409,7 @@ public sealed class ListQuestions(IProjects projects, IIdentities identities, II
 {
     public async Task<QuestionPage> ExecuteAsync(QuestionListRequest request, CancellationToken cancellationToken)
     {
-        var limit = request.Limit ?? ListIssues.DefaultLimit;
-        if (limit < 1 || limit > ListIssues.MaximumLimit)
-        {
-            throw Refusal.Validation("limit", $"limit is 1 to {ListIssues.MaximumLimit}.");
-        }
+        var limit = Paging.Limit(request.Limit, ListIssues.DefaultLimit);
 
         Guid? projectId = request.Project is null ? null : (await projects.LiveAsync(request.Project, settings, cancellationToken)).Id;
         if (projectId is { } selectedProjectId)
@@ -504,28 +499,15 @@ internal static class Questions
     }
 
     public static string Encode(QuestionQuery query, Question last) =>
-        Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new Payload(Fingerprint(query), last.AskedAt, last.Id)))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        Cursor<Payload>.Encode(new Payload(Fingerprint(query), last.AskedAt, last.Id));
 
     public static QuestionPosition Decode(string cursor, QuestionQuery query)
     {
-        Payload? payload;
-        try
-        {
-            var base64 = cursor.Replace('-', '+').Replace('_', '/');
-            base64 = base64.PadRight(base64.Length + (4 - base64.Length % 4) % 4, '=');
-            payload = JsonSerializer.Deserialize<Payload>(Convert.FromBase64String(base64));
-        }
-        catch (Exception exception) when (exception is FormatException or JsonException)
-        {
-            payload = null;
-        }
-
+        var payload = Cursor<Payload>.Decode(cursor);
         return payload is null || payload.F != Fingerprint(query)
             ? throw new Refusal(RefusalCode.CursorInvalid, "The cursor is not one this server issued for these filters.")
             : new QuestionPosition(payload.T, payload.I);
     }
 
-    private static string Fingerprint(QuestionQuery query) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(query))))[..16];
+    private static string Fingerprint(QuestionQuery query) => Cursor<Payload>.Fingerprint(query);
 }
