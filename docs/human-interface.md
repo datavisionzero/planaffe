@@ -556,7 +556,10 @@ than a plainer text area that would be swapped out from under somebody who had
 started typing. Fenced code is not highlighted; it
 carries the language its fence named ([ADR 0017](./adr/0017-the-web-application-is-drawn-by-tailwind-and-base-ui-components-the-repository-owns.md)).
 Loading, empty, error and permission states are designed states rather than
-blank screens.
+blank screens. A screen that fails — one that throws, or a lazy chunk a
+redeploy took away — fails inside the frame: the navigation stays, the screen
+area says so and offers a reload, and the next address tries again. A missing
+chunk reloads the page once by itself, and only once.
 
 Three of those weights are a number and not a description, because a budget
 that names none is never exceeded — it is only not kept, and nobody notices:

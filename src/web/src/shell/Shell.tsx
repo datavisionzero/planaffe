@@ -14,7 +14,6 @@ import { OverviewView } from "@/projects/OverviewView";
 import { ProjectsContext } from "@/projects/context";
 import { useProjects, type Projects } from "@/projects/useProjects";
 import { ReleasesView } from "@/releases/ReleasesView";
-import { ReleaseErrorBoundary } from "@/releases/ReleaseErrorBoundary";
 import { SettingsView } from "@/settings/SettingsView";
 import { SpacesContext, TreeContext } from "@/spaces/context";
 import { SpaceSwitcher } from "@/spaces/SpaceSwitcher";
@@ -28,6 +27,7 @@ import { AppSidebar, type Area } from "./AppSidebar";
 import { AttentionContext } from "./attention";
 import { useAttentionState } from "./useAttention";
 import { Palette } from "./Palette";
+import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { Keys, ShortcutsDialog } from "./ShortcutsDialog";
 import { is, overlaid, typing } from "./shortcuts";
 import { views } from "./views";
@@ -214,6 +214,9 @@ export function Shell() {
           <AccountMenu onShortcuts={() => setShortcutsOpen(true)} />
         </header>
 
+        {/* A screen that fails fails alone: the frame around it stays, and
+            the next address tries again. */}
+        <ScreenErrorBoundary at={location.pathname}>
         <Routes>
           <Route path="/" element={<Landing projects={projects} />} />
           <Route path="/settings/*" element={<SettingsView />} />
@@ -239,11 +242,12 @@ export function Shell() {
             <Route path="epics/new" element={<Suspense fallback={<Busy title="Loading the screen…" />}><NewEpicView /></Suspense>} />
             <Route path="epics/:number" element={<Suspense fallback={<Busy title="Loading the screen…" />}><EpicView /></Suspense>} />
             <Route path="releases" element={<ReleasesView />} />
-            <Route path="releases/:name" element={<ReleaseErrorBoundary project={projectKey!}><Suspense fallback={<Busy title="Loading the screen…" />}><ReleaseView /></Suspense></ReleaseErrorBoundary>} />
+            <Route path="releases/:name" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ReleaseView /></Suspense>} />
             <Route path="labels" element={<LabelsView />} />
             <Route path="settings/*" element={<Suspense fallback={<Busy title="Loading the screen…" />}><ProjectSettingsView /></Suspense>} />
           </Route>
         </Routes>
+        </ScreenErrorBoundary>
       </SidebarInset>
 
       <Palette
