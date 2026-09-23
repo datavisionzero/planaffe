@@ -25,6 +25,9 @@ src/web/src/api/schema.d.ts
 /planaffe
 /pa
 
+# Python, which runs the workflow scripts and their tests
+__pycache__/
+
 # Node
 node_modules/
 dist/

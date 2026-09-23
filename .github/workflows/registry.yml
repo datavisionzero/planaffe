@@ -47,7 +47,9 @@ jobs:
       # The rule is in a script rather than in this file because it can be run
       # by hand against the live registry without starting a workflow, which is
       # how it was checked before it ever deleted anything. It prints and
-      # decides; it does not delete.
+      # decides; it does not delete. A registry that does not answer for a
+      # version that stays makes this step red, and a red step hands no ids
+      # to the one below.
       - id: pick
         name: Which versions have stopped being useful
         env:
