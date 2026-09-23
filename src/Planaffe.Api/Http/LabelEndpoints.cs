@@ -26,11 +26,11 @@ public sealed class ChangeLabelRequestConverter : JsonConverter<ChangeLabelReque
         }
 
         return new ChangeLabelRequest(
-            Text(body, "name"),
-            body.TryGetProperty("group", out _),
-            Text(body, "group"),
-            body.TryGetProperty("description", out _),
-            Text(body, "description"));
+            PatchBody.Text(body, "name"),
+            PatchBody.Given(body, "group"),
+            PatchBody.Text(body, "group"),
+            PatchBody.Given(body, "description"),
+            PatchBody.Text(body, "description"));
     }
 
     public override void Write(Utf8JsonWriter writer, ChangeLabelRequest value, JsonSerializerOptions options)
@@ -54,8 +54,6 @@ public sealed class ChangeLabelRequestConverter : JsonConverter<ChangeLabelReque
         writer.WriteEndObject();
     }
 
-    private static string? Text(JsonElement body, string property) =>
-        body.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.String ? value.GetString() : null;
 }
 
 /// <summary>
@@ -90,11 +88,14 @@ public static class LabelEndpoints
         // A label name may carry a slash (`repo/planaffe`), which reaches the
         // route encoded and is decoded here rather than by routing.
         door.MapPatch("/{name}", (string key, string name, ChangeLabelRequest? request, ChangeLabel change, CancellationToken cancellationToken) =>
-                change.ExecuteAsync(
+            {
+                var given = PatchBody.Required(request, "A label change");
+                return change.ExecuteAsync(
                     key,
                     Uri.UnescapeDataString(name),
-                    new LabelChanges(request?.Name, request?.GroupGiven ?? false, request?.Group, request?.DescriptionGiven ?? false, request?.Description),
-                    cancellationToken))
+                    new LabelChanges(given.Name, given.GroupGiven, given.Group, given.DescriptionGiven, given.Description),
+                    cancellationToken);
+            })
             .WithName("ChangeLabel")
             .WithSummary("Rename, regroup or describe a label. A group change that would leave an issue or an epic with two of one group is refused, and `issues` and `epics` say which.")
             .ProducesProblem(StatusCodes.Status400BadRequest);

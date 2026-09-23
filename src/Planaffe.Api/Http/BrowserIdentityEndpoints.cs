@@ -39,12 +39,14 @@ public static class BrowserIdentityEndpoints
             var issued = await exchange.ExecuteAsync(request?.Token, request?.Password, ct);
             if (issued is null) return Problems.Result(RefusalCode.Unauthenticated, "The bootstrap token cannot be exchanged.");
             SetCookie(http, cookie, issued.Value); return Results.NoContent();
-        }).AllowAnonymous().WithName("ExchangeBootstrapToken").Produces(StatusCodes.Status204NoContent);
+        }).AllowAnonymous().WithName("ExchangeBootstrapToken").Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status401Unauthorized);
 
         endpoints.MapPost("/invitations/accept", async (SecretPasswordRequest? request, HttpContext http,
             AcceptInvitation accept, BrowserCookie cookie, CancellationToken ct) =>
         { var issued = await accept.ExecuteAsync(request?.Secret, request?.Password, ct); SetCookie(http, cookie, issued); return Results.NoContent(); })
-            .AllowAnonymous().WithName("AcceptInvitation").Produces(StatusCodes.Status204NoContent);
+            .AllowAnonymous().WithName("AcceptInvitation").Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status410Gone);
 
         // The answer is the same 202 for every address, and it leaves before
         // anything is looked up: writing the secret and talking to the SMTP
@@ -77,9 +79,13 @@ public static class BrowserIdentityEndpoints
 
         endpoints.MapPost("/password-recovery/complete", async (SecretPasswordRequest? request, CompletePasswordRecovery recover, CancellationToken ct) =>
         { await recover.ExecuteAsync(request?.Secret, request?.Password, ct); return Results.NoContent(); })
-            .AllowAnonymous().WithName("CompletePasswordRecovery").Produces(StatusCodes.Status204NoContent);
+            .AllowAnonymous().WithName("CompletePasswordRecovery").Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status410Gone);
 
-        var door = endpoints.MapGroup(string.Empty).RequireAuthorization();
+        // A cookie-authenticated write without its CSRF proof is 403 `csrf`,
+        // and an agent is told `forbidden`: both are the door's 403.
+        var door = endpoints.MapGroup(string.Empty).RequireAuthorization()
+            .ProducesProblem(StatusCodes.Status401Unauthorized).ProducesProblem(StatusCodes.Status403Forbidden);
         door.MapDelete("/session", async (HttpContext http, ICallerIdentity caller, IBrowserSessions sessions,
             BrowserCookie cookie, TimeProvider clock, CancellationToken ct) =>
         { var who = caller.Caller.RequireUser("sign out"); if (who.SessionId is { } id) await sessions.RevokeAsync(id, who.Id, clock.GetUtcNow(), ct); http.Response.Cookies.Delete(cookie.Name, cookie.Options(DateTimeOffset.UnixEpoch)); return Results.NoContent(); })

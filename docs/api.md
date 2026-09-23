@@ -186,8 +186,13 @@ uses `planaffe_session` without `Secure`; no other mode may weaken it. The cooki
 contains only the opaque session secret.
 
 Every `POST`, `PATCH` or `DELETE` authenticated by that cookie also requires
-`X-Planaffe-CSRF: 1` and an `Origin` exactly equal to the configured public
-origin. Missing or mismatched protection is `csrf`. A Bearer-authenticated
+`X-Planaffe-CSRF: 1` and an `Origin` that is this instance. With
+`PLANAFFE_PUBLIC_URL` set, that is its origin, scheme, host and port exactly.
+Without it the instance cannot know its own scheme — a reverse proxy that ends
+TLS forwards the request as `http` unless it is trusted to say otherwise — so
+the `Origin`'s host and port are compared with the request's `Host` alone, on
+purpose: a foreign origin cannot match it. Missing or mismatched protection is
+`csrf`. A Bearer-authenticated
 request is not subject to either browser check. If both credentials arrive,
 Bearer authentication wins and the cookie is ignored.
 
@@ -240,7 +245,7 @@ person. Extension members carry what the code needs — the holder on
 
 | status | type | when |
 |---|---|---|
-| 400 | `validation` | a field is missing, malformed or over its limit; `errors` maps field to message |
+| 400 | `validation` | a field is missing, malformed or over its limit, or the body is not the JSON object the endpoint reads — empty, not JSON, `1.5` where a whole number goes; `errors` maps field to message, `body` for the body as a whole |
 | 400 | `unknown-field` | a closed request object contains a field it does not define; `field` names it |
 | 400 | `cursor-invalid` | the cursor does not fit the filters or is not one the server issued |
 | 401 | `unauthenticated` | no token, an unknown token, or a revoked one |
@@ -907,7 +912,7 @@ way to read what the lists already say (ADR 0012).
 | `DELETE` | `/me/token` | token caller | revoke the token this request presented; 204. A browser session is told its own exit is `DELETE /session` |
 | `PATCH` | `/me` | user | `{ name }` → 200 `User`; email and password have their own confirmation-aware acts |
 | `POST` | `/me/email` | user | `{ email }` → 202; sends a confirmation link to the new address while the old remains active |
-| `POST` | `/me/email/confirm` | user | `{ secret }` → 200 `User`; consumes the link and changes the address |
+| `POST` | `/email-changes/confirm` | anyone | `{ secret }` → 204; consumes the link and changes the address. Anonymous, because the link is opened wherever the new mailbox is read; `secret-expired` when it is used, replaced or expired |
 
 Sign-ins are throttled over 15 minutes after five failed attempts for a
 normalized account or 20 for a source address, and answered `login-throttled`

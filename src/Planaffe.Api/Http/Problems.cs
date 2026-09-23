@@ -172,7 +172,8 @@ public static class Problems
 
     /// <summary>
     /// What turns a <see cref="Refusal"/> thrown by an act into its document,
-    /// and anything else into <c>internal</c> with nothing else in it.
+    /// a body nobody could read into <c>validation</c>, and anything else into
+    /// <c>internal</c> with nothing else in it.
     /// </summary>
     public sealed class Handler(ILogger<Handler> logger) : IExceptionHandler
     {
@@ -182,6 +183,14 @@ public static class Problems
             var document = exception switch
             {
                 Refusal refusal => Document(refusal, context.Request.Path),
+
+                // A body that is not the JSON its endpoint reads is the
+                // caller's mistake and not a bug: the binding throws the one,
+                // a document read by hand the other.
+                BadHttpRequestException { InnerException: not JsonException } bad => Document(
+                    Refusal.Validation("request", bad.Message), context.Request.Path),
+                BadHttpRequestException or JsonException => Document(
+                    Refusal.Validation("body", "The body is not the JSON this endpoint reads."), context.Request.Path),
                 _ => Document(RefusalCode.Internal, detail: null, context.Request.Path),
             };
 
