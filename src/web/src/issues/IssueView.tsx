@@ -374,7 +374,7 @@ function Chips({ issue }: { issue: Issue }) {
 
 function Attention({ issue, onChanged }: { issue: Issue; onChanged: (issue: Issue) => void }) {
   return <div className="mb-6 space-y-3" aria-label="Needs attention">
-    {issue.questions.filter((q) => q.answer === null).map((q) => <aside key={q.id} id={`question-${q.id}`} className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Answer needed</Eyebrow><Markdown className="mt-2">{q.question}</Markdown><Byline name={q.asked_by.name} at={q.asked_at} /><TextAction draftKey={`issue:${issue.key}:answer:${q.id}`} version={issue.updated_at} label="Answer" onRun={async (text) => { const result = await api.POST("/questions/{id}/answer", { params: { path: { id: q.id } }, body: { answer: text } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); const latest = await api.GET("/issues/{key}", { params: { path: { key: issue.key } } }).catch(() => undefined); return latest?.data?.questions.some((answer) => answer.id === q.id && answer.answer !== null) ? latest.data : { ...issue, questions: issue.questions.map((x) => x.id === q.id ? result.data! : x), open_questions: issue.open_questions - 1 }; }} onChanged={onChanged} /></aside>)}
+    {issue.questions.filter((q) => q.answer === null).map((q) => <aside key={q.id} id={`question-${q.id}`} className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Answer needed</Eyebrow><Markdown className="mt-2">{q.question}</Markdown><Byline name={q.asked_by.name} at={q.asked_at} /><TextAction draftKey={`issue:${issue.key}:answer:${q.id}`} version={issue.updated_at} label="Answer" onRun={async (text) => { const result = await api.POST("/questions/{id}/answer", { params: { path: { id: q.id } }, body: { answer: text } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return reread(issue.key, { ...issue, questions: issue.questions.map((x) => x.id === q.id ? result.data! : x), open_questions: issue.open_questions - 1 }); }} onChanged={onChanged} /></aside>)}
     {/* Accepting is the header's primary in this status, so this box carries
         the result and the two decisions that are not it. */}
     {issue.status === "review" && <aside className="rounded-lg border border-brand bg-accent p-4"><Eyebrow>Review needed</Eyebrow><p className="mt-1 text-sm">Decide whether this work is done, canceled, or should return to todo.</p>{issue.result !== null && <Markdown className="mt-3">{issue.result}</Markdown>}<div className="mt-3 flex flex-wrap gap-2"><IssueAction label="Accept as canceled" variant="outline" path="/issues/{key}/close" issue={issue} body={{ status: "canceled", result: issue.result }} onChanged={onChanged} /></div><TextAction draftKey={`issue:${issue.key}:review-return`} version={issue.updated_at} label="Return to todo" placeholder="What needs to change?" onRun={(comment) => issueRequest("/issues/{key}/reopen", issue, { comment })} onChanged={onChanged} /></aside>}
@@ -434,8 +434,8 @@ function Conversation({ issue, onChanged }: { issue: Issue; onChanged: (issue: I
   return <div className="space-y-5">
     {entries.length === 0 ? <p className="text-sm text-muted-foreground">Nothing has been said on this issue yet.</p> : entries.map((entry) => entry.kind === "comment" ? <CommentEntry key={entry.value.id} issue={issue} comment={entry.value} onChanged={onChanged} /> : <article key={entry.value.id}><Eyebrow>{entry.value.answer === null ? "Open question" : "Question"}</Eyebrow><Markdown className="mt-1">{entry.value.question}</Markdown><Byline name={entry.value.asked_by.name} at={entry.value.asked_at} />{entry.value.answer !== null && <div className="mt-3 border-l-2 pl-3"><Markdown>{entry.value.answer}</Markdown><Byline name={entry.value.answered_by?.name ?? "Unknown"} at={entry.value.answered_at!} /></div>}</article>)}
     {writing === undefined && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => setWriting("comment")}>Add comment</Button><Button variant="outline" size="sm" onClick={() => setWriting("question")}>Ask question</Button></div>}
-    {writing === "comment" && <TextAction draftKey={`issue:${issue.key}:new-comment`} version={issue.updated_at} label="Add comment" multiline onCancel={() => setWriting(undefined)} onRun={async (body) => { const result = await api.POST("/issues/{key}/comments", { params: { path: { key: issue.key } }, body: { body } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, comments: [...issue.comments, result.data] }; }} onChanged={added} />}
-    {writing === "question" && <TextAction draftKey={`issue:${issue.key}:new-question`} version={issue.updated_at} label="Ask question" multiline onCancel={() => setWriting(undefined)} onRun={async (question) => { const result = await api.POST("/issues/{key}/questions", { params: { path: { key: issue.key } }, body: { question } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return { ...issue, questions: [...issue.questions, result.data], open_questions: issue.open_questions + 1 }; }} onChanged={added} />}
+    {writing === "comment" && <TextAction draftKey={`issue:${issue.key}:new-comment`} version={issue.updated_at} label="Add comment" multiline onCancel={() => setWriting(undefined)} onRun={async (body) => { const result = await api.POST("/issues/{key}/comments", { params: { path: { key: issue.key } }, body: { body } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return reread(issue.key, { ...issue, comments: [...issue.comments, result.data] }); }} onChanged={added} />}
+    {writing === "question" && <TextAction draftKey={`issue:${issue.key}:new-question`} version={issue.updated_at} label="Ask question" multiline onCancel={() => setWriting(undefined)} onRun={async (question) => { const result = await api.POST("/issues/{key}/questions", { params: { path: { key: issue.key } }, body: { question } }); if (!result.data) throw new Error(describe(result.error, result.response.status)); return reread(issue.key, { ...issue, questions: [...issue.questions, result.data], open_questions: issue.open_questions + 1 }); }} onChanged={added} />}
   </div>;
 }
 
@@ -473,13 +473,13 @@ function CommentEntry({ issue, comment, onChanged }: { issue: Issue; comment: Is
       ? <TextAction draftKey={`issue:${issue.key}:comment:${comment.id}`} version={comment.edited_at ?? comment.created_at} label="Save comment" multiline initial={comment.body} onCancel={() => setEditing(false)} onRun={async (body) => {
           const result = await api.PATCH("/comments/{id}", { params: { path: { id: comment.id } }, body: { body } });
           if (!result.data) throw new Error(describe(result.error, result.response.status));
-          return { ...issue, comments: issue.comments.map((x) => x.id === comment.id ? result.data! : x) };
+          return reread(issue.key, { ...issue, comments: issue.comments.map((x) => x.id === comment.id ? result.data! : x) });
         }} onChanged={(next) => { setEditing(false); onChanged(next); }} />
       : <Markdown className="mt-1">{comment.body}</Markdown>}
     <ActionDialog open={deleting} onOpenChange={setDeleting} title="Delete this comment?" description="It is gone for good — there is no grace period for a comment. The history keeps that it was taken away." confirmLabel="Delete comment" onConfirm={async () => {
       const result = await api.DELETE("/comments/{id}", { params: { path: { id: comment.id } } });
       if (!result.response.ok) throw new Error(describe(result.error, result.response.status));
-      onChanged(without(issue));
+      onChanged(await reread(issue.key, without(issue)));
     }} />
   </article>;
 }
@@ -522,7 +522,25 @@ function EdgeAction({ issue, onChanged }: { issue: Issue; onChanged: (issue: Iss
   </div>;
 }
 
-type ActPath = "/issues/{key}/claim" | "/issues/{key}/release" | "/issues/{key}/close" | "/issues/{key}/review" | "/issues/{key}/reopen" | "/issues/{key}/restore";
+/**
+ * The issue as it stands after an act whose answer is only a part of it — a
+ * comment, a question, an answer. Every one of them moves the issue's
+ * `updated_at` (ADR 0022), so an issue patched together from the old one and
+ * the part would carry a version the instance no longer has: the next guarded
+ * write would be refused, and an open draft would take the writer's own
+ * comment for a change made elsewhere. Where the read fails the patched-up
+ * issue is the best there is, and the next wake reads it again.
+ */
+async function reread(key: string, fallback: Issue): Promise<Issue> {
+  try {
+    const { data } = await api.GET("/issues/{key}", { params: { path: { key } } });
+    return data ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+type ActPath ="/issues/{key}/claim" | "/issues/{key}/release" | "/issues/{key}/close" | "/issues/{key}/review" | "/issues/{key}/reopen" | "/issues/{key}/restore";
 async function issueRequest(path: ActPath, issue: Issue, body?: object): Promise<Issue> {
   const result = await api.POST(path as "/issues/{key}/claim", { params: { path: { key: issue.key } }, body: body as never });
   if (!result.data) throw new Error(describe(result.error, result.response.status));

@@ -21,8 +21,16 @@ export function useDraft<T>(form: string, initial: T, baseVersion: string | null
       return raw === null ? null : JSON.parse(raw) as Saved<T>;
     } catch { return null; }
   });
-  const [value, setValue] = useState(initial);
+  const [value, setRawValue] = useState(initial);
   const skip = useRef(false);
+  // The field stays editable under the banner, and what is typed there is the
+  // writer's answer to it: the waiting draft is dropped, and the new text is
+  // saved and guarded from the first key on. Holding the new text back while
+  // the banner waited lost it without a word the moment the screen was left.
+  const setValue = useCallback<React.Dispatch<React.SetStateAction<T>>>((next) => {
+    setPending(null);
+    setRawValue(next);
+  }, []);
   const initialText = JSON.stringify(initial);
 
   useEffect(() => {
@@ -52,7 +60,7 @@ export function useDraft<T>(form: string, initial: T, baseVersion: string | null
       {pending.baseVersion !== baseVersion && " The server changed since this draft was started. Review the current version before restoring."}
     </p>
     <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" onClick={() => { setValue(pending.value); setPending(null); }}>Restore draft</Button>
+      <Button type="button" size="sm" onClick={() => { setRawValue(pending.value); setPending(null); }}>Restore draft</Button>
       <Button type="button" size="sm" variant="outline" onClick={() => { setPending(null); try { localStorage.removeItem(key); } catch { /* See above. */ } }}>Discard draft</Button>
     </div>
   </div>;

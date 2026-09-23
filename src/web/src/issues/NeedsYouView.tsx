@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -74,15 +74,27 @@ export function NeedsYouView() {
     [project],
   );
 
+  const [refreshWhy, setRefreshWhy] = useState<string>();
+  // Which reading of the list is standing. A page loaded under an older one
+  // belongs to a list that is gone, and is not appended to the new one.
+  const reading = useRef(0);
+
   useEffect(() => {
     let current = true;
+    const mine = ++reading.current;
 
     void (async () => {
       const answer = await ask(undefined);
 
-      if (current) {
+      if (current && mine === reading.current) {
         setMore({ busy: false });
-        setKnown({ of: project, page: answer });
+        // A refresh that failed does not take away a list that was known:
+        // everywhere else what is known stays standing, and the failure is
+        // said beside it.
+        setRefreshWhy(answer.at === "failed" ? answer.why : undefined);
+        setKnown((old) =>
+          answer.at === "failed" && old !== null && old.of === project && old.page.at === "known" ? old : { of: project, page: answer },
+        );
       }
     })();
 
@@ -95,8 +107,13 @@ export function NeedsYouView() {
   }, [again, ask, project, pulse]);
 
   async function loadMore(cursor: string) {
+    const mine = reading.current;
     setMore({ busy: true });
     const answer = await ask(cursor);
+
+    if (mine !== reading.current) {
+      return;
+    }
 
     if (answer.at === "failed") {
       setMore({ busy: false, why: answer.why });
@@ -130,6 +147,12 @@ export function NeedsYouView() {
         </div>
       )}
       {page.at === "failed" && <p className="p-4 text-sm text-destructive">{page.why}</p>}
+      {page.at === "known" && refreshWhy !== undefined && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm text-destructive">
+          Could not refresh: {refreshWhy}
+          <Button size="sm" variant="outline" onClick={() => setAgain((count) => count + 1)}>Try again</Button>
+        </div>
+      )}
       {/* A fact about the instance, said once beside the list rather than turned
           into entries on it: without an agent nothing here gets worked off, and
           the one thing to do about it is not an issue on this list. */}
