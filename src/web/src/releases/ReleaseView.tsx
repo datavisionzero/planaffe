@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { api, describe, type IssueSummary, type Release } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { failure } from "@/shared/act";
 import {
   Dialog,
   DialogClose,
@@ -260,7 +261,7 @@ function Membership({ issues, onRemove }: { issues: IssueSummary[]; onRemove?: (
               <Button
                 size="xs"
                 variant="ghost"
-                onClick={() => void onRemove(issue.key).then(() => setWhy(undefined), (reason: unknown) => setWhy(reason instanceof Error ? reason.message : "The instance did not answer."))}
+                onClick={() => void onRemove(issue.key).then(() => setWhy(undefined), (reason: unknown) => setWhy(failure(reason)))}
               >
                 Remove
               </Button>

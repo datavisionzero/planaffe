@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { api, describe, type IssueSummary, type Schemas } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { failure } from "@/shared/act";
 import { Input } from "@/components/ui/input";
 import { LabelPicker, type PickableLabel } from "@/components/ui/label-picker";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -113,7 +114,7 @@ export function IssueListView({ view }: { view: View }) {
       });
     } catch (reason) {
       if (signal?.aborted || request !== serial.current) return;
-      const why = reason instanceof Error ? reason.message : "The instance did not answer.";
+      const why = failure(reason);
       setLoaded((current) => current?.of === fingerprint ? { of: fingerprint, project, page: { at: "failed", items: current.page.items, total: current.page.total, why } } : current);
     } finally {
       if (cursor !== undefined && loadingMore.current === cursor) loadingMore.current = null;

@@ -265,6 +265,43 @@ describe("the human-first issue detail", () => {
     expect(screen.getByRole("link", { name: /Back to Needs you/ })).toBeInTheDocument();
   });
 
+  // The flow used to read every candidate on every wake to find one that
+  // still opens. It lists them from Needs you and asks only when somebody goes
+  // on — and then it still skips the one that is gone.
+  it("asks which waiting issue still opens only when going on, and skips one that is gone", async () => {
+    const waiting = { ...free, questions: issue.questions, open_questions: 1 };
+    const gone = { ...free, key: "PLAN-11", title: "Deleted meanwhile" };
+    const next = { ...free, key: "PLAN-10", title: "Next decision", questions: issue.questions, open_questions: 1 };
+    const answered = { ...issue.questions[0], answer: "Use the browser path.", answered_by: person, answered_at: "2026-09-04T11:00:00Z" };
+    let items = [{ issue: waiting, because: "question" }, { issue: gone, because: "question" }, { issue: next, because: "question" }];
+    const instance = installInstance({
+      "GET /issues/PLAN-9": waiting,
+      "GET /issues/PLAN-9/history": [],
+      "GET /issues/PLAN-11": { status: 404, body: { detail: "No issue PLAN-11." } },
+      "GET /issues/PLAN-10": next,
+      "GET /issues/PLAN-10/history": [],
+      "GET /projects/PLAN/needs-you": () => ({ items, total: items.length, next_cursor: null, has_more: false, agents: 1 }),
+      "POST /questions/0199a000-0000-7000-8000-000000000004/answer": () => {
+        items = items.slice(1);
+        return { body: answered };
+      },
+    });
+    renderAt("/PLAN/issues/9?from=needs-you", routedIssue);
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByLabelText("Answer"), "Use the browser path.");
+    await user.click(screen.getByRole("button", { name: "Answer" }));
+    const onward = await screen.findByRole("button", { name: "Next waiting issue" });
+
+    const candidates = () => instance.calls.filter((call) => /\/issues\/PLAN-1[01]$/.test(new URL(call.url).pathname));
+    expect(candidates()).toHaveLength(0);
+
+    await user.click(onward);
+
+    expect(await screen.findByRole("heading", { name: /Next decision/ })).toBeInTheDocument();
+    expect(candidates().map((call) => new URL(call.url).pathname).slice(0, 2)).toEqual(["/issues/PLAN-11", "/issues/PLAN-10"]);
+  });
+
   it("leaves a direct issue link outside the Needs you workflow", async () => {
     installInstance({ "GET /issues/PLAN-9": free, "GET /issues/PLAN-9/history": [] });
     renderAt("/PLAN/issues/9", routedIssue);

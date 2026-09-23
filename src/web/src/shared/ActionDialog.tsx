@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { failure } from "@/shared/act";
 import {
   Dialog,
   DialogClose,
@@ -51,7 +52,7 @@ export function ActionDialog({ trigger, open: controlled, onOpenChange, title, d
       if (controlled === undefined) setUncontrolled(false);
       onOpenChange?.(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The instance did not answer.");
+      setError(failure(reason));
     } finally {
       setBusy(false);
     }
@@ -129,7 +130,7 @@ export function TextActionDialog({ trigger, open: controlled, onOpenChange, titl
       await onSubmit(next);
       changeOpen(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The instance did not answer.");
+      setError(failure(reason));
     } finally {
       setBusy(false);
     }
