@@ -53,6 +53,30 @@ public sealed class LabelEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task A_restore_that_would_leave_an_issue_with_two_of_a_group_is_refused()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = instance.ClientWith(AnInstance.BootstrapToken);
+        await admin.PostAsJsonAsync("/projects", new { key = "PLAN", name = "planaffe" }, Ct);
+        await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "A", labels = new[] { "bug" } } } }, Ct);
+
+        // While `bug` is gone, `kind` looks free on PLAN-1, and `feature` takes it.
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync("/projects/PLAN/labels/bug", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync("/issues/PLAN-1/labels/feature", null, Ct)).StatusCode);
+
+        var problem = await ProjectEndpointTests.Problem(
+            await admin.PostAsync("/projects/PLAN/labels/bug/restore", null, Ct), HttpStatusCode.BadRequest, "validation");
+        Assert.Equal(["PLAN-1"], problem.GetProperty("issues").EnumerateArray().Select(i => i.GetString()));
+
+        var issue = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+        Assert.Equal(["feature"], issue.GetProperty("labels").EnumerateArray().Select(l => l.GetProperty("name").GetString()));
+
+        // Once nothing is in the way, it comes back.
+        Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync("/issues/PLAN-1/labels/feature", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync("/projects/PLAN/labels/bug/restore", null, Ct)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_name_follows_the_pattern_and_is_unique_in_the_project()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);

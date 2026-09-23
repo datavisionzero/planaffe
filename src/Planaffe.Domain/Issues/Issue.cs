@@ -499,7 +499,7 @@ public sealed class Issue
             throw new ArgumentException("An issue has a title.", nameof(title));
         }
 
-        return trimmed.Length > TitleMaxLength || trimmed.Contains('\n')
+        return trimmed.Length > TitleMaxLength || trimmed.IndexOfAny(['\r', '\n']) >= 0
             ? throw new ArgumentException(
                 $"An issue title is one line of at most {TitleMaxLength} characters.", nameof(title))
             : trimmed;

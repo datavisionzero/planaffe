@@ -117,13 +117,31 @@ public sealed class ChangeIssue(
             ? await ParentAsync(changes.Parent, cancellationToken)
             : null;
 
-        if (changes.EpicGiven && (before.ParentId is not null || parentRow is not null))
+        // Against the parent the issue has after this change: `parent: null`
+        // with an epic detaches first and then attaches.
+        if (changes.EpicGiven && (changes.ParentGiven ? parentRow is not null : before.ParentId is not null))
         {
             throw new Refusal(RefusalCode.EpicInherited, "A sub-issue's epic follows its parent.");
         }
 
+        // A new parent is locked with the issue, the lower id first, so that
+        // two writes that would each add a level — X under P, P under Q —
+        // meet on P's row and the second sees the first.
+        Issue? parent = null;
+        if (parentRow is not null && parentRow.Id.CompareTo(before.Id) < 0)
+        {
+            parent = await issues.LoadForWriteAsync(parentRow.Id, cancellationToken)
+                ?? throw Refusal.Validation("parent", $"No issue {parentRow.Key}.");
+        }
+
         var issue = await issues.LoadForWriteAsync(before.Id, cancellationToken)
                 ?? throw new Refusal(RefusalCode.NotFound, $"No issue {key}.");
+
+        if (parentRow is not null && parent is null && parentRow.Id != before.Id)
+        {
+            parent = await issues.LoadForWriteAsync(parentRow.Id, cancellationToken)
+                ?? throw Refusal.Validation("parent", $"No issue {parentRow.Key}.");
+        }
 
         if (expected is { } version && issue.UpdatedAt != version)
         {
@@ -141,13 +159,13 @@ public sealed class ChangeIssue(
             {
                 throw new Refusal(RefusalCode.Transition, "A closed issue cannot change parent; reopen it first.");
             }
-            if (parentRow is not null)
+            if (parent is not null)
             {
-                if (parentRow.ProjectId != issue.ProjectId)
+                if (parent.ProjectId != issue.ProjectId)
                 {
                     throw new Refusal(RefusalCode.OtherProject, "A parent and its sub-issue stay in one project.");
                 }
-                if (parentRow.ParentId is not null || await issues.HasSubIssuesAsync(issue.Id, cancellationToken))
+                if (parent.ParentId is not null || await issues.HasSubIssuesAsync(issue.Id, cancellationToken))
                 {
                     throw new Refusal(RefusalCode.OneLevel, "Sub-issues are exactly one level deep.");
                 }
@@ -157,11 +175,26 @@ public sealed class ChangeIssue(
                 ? (await issues.FindLiveManyAsync([oldParentId], cancellationToken)).SingleOrDefault()?.Key
                 : null;
             issue.AttachToParent(parentRow?.Id, now);
-            if (parentRow is not null)
-            {
-                issue.AttachTo(parentRow.EpicId, now);
-            }
             history.Add(HistoryEntry.OnIssue(issue.Id, caller.Id, now, HistoryField.Parent, oldParent, parentRow?.Key));
+
+            // The sub-issue takes its parent's epic, and that is a move under
+            // an epic like any other: written down, and a closed epic reopens.
+            if (parent is not null && parent.EpicId != issue.EpicId)
+            {
+                var oldEpic = issue.EpicId is { } oldEpicId ? await epics.FindAsync(oldEpicId, cancellationToken) : null;
+                var newEpic = parent.EpicId is { } newEpicId ? await epics.FindAsync(newEpicId, cancellationToken) : null;
+                issue.AttachTo(parent.EpicId, now);
+                history.Add(HistoryEntry.OnIssue(
+                    issue.Id, caller.Id, now, HistoryField.Epic,
+                    oldEpic is null ? null : EpicKey.Of(project.Key, oldEpic.Number),
+                    newEpic is null ? null : EpicKey.Of(project.Key, newEpic.Number)));
+
+                if (newEpic is { Closed: true })
+                {
+                    newEpic.Reopen(now);
+                    history.Add(HistoryEntry.OnEpic(newEpic.Id, caller.Id, now, HistoryField.Status, "closed", "open", "reopened by attaching an issue"));
+                }
+            }
         }
 
         if (parking is { } target)

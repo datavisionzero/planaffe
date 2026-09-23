@@ -124,6 +124,7 @@ public sealed class IssueEdges(
         string key, Func<Issue, IssueRow, DateTimeOffset, Task> change, CancellationToken cancellationToken)
     {
         var row = await issues.LiveAsync(key, settings, cancellationToken);
+        await scope.RequireAsync(row.ProjectId, cancellationToken);
 
         await transactions.RunAsync(async () =>
         {

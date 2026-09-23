@@ -438,7 +438,7 @@ metadata back channel (`PATCH /me/metadata`) is cut two.
 | `POST` | `/projects/{key}/labels` | any | `{ name, group?, description? }` → 201 |
 | `PATCH` | `/projects/{key}/labels/{name}` | any | `{ name?, group?, description? }`. Changing the group is refused with `validation` when an issue or an epic would end up with two labels of the new group; `issues` and `epics` list them |
 | `DELETE` | `/projects/{key}/labels/{name}` | any | soft delete; the label vanishes from every issue; 204 |
-| `POST` | `/projects/{key}/labels/{name}/restore` | any | back, with its attachments |
+| `POST` | `/projects/{key}/labels/{name}/restore` | any | back, with its attachments. Refused with `validation`, `issues` and `epics` as on a group change, when one of them took another label of the group while this one was gone |
 
 ### Next
 

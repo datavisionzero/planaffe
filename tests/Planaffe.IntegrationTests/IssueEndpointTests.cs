@@ -97,6 +97,38 @@ public sealed class IssueEndpointTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task An_edge_said_from_both_ends_is_written_once_and_an_existing_blocked_issue_moves_its_version()
+    {
+        await using var instance = await AnInstance.BootstrappedAsync(postgres);
+        using var admin = await Ready(instance);
+        using var first = await admin.PostAsJsonAsync("/issues", new { project = "PLAN", issues = new[] { new { title = "Existing" } } }, Ct);
+        var before = (await first.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("items")[0].GetProperty("updated_at").GetString();
+
+        var body = new
+        {
+            project = "PLAN",
+            issues = new object[]
+            {
+                new { @ref = "a", title = "A", blocks = new[] { "b", "PLAN-1" } },
+                new { @ref = "b", title = "B", blocked_by = new[] { "a" } },
+            },
+        };
+
+        using var created = await admin.PostAsJsonAsync("/issues", body, Ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var b = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-3", Ct);
+        Assert.Equal(["PLAN-2"], b.GetProperty("blocked_by").EnumerateArray().Select(x => x.GetProperty("key").GetString()));
+
+        var existing = await admin.GetFromJsonAsync<JsonElement>("/issues/PLAN-1", Ct);
+        Assert.Equal(["PLAN-2"], existing.GetProperty("blocked_by").EnumerateArray().Select(x => x.GetProperty("key").GetString()));
+        Assert.NotEqual(before, existing.GetProperty("updated_at").GetString());
+
+        await using var reader = Migrated.ContextFor(instance.ConnectionString);
+        Assert.Equal(2, await reader.History.CountAsync(h => h.Field == "blocked_by", Ct));
+    }
+
+    [Fact]
     public async Task A_cycle_among_the_new_issues_refuses_the_whole_request()
     {
         await using var instance = await AnInstance.BootstrappedAsync(postgres);
