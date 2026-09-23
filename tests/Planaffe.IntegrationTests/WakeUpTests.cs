@@ -81,6 +81,37 @@ public sealed class WakeUpTests(PostgresFixture postgres)
         await EstablishListenerAsync(changes, db);
     }
 
+    /// <summary>
+    /// A blocker may sit in another project. Closing or deleting it makes the
+    /// issue it blocks workable, so it wakes the blocked issue's project too;
+    /// so does deleting the blocker's whole project.
+    /// </summary>
+    [Fact]
+    public async Task A_blocker_in_another_project_wakes_the_project_it_blocks()
+    {
+        await using var db = await Migrated.SeededAsync(postgres);
+        await using var changes = new PostgresChanges(db.ConnectionString, NullLogger<PostgresChanges>.Instance);
+        await EstablishListenerAsync(changes, db);
+
+        var other = Project.Create("OTHER", "Another project", db.User.Id, Migrated.Now);
+        var first = Issue.Create(other.Id, 1, "Elsewhere", db.User.Id, Migrated.Now);
+        var second = Issue.Create(other.Id, 2, "Elsewhere too", db.User.Id, Migrated.Now);
+        db.Context.AddRange(other, first, second);
+        await db.Context.SaveChangesAsync(Ct);
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"insert into blocker (blocker_id, blocked_id, created_by, created_at) values ({first.Id}, {db.Issue.Id}, {db.User.Id}, now()), ({second.Id}, {db.Issue.Id}, {db.User.Id}, now())", Ct);
+
+        var closed = changes.WaitAsync(db.Project.Id, Ct);
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"update issue set status = 'done', closed_at = now() where id = {first.Id}", Ct);
+        await closed.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+
+        var deleted = changes.WaitAsync(db.Project.Id, Ct);
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"update project set deleted_at = now(), deleted_by = {db.User.Id} where id = {other.Id}", Ct);
+        await deleted.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+    }
+
     private static async Task EstablishListenerAsync(PostgresChanges changes, Migrated db)
     {
         var waiting = changes.WaitAsync(db.Project.Id, Ct);

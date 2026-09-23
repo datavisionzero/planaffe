@@ -716,23 +716,53 @@ begin
     return null;
 end $$;
 
-create trigger issue_notify    after insert or update on issue    for each row execute function planaffe_notify();
+-- An issue wakes its own project and every other project it blocks an issue in.
+create function planaffe_notify_issue() returns trigger language plpgsql as $$
+declare
+    held uuid;
+begin
+    perform pg_notify('planaffe_' || replace(new.project_id::text, '-', ''), '');
+    for held in
+        select distinct blocked.project_id
+          from blocker edge
+          join issue blocked on blocked.id = edge.blocked_id
+         where edge.blocker_id = new.id
+           and blocked.project_id <> new.project_id
+    loop
+        perform pg_notify('planaffe_' || replace(held::text, '-', ''), '');
+    end loop;
+    return null;
+end $$;
+
+create trigger issue_notify    after insert or update on issue    for each row execute function planaffe_notify_issue();
 create trigger question_notify after insert or update on question for each row execute function planaffe_notify();
+create trigger project_notify  after update of deleted_at on project
+    for each row when (old.deleted_at is distinct from new.deleted_at)
+    execute function planaffe_notify_project();
 ```
 
 One channel per project, because every question a waiter asks — `next`, a
 question's answer, "needs you" — is a project's question, and an agent waiting
-in one project has no reason to wake for a change in another. The payload is
-empty: a notification says "look again", and the waiter re-runs the query it
+in one project has no reason to wake for a change in another. The exception is
+the blocker, which may sit in another project: closing or deleting it makes an
+issue here workable, so an issue also notifies the projects of the issues it
+blocks, and deleting a project (`planaffe_notify_project`) notifies the
+projects its issues block, since they stop blocking at that moment. The payload
+is empty: a notification says "look again", and the waiter re-runs the query it
 was waiting on. `question` carries `project_id` denormalised from its issue for
 this trigger. Comments notify nothing — a comment makes nothing workable.
 
 The instance holds one listening connection and fans notifications out to its
-waiters in process; a waiter that outlives that connection is woken by the
-reconnect and re-runs its query, which is the same as being woken by a change
-it might have missed. The deadline is the fallback for a notification that
-never comes, and it is bounded — one hour — so that a proxy's idle timeout is a
-number an operator can set (`docs/operations.md`).
+waiters in process. A waiter is woken whenever that connection is given up —
+when it drops, and when the listener reconnects to add the channel of a project
+nobody was waiting on before, which wakes every waiter — and re-runs its query,
+which is the same as being woken by a change it might have missed. The
+connection sends a keepalive query every 30 seconds with TCP keepalive
+underneath, so a connection a NAT or a failover drops silently is noticed
+rather than left to every waiter's deadline, and a failed reconnect is retried
+after one second, doubling to at most thirty. The deadline is the fallback for
+a notification that never comes, and it is bounded — one hour — so that a
+proxy's idle timeout is a number an operator can set (`docs/operations.md`).
 
 ### The agent's metadata
 

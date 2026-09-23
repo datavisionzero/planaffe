@@ -339,11 +339,13 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
     }
 
     // Every project's standing in one statement (ADR 0024). The shape is the
-    // needs-you query generalised: `derived` and `walk` are scoped by a join
-    // against the projects asked for instead of by one project id, and the
-    // triage switch comes out of that join rather than out of a parameter,
-    // because it differs per project. The recursion is the expensive half and
-    // it is walked once for all of them rather than once each.
+    // needs-you query generalised: the candidates and the roots of `walk` are
+    // scoped by a join against the projects asked for instead of by one
+    // project id, and the triage switch comes out of that join rather than out
+    // of a parameter, because it differs per project. `derived` itself is not
+    // scoped, as it is not for `next`: a blocker may sit in a project nobody
+    // asked about, and it blocks all the same. The recursion is the expensive
+    // half and it is walked once for all of them rather than once each.
     //
     // The counts that are not "needs you" — workable, blocked, open, in flight
     // — are aggregated in the same pass over `derived`, so a project that has
@@ -360,12 +362,12 @@ public sealed class Issues(PlanaffeDbContext context) : IIssues
                    case when i.claimed_by is not null and i.claim_expires_at is not null and i.claim_expires_at <= now()
                         then null else i.claimed_by end as claimed_by
               from issue i
-              join scope s on s.project_id = i.project_id
              where {{LiveRows}}
         ),
         walk (root_id, node_id, path) as (
             select blocked.id, blocker.id, array[blocked.id, blocker.id]
               from derived blocked
+              join scope rs on rs.project_id = blocked.project_id
               join blocker edge on edge.blocked_id = blocked.id
               join derived blocker on blocker.id = edge.blocker_id
              where blocked.status not in ('done', 'canceled')
