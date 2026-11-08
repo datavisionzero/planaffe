@@ -20,6 +20,8 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.Key).HasColumnName("key").IsRequired();
         builder.HasIndex(p => p.Key).IsUnique().HasDatabaseName("project_key");
 
+        builder.Property(p => p.GroupId).HasColumnName("group_id");
+        builder.HasOne<ProjectGroup>().WithMany().HasForeignKey(p => p.GroupId).OnDelete(DeleteBehavior.SetNull);
         builder.Property(p => p.Name).HasColumnName("name").IsRequired();
 
         builder.Property(p => p.TriageRequired)

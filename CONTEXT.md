@@ -110,6 +110,12 @@ It is not a **space** either — the knowledge base's bracket holds no issues, n
 keys and no workflow, and the two never stand in for one another (ADR 0027).
 _Avoid_: workspace, team, repository
 
+**Project group**:
+A flat, optional grouping for navigation. Each project belongs to at most one
+group. Groups carry a name and optional description, never access or workflow.
+Dissolving a group leaves its projects ungrouped.
+_Avoid_: workspace, portfolio, space, folder
+
 **Project file**:
 The `.planaffe` file in the root of a repository, checked in, pointing from that
 repository at exactly one project by its project key and optionally naming the

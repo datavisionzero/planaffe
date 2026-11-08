@@ -122,7 +122,7 @@ func newRoot(env Env) *cobra.Command {
 	})
 
 	root.AddCommand(newLogin(g), newLogout(g))
-	root.AddCommand(newInit(g), newNext(g), newNeedsYou(g), newStanding(g), newExport(g), newIssue(g), newQuestion(g), newProject(g), newLabel(g), newEpic(g), newPage(g), newSpace(g), newRelease(g))
+	root.AddCommand(newInit(g), newNext(g), newNeedsYou(g), newStanding(g), newExport(g), newIssue(g), newQuestion(g), newProject(g), newProjectGroup(g), newLabel(g), newEpic(g), newPage(g), newSpace(g), newRelease(g))
 	root.AddCommand(identityCommands(g)...)
 	return root
 }

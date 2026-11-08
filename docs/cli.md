@@ -410,3 +410,12 @@ The generated client is `internal/api/client.gen.go`, produced by `oapi-codegen`
 as a Go tool dependency of the module; CI runs the same three commands. A
 release builds `cmd/pa` per platform with
 `-ldflags "-X github.com/datavisionzero/planaffe/src/cli/internal/version.Version=<tag>"`.
+
+## Project groups
+
+`pa project-group list` lists visible groups. Administrators use
+`pa project-group create NAME --description TEXT`,
+`pa project-group edit ID NAME --description TEXT` (replaces the description),
+and `pa project-group dissolve ID`. Dissolving preserves all projects.
+`pa project edit KEY --group UUID` assigns a project; `--group ""` removes
+the assignment. All commands support `--json`.

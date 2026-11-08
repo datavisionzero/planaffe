@@ -19,7 +19,7 @@ public sealed record ProjectStandingShape(
     Standing Standing,
     StandingBecause Because,
     StandingAttentionShape NeedsYou,
-    StandingWorkShape Work);
+    StandingWorkShape Work, Guid? GroupId = null);
 
 /// <summary>
 /// The overview (<c>docs/human-interface.md</c>): every project the caller
@@ -86,7 +86,7 @@ public sealed class ReadStanding(
                     standing,
                     StandingScale.Why(facts, standing),
                     new StandingAttentionShape(facts.Questions, facts.InReview, facts.Unready, facts.Stuck, facts.Oldest),
-                    new StandingWorkShape(facts.InProgress, facts.Ready, facts.Open));
+                    new StandingWorkShape(facts.InProgress, facts.Ready, facts.Open), project.GroupId);
             })
             // Worst first, then whoever has been waiting longest, then the key —
             // so that what needs a human is the first thing under the reader's

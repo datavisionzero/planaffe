@@ -20,11 +20,11 @@ public sealed record ProjectShape(
     bool ReviewRequired,
     string? Instructions,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt, Guid? GroupId = null)
 {
     public static ProjectShape Of(Project project) =>
         new(project.Key, project.Name, project.TriageRequired, project.ReviewRequired,
-            project.Instructions, project.CreatedAt, project.UpdatedAt);
+            project.Instructions, project.CreatedAt, project.UpdatedAt, project.GroupId);
 }
 
 public sealed record AdminProjectShape(string Key, string Name, DateTimeOffset CreatedAt, DateTimeOffset? DeletedAt);
@@ -145,7 +145,7 @@ public sealed class ReadProject(IProjects projects, ProjectScope scope, Instance
 /// as <c>null</c>, which is how the text is taken away.
 /// </summary>
 public sealed record ProjectChanges(
-    string? Name, bool? TriageRequired, bool? ReviewRequired, bool InstructionsGiven = false, string? Instructions = null);
+    string? Name, bool? TriageRequired, bool? ReviewRequired, bool InstructionsGiven = false, string? Instructions = null, bool GroupGiven = false, Guid? GroupId = null);
 
 /// <summary>
 /// A user changes the name, the switches or the text every agent is handed with
@@ -154,7 +154,7 @@ public sealed record ProjectChanges(
 /// would be writing its own brief.
 /// </summary>
 public sealed class ChangeProject(
-    ICallerIdentity callerIdentity, IProjects projects, ProjectScope scope, InstanceSettings settings, TimeProvider clock)
+    ICallerIdentity callerIdentity, IProjects projects, ProjectScope scope, InstanceSettings settings, TimeProvider clock, IProjectGroups groups)
 {
     public async Task<ProjectShape> ExecuteAsync(string key, ProjectChanges changes, CancellationToken cancellationToken)
     {
@@ -185,6 +185,13 @@ public sealed class ChangeProject(
             project.Instruct(changes.Instructions, now);
         }
 
+        if (changes.GroupGiven)
+        {
+            callerIdentity.Caller.RequireAdministrator("assign a project group");
+            if (changes.GroupId is { } groupId && await groups.FindAsync(groupId, cancellationToken) is null)
+                throw Refusal.Validation("group_id", "No such project group.");
+            project.AssignGroup(changes.GroupId, now);
+        }
         await projects.SaveAsync(project, cancellationToken);
 
         return ProjectShape.Of(project);

@@ -1192,3 +1192,17 @@ none; this is the bracket's consequence rather than a field left for later.
 There is no comment endpoint and no history endpoint on a page. Whoever has
 something to do makes a ticket, which is what keeps the discussion in one
 place; the history is written and read from the database, as an epic's is.
+
+## Project groups
+
+`GET /project-groups` returns `{ id, name, description }` records. Administrators
+see every group; other callers see only groups containing a live project they
+can access. `POST /project-groups` creates a group and returns 201.
+`PUT /project-groups/{id}` replaces its name and description;
+`DELETE /project-groups/{id}` dissolves it and returns 204. These writes require
+an administrator. Names are unique and case-sensitive.
+
+Project and standing responses carry nullable `group_id`. In
+`PATCH /projects/{key}`, an omitted `group_id` preserves membership, a UUID
+assigns a group, and null removes it. Assignment requires administrator role
+and access to the project. Group membership never grants access.

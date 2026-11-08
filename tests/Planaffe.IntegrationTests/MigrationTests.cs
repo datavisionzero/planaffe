@@ -64,7 +64,7 @@ public sealed class MigrationTests(PostgresFixture postgres)
         await MigrateToAsync(connectionString, BeforeTheWithdrawal);
 
         await using var context = Migrated.ContextFor(connectionString);
-        var projects = await context.Projects.OrderBy(p => p.Key).ToDictionaryAsync(p => p.Key, p => p.Instructions, TestContext.Current.CancellationToken);
+        var projects = await context.Projects.OrderBy(p => p.Key).Select(p => new { p.Key, p.Instructions }).ToDictionaryAsync(p => p.Key, p => p.Instructions, TestContext.Current.CancellationToken);
 
         Assert.Equal("Tests run with `just test`.", projects["PLAN"]);
         Assert.Null(projects["DOCS"]);

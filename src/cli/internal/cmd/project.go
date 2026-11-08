@@ -180,7 +180,7 @@ func projectArg(cfg config.Config, args []string) (string, error) {
 }
 
 func newProjectEdit(g *globals) *cobra.Command {
-	var name, triage, review, instructionsFile string
+	var name, triage, review, instructionsFile, group string
 	cmd := &cobra.Command{
 		Use:   "edit KEY",
 		Short: "Change the name, the switches or the instructions; the key is immutable.",
@@ -215,6 +215,17 @@ func newProjectEdit(g *globals) *cobra.Command {
 			if instructions != nil {
 				changes["instructions"] = *instructions
 			}
+			if cmd.Flags().Changed("group") {
+				if group == "" {
+					changes["group_id"] = nil
+				} else {
+					id, err := uuid.Parse(group)
+					if err != nil {
+						return &config.UsageError{Message: "--group is a group UUID, or an empty string for Ungrouped."}
+					}
+					changes["group_id"] = id
+				}
+			}
 			if len(changes) == 0 {
 				return &config.UsageError{Message: "nothing to change: --name, --triage-required, --review-required or --instructions-file."}
 			}
@@ -226,6 +237,7 @@ func newProjectEdit(g *globals) *cobra.Command {
 			return printProject(g, cmd, *resp.JSON200)
 		},
 	}
+	cmd.Flags().StringVar(&group, "group", "", "project group UUID; an empty string removes the group (administrators only)")
 	cmd.Flags().StringVar(&name, "name", "", "the new name")
 	cmd.Flags().StringVar(&triage, "triage-required", "", "true or false")
 	cmd.Flags().StringVar(&review, "review-required", "", "true or false")

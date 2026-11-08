@@ -89,7 +89,7 @@ public sealed class SchemaTests(PostgresFixture postgres)
         Assert.Equal(
             [
                 "__EFMigrationsHistory", "blocker", "browser_session", "comment", "device_login", "epic", "epic_label", "history", "idempotency",
-                "identity", "identity_metadata", "issue", "issue_label", "label", "one_time_secret", "page", "project", "project_access", "question",
+                "identity", "identity_metadata", "issue", "issue_label", "label", "one_time_secret", "page", "project", "project_access", "project_group", "question",
                 "release", "release_issue", "space", "space_access", "token",
             ],
             tables);
@@ -112,7 +112,7 @@ public sealed class SchemaTests(PostgresFixture postgres)
 
         Assert.Equal(
             [
-                "PK___EFMigrationsHistory", "blocker_blocked", "browser_session_hash", "browser_session_user", "comment_issue", "comment_search",
+                "IX_project_group_name", "PK___EFMigrationsHistory", "PK_project_group", "blocker_blocked", "browser_session_hash", "browser_session_user", "comment_issue", "comment_search",
                 "device_login_code", "device_login_expiry", "epic_number", "history_epic", "history_issue", "history_page", "idempotency_created_at", "identity_email",
                 "identity_metadata_identity", "identity_name", "issue_assignee", "issue_claim", "issue_epic", "issue_next", "issue_number",
                 "issue_parent", "issue_search", "issue_updated", "label_name", "one_live_login_per_code", "one_live_secret_per_purpose",
