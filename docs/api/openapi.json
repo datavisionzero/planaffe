@@ -3008,6 +3008,120 @@
         }
       }
     },
+    "/project-groups": {
+      "get": {
+        "tags": [
+          "Project groups"
+        ],
+        "operationId": "ListProjectGroups",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectGroup"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Project groups"
+        ],
+        "operationId": "CreateProjectGroup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveProjectGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGroup"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/project-groups/{id}": {
+      "put": {
+        "tags": [
+          "Project groups"
+        ],
+        "operationId": "ChangeProjectGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveProjectGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGroup"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Project groups"
+        ],
+        "operationId": "DeleteProjectGroup",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/projects/{key}/labels": {
       "get": {
         "tags": [
@@ -7982,7 +8096,8 @@
           "name",
           "triage_required",
           "review_required",
-          "instructions"
+          "instructions",
+          "group_id"
         ],
         "type": "object",
         "properties": {
@@ -8009,6 +8124,13 @@
               "null",
               "string"
             ]
+          },
+          "group_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -9945,6 +10067,13 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "group_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -9978,6 +10107,29 @@
             }
           },
           "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ProjectGroup": {
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
             "type": [
               "null",
               "string"
@@ -10068,6 +10220,13 @@
           },
           "work": {
             "$ref": "#/components/schemas/StandingWork"
+          },
+          "group_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -10413,6 +10572,27 @@
           }
         }
       },
+      "SaveProjectGroupRequest": {
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "SecretPasswordRequest": {
         "required": [
           "secret",
@@ -10745,6 +10925,9 @@
   "tags": [
     {
       "name": "planaffe"
+    },
+    {
+      "name": "Project groups"
     }
   ]
 }

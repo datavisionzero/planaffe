@@ -835,6 +835,10 @@ namespace Planaffe.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("deleted_by");
 
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
                     b.Property<string>("Instructions")
                         .HasColumnType("text")
                         .HasColumnName("instructions");
@@ -912,6 +916,32 @@ namespace Planaffe.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("project_access_user");
 
                     b.ToTable("project_access", (string)null);
+                });
+
+            modelBuilder.Entity("Planaffe.Domain.Projects.ProjectGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("project_group", (string)null);
                 });
 
             modelBuilder.Entity("Planaffe.Domain.Releases.Release", b =>
@@ -1709,6 +1739,11 @@ namespace Planaffe.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DeletedBy")
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("fk_project_deleted_by");
+
+                    b.HasOne("Planaffe.Domain.Projects.ProjectGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Planaffe.Domain.Projects.ProjectAccess", b =>

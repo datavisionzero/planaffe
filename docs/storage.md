@@ -1146,3 +1146,10 @@ token may be exchanged once through the browser activation endpoint: the user
 sets a password, a browser session is created, and the exchange is permanently
 recorded so the token cannot perform it again. The user token itself remains a
 valid CLI key until explicitly revoked.
+
+## Project groups
+
+`project_group` holds a UUID, unique case-sensitive name (100 characters) and
+nullable description (500 characters). `project.group_id` is a nullable foreign
+key with `ON DELETE SET NULL`. This also clears membership on soft-deleted
+projects when a group is dissolved. No access table refers to a group.

@@ -3,6 +3,9 @@ import { useParams } from "react-router";
 import { api, describe, type Project, type Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useProjectGroups } from "@/projects/useProjectGroups";
+import { useContext } from "react";
+import { ProjectsContext } from "@/projects/context";
 import { useSession } from "@/session/useSession";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { MarkdownField } from "@/shared/MarkdownField";
@@ -35,6 +38,8 @@ export function ProjectSettingsView() {
 }
 
 function General() {
+  const { groups, failed: groupsFailed, loading: groupsLoading } = useProjectGroups();
+  const projectList = useContext(ProjectsContext);
   const { project: key } = useParams();
   const { me } = useSession();
   const [project, setProject] = useState<Project>();
@@ -53,8 +58,9 @@ function General() {
     <>
       <Section title="Project" description="The key is permanent; the name and workflow switches can change.">
         {project && (
-          <form className="grid max-w-lg gap-3" onSubmit={(e) => void submitting(e, setNotice, async (data) => { const r = await api.PATCH("/projects/{key}", { params: { path: { key: key! } }, body: { name: String(data.get("name")), triage_required: data.has("triage"), review_required: data.has("review") } as never }); if (!r.data) throw new Error(describe(r.error, r.response.status)); setProject(r.data); })}>
+          <form className="grid max-w-lg gap-3" onSubmit={(e) => void submitting(e, setNotice, async (data) => { const r = await api.PATCH("/projects/{key}", { params: { path: { key: key! } }, body: { name: String(data.get("name")), triage_required: data.has("triage"), review_required: data.has("review"), ...(me.administrator && !groupsFailed && !groupsLoading && data.has("group") && (data.get("group") || null) !== (project.group_id ?? null) ? { group_id: data.get("group") || null } : {}) } as never }); if (!r.data) throw new Error(describe(r.error, r.response.status)); setProject(r.data); await projectList?.reload(); })}>
             <label className="text-sm">Name<Input name="name" defaultValue={project.name} /></label>
+            {me.administrator && <label className="grid gap-1 text-sm">Project group<select name="group" disabled={groupsFailed || groupsLoading} key={`${project.group_id}-${groups.length}`} defaultValue={project.group_id ?? ""} className="rounded-md border bg-background p-2"><option value="">Ungrouped</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select><span className="text-xs text-muted-foreground">Groups organize navigation. Access stays with this project.</span></label>}
             <label className="flex gap-2 text-sm"><input name="triage" type="checkbox" defaultChecked={project.triage_required} /> Require triage before agents take issues</label>
             <label className="flex gap-2 text-sm"><input name="review" type="checkbox" defaultChecked={project.review_required} /> Require review before issues are done</label>
             <Button type="submit" className="w-fit">Save project</Button>

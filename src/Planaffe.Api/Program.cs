@@ -95,6 +95,7 @@ builder.Services.AddSingleton(InstanceSettings.FromVariables(
 
 // Projects and their labels: the bracket everything belongs to, and the one
 // extensibility the product offers.
+builder.Services.AddScoped<ProjectGroupActs>();
 builder.Services.AddScoped<CreateProject>();
 builder.Services.AddScoped<ListProjects>();
 builder.Services.AddScoped<ReadStanding>();
@@ -260,6 +261,7 @@ app.MapIdentities();
 app.MapBrowserIdentity();
 app.MapDeviceLogins();
 app.MapProjects();
+app.MapProjectGroups();
 app.MapLabels();
 app.MapIssues();
 app.MapConversation();

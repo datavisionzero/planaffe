@@ -48,6 +48,9 @@ public sealed class Project
 
     public string Name { get; private set; } = null!;
 
+    public Guid? GroupId { get; private set; }
+    public void AssignGroup(Guid? id, DateTimeOffset at) { GroupId = id; UpdatedAt = at; }
+
     public bool TriageRequired { get; private set; }
 
     public bool ReviewRequired { get; private set; }

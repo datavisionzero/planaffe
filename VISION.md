@@ -170,6 +170,9 @@ The CLI is a client of the public API. Everything the CLI can do, a directly con
 
 ## 7. Domain Model
 
+Projects may optionally share a flat project group for navigation (ADR 0030).
+Groups carry no access or workflow; dissolving one keeps its projects.
+
 The structure is backed by research (see [`docs/research/hierarchy-and-fields.md`](docs/research/hierarchy-and-fields.md)) and deliberately flat:
 
 ```

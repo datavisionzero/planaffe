@@ -275,7 +275,7 @@ describe("the shell (ADR 0006)", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Switch project" }));
-    await user.click(await screen.findByRole("menuitem", { name: /logaffe/ }));
+    await user.click(await screen.findByRole("option", { name: /logaffe/ }));
 
     await waitFor(() =>
       expect(screen.getByRole("navigation").querySelector('a[aria-current="page"]')).toHaveAttribute(
@@ -309,7 +309,7 @@ describe("the shell (ADR 0006)", () => {
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
-    expect(await screen.findByRole("menuitem", { name: /planaffe/ })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /planaffe/ })).toBeInTheDocument();
   });
 
   it("offers project creation from the project switcher", async () => {
@@ -318,7 +318,7 @@ describe("the shell (ADR 0006)", () => {
 
     await screen.findByText("The web shell");
     await user.click(screen.getByRole("button", { name: "Switch project" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Create project" }));
+    await user.click(await screen.findByRole("button", { name: "Create project" }));
 
     expect(await screen.findByRole("heading", { name: "Create project" })).toBeInTheDocument();
   });
@@ -493,9 +493,9 @@ describe("the shell (ADR 0006)", () => {
 
     await user.keyboard("p");
 
-    const label = await screen.findByText("Projects");
-    expect(within(label).getByText("P")).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /logaffe/ })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Your projects" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Search projects" })).toHaveFocus();
+    expect(screen.getByRole("option", { name: /logaffe/ })).toBeInTheDocument();
   });
 
   it("leaves the key alone while something is being typed", async () => {

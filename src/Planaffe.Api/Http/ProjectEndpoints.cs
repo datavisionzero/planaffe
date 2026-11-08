@@ -15,7 +15,7 @@ public sealed record CreateProjectRequest(string? Key, string? Name, bool? Triag
 /// the contract's; the act takes <see cref="ProjectChanges"/>, which tells
 /// absent from null.
 /// </summary>
-public sealed record ChangeProjectRequest(string? Name, bool? TriageRequired, bool? ReviewRequired, string? Instructions);
+public sealed record ChangeProjectRequest(string? Name, bool? TriageRequired, bool? ReviewRequired, string? Instructions, Guid? GroupId);
 
 /// <summary>Projects (<c>docs/api.md</c>): read by anyone, changed by a user, deleted by an administrator.</summary>
 public static class ProjectEndpoints
@@ -172,10 +172,16 @@ public static class ProjectEndpoints
             PatchBody.Flag(body, "triage_required"),
             PatchBody.Flag(body, "review_required"),
             PatchBody.Given(body, "instructions"),
-            PatchBody.Text(body, "instructions"));
+            PatchBody.Text(body, "instructions"), PatchBody.Given(body, "group_id"), GroupId(body));
     }
 
 
+    private static Guid? GroupId(JsonElement body)
+    {
+        if (!body.TryGetProperty("group_id", out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        if (value.ValueKind == JsonValueKind.String && value.TryGetGuid(out var id)) return id;
+        throw Planaffe.Domain.Refusal.Validation("group_id", "A group ID is a UUID or null.");
+    }
     private static Task NeedsYouValidator(
         OpenApiOperation operation,
         OpenApiOperationTransformerContext context,

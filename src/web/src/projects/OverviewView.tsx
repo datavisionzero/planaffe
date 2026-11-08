@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { useProjectGroups } from "./useProjectGroups";
+import { GroupManager } from "./GroupManager";
+import { useSession } from "@/session/useSession";
 import { PageHeader } from "@/shared/PageHeader";
 import { cn } from "@/lib/utils";
 import { celebrate } from "./celebrate";
@@ -18,6 +21,14 @@ import { useOverview } from "./useOverview";
  */
 export function OverviewView() {
   const { overview, reload } = useOverview();
+  const { groups, failed, reload: reloadGroups } = useProjectGroups();
+  const { me } = useSession();
+  const [params, setParams] = useSearchParams();
+  const filter = params.get("group") ?? "all";
+  const sections = overview.at === "known" ? [...new Set(overview.projects.map(p => p.group_id ?? "ungrouped"))].map(id => ({
+    id, name: groups.find(g => g.id === id)?.name ?? (id === "ungrouped" ? "Ungrouped" : "Project group"),
+    projects: overview.projects.filter(p => (p.group_id ?? "ungrouped") === id),
+  })).filter(g => filter === "all" || filter === g.id) : [];
   const tiles = useRef(new Map<string, HTMLElement>());
   const seen = useRef(new Map<string, Standing>());
 
@@ -65,6 +76,15 @@ export function OverviewView() {
         meta={overview.at === "known" ? `${overview.projects.length}` : undefined}
       />
 
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+        <label className="flex items-center gap-2 text-sm">Show group
+          <select name="group" aria-label="Show group" value={filter} className="rounded-md border bg-background px-3 py-2" onChange={e => { const next = new URLSearchParams(params); if (e.target.value === "all") next.delete("group"); else next.set("group", e.target.value); setParams(next); }}>
+            <option value="all">All projects</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}<option value="ungrouped">Ungrouped</option>
+          </select>
+        </label>
+        {me.administrator && <GroupManager groups={groups} reload={async () => { await reloadGroups(); reload(); }} />}
+        {failed && <p role="alert" className="text-sm text-destructive">Groups could not be loaded. <button className="underline" onClick={() => void reloadGroups()}>Retry groups</button></p>}
+      </div>
       {overview.at === "asking" && (
         <p role="status" aria-busy className="p-4 text-sm text-muted-foreground">Looking at your projects…</p>
       )}
@@ -99,19 +119,16 @@ export function OverviewView() {
               <Link to="/settings/agents" className="text-brand underline-offset-4 hover:underline">Create an agent</Link>.
             </p>
           )}
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {overview.projects.map((project) => (
-              <Tile
-                key={project.key}
-                project={project}
-                now={overview.read}
-                held={(element) => {
-                  if (element === null) tiles.current.delete(project.key);
-                  else tiles.current.set(project.key, element);
-                }}
-              />
-            ))}
-          </ul>
+          <div className="space-y-5">
+            {sections.map(section => <details key={section.id} open className="rounded-xl border bg-card">
+              <summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-medium hover:bg-accent">
+                {section.name}<span className="ml-2 text-muted-foreground">{section.projects.length} projects</span>
+                {section.projects.some(p => p.standing === "waiting" || p.standing === "neglected") && <span className="ml-3 text-brand">Needs your attention</span>}
+              </summary>
+              <ul className="grid gap-3 px-3 pb-3 sm:grid-cols-2 xl:grid-cols-3">{section.projects.map(project => <Tile key={project.key} project={project} now={overview.read} held={element => { if (element === null) tiles.current.delete(project.key); else tiles.current.set(project.key, element); }} />)}</ul>
+            </details>)}
+            {sections.length === 0 && <p className="p-6 text-center text-muted-foreground">No projects in this group yet. Assign a group in project settings.</p>}
+          </div>
         </div>
       )}
     </>

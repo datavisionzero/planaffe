@@ -601,3 +601,18 @@ the subsets it actually needs, and they hold nothing up. Nor is there a number
 for the time to the first frame: without a browser driver it is not
 reproducibly measurable, and a number that depends on the machine it was taken
 on is worse than no number at all.
+
+## Project selection and groups
+
+The header's project button and `p` open a spacious searchable dialog. Search
+matches name, key and group; group buttons narrow the list. Arrow keys and
+Enter open a result, Escape dismisses, and the current project is marked.
+Switching retains the current view. On narrow screens the group navigation
+becomes a horizontal strip above the results. Overview and Create project
+remain directly available. Loading, failed reads and empty results have
+distinct states.
+
+The overview has collapsible project groups and a bookmarkable `group` filter.
+Group headers indicate attention even when collapsed. Administrators manage
+groups from the overview and assign projects in General project settings.
+Dissolving a group asks for confirmation and keeps all projects intact.

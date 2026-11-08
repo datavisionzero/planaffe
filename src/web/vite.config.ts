@@ -18,6 +18,7 @@ const instanceRoutes = [
   "/invitations",
   "/me",
   "/openapi",
+  "/project-groups",
   "/projects",
   "/questions",
   "/password-recovery",
