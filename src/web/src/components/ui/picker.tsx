@@ -239,6 +239,7 @@ export function Picker({
             aria-invalid={said != null || undefined}
             aria-activedescendant={open && options.length > 0 ? `${id}-option-${cursor}` : undefined}
             autoComplete="off"
+            data-protonpass-ignore="true"
             className="h-6 min-w-24 flex-1 bg-transparent px-1 text-base font-normal outline-none placeholder:text-muted-foreground md:text-sm"
             placeholder={value.length === 0 ? placeholder : ""}
             value={query}

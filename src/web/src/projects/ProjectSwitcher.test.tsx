@@ -15,6 +15,8 @@ it("searches names, keys and groups, and opens a keyboard result in the same vie
   installInstance({ "GET /project-groups": [group] }); renderAt("/PLAN/in-progress", <Picker />);
   const user = userEvent.setup();
   const search = await screen.findByRole("combobox", { name: "Search projects" });
+  expect(search).toHaveAttribute("autocomplete", "off");
+  expect(search).toHaveAttribute("data-protonpass-ignore", "true");
   await user.type(search, "Products");
   await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
   expect(screen.getByRole("option", { name: /planaffe/ })).toHaveAttribute("aria-selected", "true");

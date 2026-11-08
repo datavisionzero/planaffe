@@ -40,7 +40,7 @@ function Profile() {
         <Button type="submit">Save name</Button>
       </form>
       <form className="mt-3 flex max-w-lg gap-2" onSubmit={(e) => void submitting(e, setNotice, async (data) => { const r = await api.POST("/me/email", { body: { email: String(data.get("email")) } }); if (!r.response.ok) throw new Error(describe(r.error, r.response.status)); setNotice("Check the new address to confirm the change."); })}>
-        <Input name="email" type="email" defaultValue={me.email ?? ""} aria-label="Email" />
+        <Input name="email" type="email" autoComplete="email" defaultValue={me.email ?? ""} aria-label="Email" />
         <Button type="submit" variant="outline">Change email</Button>
       </form>
       <Said notice={notice} />
@@ -70,8 +70,8 @@ function Security() {
     <>
       <Section title="Password" description="Changing it signs every other browser session out.">
         <form className="grid max-w-lg gap-2" onSubmit={(e) => void submitting(e, setPasswordNotice, async (data, form) => { const r = await api.POST("/me/password", { body: { current_password: String(data.get("current")), password: String(data.get("password")) } }); if (!r.response.ok) throw new Error(wrongCurrentPassword(r.error) ?? describe(r.error, r.response.status)); form.reset(); })}>
-          <Input name="current" type="password" placeholder="Current password" aria-label="Current password" />
-          <Input name="password" type="password" placeholder="New password (12 characters or more)" minLength={12} aria-label="New password" />
+          <Input name="current" type="password" autoComplete="current-password" placeholder="Current password" aria-label="Current password" />
+          <Input name="password" type="password" autoComplete="new-password" placeholder="New password (12 characters or more)" minLength={12} aria-label="New password" />
           <Button type="submit" className="w-fit">Change password</Button>
         </form>
         <Said notice={passwordNotice} />

@@ -345,6 +345,8 @@ function PaletteBody({ onOpenChange, projects, current, spaces, space, knowledge
           <SearchIcon className="size-4 text-muted-foreground" />
           <input
             id={searchId}
+            autoComplete="off"
+            data-protonpass-ignore="true"
             autoFocus
             role="combobox"
             aria-expanded

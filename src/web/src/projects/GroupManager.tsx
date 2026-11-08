@@ -21,9 +21,9 @@ export function GroupManager({ groups, reload }: { groups: ProjectGroup[]; reloa
         if (!r.response.ok) throw new Error(describe(r.error, r.response.status));
         setEditing(undefined); setVersion(v => v + 1); await refresh();
       }} /></div>)}</div>
-      <form key={version} className="grid gap-3 border-t pt-4" onSubmit={async e => {
+      <form key={version} name="project-group" autoComplete="off" className="grid gap-3 border-t pt-4" onSubmit={async e => {
         e.preventDefault(); const data = new FormData(e.currentTarget); setBusy(true); setNotice("");
-        const body = { name: String(data.get("name")), description: String(data.get("description")) || null };
+        const body = { name: String(data.get("project-group-name")), description: String(data.get("project-group-description")) || null };
         try {
           const r = editing ? await api.PUT("/project-groups/{id}", { params: { path: { id: editing.id } }, body }) : await api.POST("/project-groups", { body });
           if (!r.response.ok) throw new Error(describe(r.error, r.response.status));
@@ -31,9 +31,9 @@ export function GroupManager({ groups, reload }: { groups: ProjectGroup[]; reloa
         } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save the group."); } finally { setBusy(false); }
       }}>
         <p className="font-medium">{editing ? "Edit group" : "New group"}</p>
-        <label>Name<Input name="name" required maxLength={100} defaultValue={editing?.name} /></label>
-        <label>Description <span className="text-muted-foreground">(optional)</span><Input name="description" maxLength={500} defaultValue={editing?.description ?? ""} /></label>
-        <div className="flex gap-2"><Button disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Create group"}</Button>{editing && <Button type="button" variant="ghost" onClick={() => { setEditing(undefined); setVersion(v => v + 1); }}>Cancel</Button>}</div>
+        <label>Group name<Input name="project-group-name" required maxLength={100} defaultValue={editing?.name} /></label>
+        <label>Description <span className="text-muted-foreground">(optional)</span><Input name="project-group-description" maxLength={500} defaultValue={editing?.description ?? ""} /></label>
+        <div className="flex gap-2"><Button type="submit" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Create group"}</Button>{editing && <Button type="button" variant="ghost" onClick={() => { setEditing(undefined); setVersion(v => v + 1); }}>Cancel</Button>}</div>
         {notice && <p role="status" className="text-sm">{notice}</p>}
       </form>
     </DialogContent>

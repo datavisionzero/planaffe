@@ -40,6 +40,10 @@ it("reports a changed password as saved and clears the fields", async () => {
 
   await user.type(await screen.findByLabelText("Current password"), "a long first password");
   await user.type(screen.getByLabelText("New password"), "a long second password");
+  expect(screen.getByLabelText("Current password")).toHaveAttribute("autocomplete", "current-password");
+  expect(screen.getByLabelText("New password")).toHaveAttribute("autocomplete", "new-password");
+  expect(screen.getByLabelText("Current password")).not.toHaveAttribute("data-protonpass-ignore");
+  expect(screen.getByLabelText("New password")).not.toHaveAttribute("data-protonpass-ignore");
   await user.click(screen.getByRole("button", { name: "Change password" }));
 
   expect(await screen.findByRole("status")).toHaveTextContent("Saved.");

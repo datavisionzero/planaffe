@@ -43,7 +43,7 @@ function Chooser({ projects, current, viewPath, onOpenChange, reload }: Props) {
   return <>
     <div className="flex min-w-0 shrink-0 items-center gap-3 border-b px-6 py-3">
       <SearchIcon className="size-5 shrink-0 text-muted-foreground" />
-      <input name="project-search" autoFocus role="combobox" aria-label="Search projects" aria-expanded aria-controls={`${id}-list`} aria-activedescendant={found.length ? `${id}-${index}` : undefined}
+      <input name="project-search" autoComplete="off" data-protonpass-ignore="true" autoFocus role="combobox" aria-label="Search projects" aria-expanded aria-controls={`${id}-list`} aria-activedescendant={found.length ? `${id}-${index}` : undefined}
         placeholder="Search projects, keys or groups…" value={query} className="h-10 min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
         onChange={e => { setQuery(e.target.value); setActive(0); }} onKeyDown={e => {
           if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (found.length) move((index + (e.key === "ArrowDown" ? 1 : found.length - 1)) % found.length); }
