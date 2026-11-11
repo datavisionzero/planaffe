@@ -54,7 +54,7 @@ RUN dotnet publish src/Planaffe.Api/Planaffe.Api.csproj -c Release -o /app \
     -p:Version=$VERSION -p:SourceRevisionId=$REVISION
 
 # ------------------------------------------------------------ the runtime ----
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0-alpine AS runtime
 WORKDIR /app
 
 # Npgsql probes for GSSAPI when it opens a connection, whatever the connection
