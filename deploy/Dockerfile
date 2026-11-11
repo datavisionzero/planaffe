@@ -22,7 +22,7 @@ COPY src/web/ ./
 RUN npm run build -- --outDir dist --emptyOutDir
 
 # ------------------------------------------------------------- the server ----
-FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0-alpine AS build
 WORKDIR /src
 
 # What this build calls itself. The release workflow passes the tag; a build
